@@ -20,7 +20,7 @@ class MulticastPacket {
 
 	static final int HEAD_SIZE = 16;
 
-	private static final int HEAD_TAG = 0x234c;
+	private static final int HEAD_TAG = 0x2096;
 
 	private static PacketParser parser = (b, off, len) -> {
 		if (len < HEAD_SIZE) {

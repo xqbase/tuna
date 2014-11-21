@@ -33,9 +33,6 @@ public class TestSSLForward {
 				setDumpStream(System.err).setUseClientMode(true));
 		connector.add(forwardServer);
 
-		while (true) {
-			while (connector.doEvents()) {/**/}
-			Thread.sleep(16);
-		}
+		connector.doEvents();
 	}
 }

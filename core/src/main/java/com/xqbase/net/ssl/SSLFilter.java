@@ -50,7 +50,7 @@ public class SSLFilter extends Filter {
 	 */
 	public static final int CLIENT = 3;
 
-	private static final int EVENT_TASK = 2246;
+	private static final int EVENT_TASK = 443;
 
 	private ExecutorService executor;
 	private SSLEngine ssle;
@@ -211,7 +211,7 @@ public class SSLFilter extends Filter {
 		while ((task = ssle.getDelegatedTask()) != null) {
 			task.run();
 		}
-		getConnection().dispatchEvent(EVENT_TASK, true);
+		getConnection().dispatchLater(EVENT_TASK);
 	}
 
 	private void doHandshake() throws IOException {

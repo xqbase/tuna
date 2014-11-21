@@ -12,7 +12,7 @@ public class TestEdge {
 
 	public static void main(String[] args) throws Exception {
 		Properties p = new Properties();
-		p.load(TestEdge.class.getResourceAsStream("/EdgeConnectlet.properties"));
+		p.load(TestEdge.class.getResourceAsStream("/Edge.properties"));
 		int clientPort = Integer.parseInt(p.getProperty("client_port"));
 		String originHost = p.getProperty("origin_host");
 		int originPort = Integer.parseInt(p.getProperty("origin_port"));
@@ -26,8 +26,7 @@ public class TestEdge {
 			edge.getFilterFactories().add(new DumpFilterFactory());
 		}
 		while (edge.getOriginConnection().isOpen()) {
-			while (connector.doEvents()) {/**/}
-			Thread.sleep(16);
+			connector.doEvents(1000);
 		}
 	}
 }

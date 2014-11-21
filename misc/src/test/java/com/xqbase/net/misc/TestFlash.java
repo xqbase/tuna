@@ -64,10 +64,6 @@ public class TestFlash {
 		DoSFilterFactory dosff = new DoSFilterFactory(60000, 65536, 60, 10);
 		connector.getFilterFactories().add(dosff);
 		connector.getFilterFactories().add(new IPTrustSet("127.0.0.1"));
-		while (true) {
-			while (connector.doEvents()) {/**/}
-			dosff.onEvent();
-			Thread.sleep(16);
-		}
+		connector.doEvents();
 	}
 }

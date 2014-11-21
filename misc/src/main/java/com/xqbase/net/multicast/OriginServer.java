@@ -84,7 +84,7 @@ class EdgeConnection extends Connection {
 			VirtualWriter writer = new VirtualWriter(this, connId);
 			origin.writerMap.put(conn, writer);
 			connMap.put(Integer.valueOf(connId), conn);
-			conn.setWriter(writer, local, remote, origin.events, origin.eventQueue::add);
+			conn.setWriter(writer, local, remote, origin.consumer, origin.eventQueue);
 			conn.appendFilters(origin.getVirtualFilterFactories());
 			conn.getNetReader().onConnect();
 			if (conn instanceof Listener) {
@@ -106,7 +106,7 @@ class EdgeConnection extends Connection {
 				packet = new MulticastPacket(connId,
 						MulticastPacket.ORIGIN_CLOSE, 0, 0);
 				send(packet.getHead());
-				conn.dispatchEvent(-1);
+				conn.dispatchNow(-1);
 			}
 		}
 	}
@@ -115,7 +115,7 @@ class EdgeConnection extends Connection {
 	protected void onDisconnect() {
 		for (Connection conn : connMap.values().toArray(new Connection[0])) {
 			// "conn.onDisconnect()" might change "connMap"
-			conn.dispatchEvent(-1);
+			conn.dispatchNow(-1);
 		}
 	}
 }
@@ -129,7 +129,7 @@ public class OriginServer extends ServerConnection implements Listener {
 	ConcurrentLinkedQueue<Event> eventQueue = new ConcurrentLinkedQueue<>();
 	LinkedHashMap<Connection, VirtualWriter> writerMap = new LinkedHashMap<>();
 	LinkedHashSet<Listener> listeners = new LinkedHashSet<>();
-	Consumer<Event> events = event -> {
+	Consumer<Event> consumer = event -> {
 		Connection conn = event.getConnection();
 		if (!writerMap.containsKey(conn)) {
 			return;
@@ -174,7 +174,7 @@ public class OriginServer extends ServerConnection implements Listener {
 	public void onEvent() {
 		Event event;
 		while ((event = eventQueue.poll()) != null) {
-			events.accept(event);
+			consumer.accept(event);
 		}
 		for (Listener listener : listeners.toArray(new Listener[0])) {
 			// "listener.onEvent()" might change "listeners" 

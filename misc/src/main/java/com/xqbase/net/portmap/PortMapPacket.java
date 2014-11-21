@@ -20,7 +20,7 @@ class PortMapPacket {
 
 	static final int HEAD_SIZE = 16;
 
-	private static final int HEAD_TAG = 0x234d;
+	private static final int HEAD_TAG = 0x2095;
 
 	private static PacketParser parser = (b, off, len) -> {
 		if (len < HEAD_SIZE) {
