@@ -1,11 +1,9 @@
 package com.xqbase.net.multicast;
 
-import java.util.Iterator;
-
 import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
 import com.xqbase.net.misc.DumpFilterFactory;
-import com.xqbase.net.misc.ZLibFilterFactory;
+import com.xqbase.net.misc.ZLibFilter;
 
 public class TestMulticast {
 	private static Connector newConnector() {
@@ -18,16 +16,11 @@ public class TestMulticast {
 		connector.add(new OriginServer(2323) {
 			{
 				getVirtualFilterFactories().add(new DumpFilterFactory().setDumpText(true));
-				getVirtualFilterFactories().add(new ZLibFilterFactory());
+				getVirtualFilterFactories().add(ZLibFilter::new);
 			}
 
-			Connection multicast = createMulticast(new
-					Iterable<Connection>() {
-				@Override
-				public Iterator<Connection> iterator() {
-					return getVirtualConnectionSet().iterator();
-				}
-			});
+			//  
+			Connection multicast = createMulticast(getVirtualConnectionSet());
 
 			@Override
 			protected Connection createVirtualConnection() {

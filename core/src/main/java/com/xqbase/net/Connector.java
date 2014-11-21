@@ -19,6 +19,7 @@ import com.xqbase.net.Connection.Event;
  * which makes {@link Connection} and {@link ServerConnection} working.<p>
  */
 public class Connector implements AutoCloseable {
+	private static final Event INTERRUPTED = new Connection().new Event(0);
 	/** Maximum buffer size. {@link #setBufferSize(int)} should not exceed this value */
 	public static final int MAX_BUFFER_SIZE = 32768;
 
@@ -31,11 +32,17 @@ public class Connector implements AutoCloseable {
 		public void onEvent();
 	}
 
+	private Selector selector;
+	private boolean interrupted = false;
 	private LinkedHashSet<Listener> listeners = new LinkedHashSet<>();
 	private int bufferSize = MAX_BUFFER_SIZE;
 	private byte[] buffer = new byte[MAX_BUFFER_SIZE];
 	private ArrayList<FilterFactory> filterFactories = new ArrayList<>();
 	private Consumer<Event> events = event -> {
+		if (event == INTERRUPTED) {
+			interrupted = true;
+			return;
+		}
 		Connection connection = event.getConnection();
 		if (!connection.isOpen()) {
 			return;
@@ -55,7 +62,6 @@ public class Connector implements AutoCloseable {
 		}
 	};
 	private ConcurrentLinkedQueue<Event> eventQueue = new ConcurrentLinkedQueue<>();
-	private Selector selector;
 
 	{
 		try {
@@ -69,7 +75,6 @@ public class Connector implements AutoCloseable {
 		connection.events = events;
 		connection.concurrentEvents = event -> {
 			eventQueue.add(event);
-			// TODO Make selector blocking
 			selector.wakeup();
 		};
 		try {
@@ -144,27 +149,35 @@ public class Connector implements AutoCloseable {
 		this.bufferSize = bufferSize;
 	}
 
+	/** Consume events until interrupted */
+	public void doEvents() {
+		while (doEvents(-1) >= 0) {/**/}
+	}
+
 	/**
 	 * Consumes all events raised by registered Connections and ServerConnections,
 	 * including network events (accept/connect/read/write) and user-defined events.<p>
 	 *
-	 * Here is the code to make a connector working:<p><code>
-	 * while (true) {<br>
-	 * &nbsp;&nbsp;while (connector.doEvents()) {}<br>
-	 * &nbsp;&nbsp;Thread.sleep(1);<br>
-	 * }</code>
-	 *
-	 * @return <b>true</b> if NETWORK events consumed<br>
-	 *         <b>false</b> if no NETWORK events raised,
-	 *         whether or not user-defined events raised.
+	 * @param timeout Block for up to timeout milliseconds, or -1 to block indefinitely,
+	 *        or 0 without blocking. 
+	 * @return <b>> 0</b> if NETWORK events consumed;<br>
+	 *         <b>== 0</b> if no NETWORK events raised,
+	 *         whether or not user-defined events raised;<br>
+	 *         <b>< 0</b> if interrupted.
 	 */
-	public boolean doEvents() {
-		boolean busy;
+	public int doEvents(long timeout) {
+		int keySize;
 		try {
-			busy = selector.selectNow() > 0;
+			keySize = timeout == 0 ? selector.selectNow() :
+					timeout < 0 ? selector.select() : selector.select(timeout);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
+		if (interrupted) {
+			interrupted = false;
+			return -1;
+		}
+
 		Set<SelectionKey> selectedKeys = selector.selectedKeys();
 		for (SelectionKey key : selectedKeys) {
 			if (!key.isValid()) {
@@ -220,8 +233,12 @@ public class Connector implements AutoCloseable {
 			// "listener.onEvent()" might change "listeners" 
 			listener.onEvent();
 		}
+		return keySize;
+	}
 
-		return busy;
+	public void interrupt() {
+		eventQueue.add(INTERRUPTED);
+		selector.wakeup();
 	}
 
 	/**

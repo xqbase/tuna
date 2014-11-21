@@ -72,14 +72,9 @@ public class PortMapClientFrame extends ConnectorFrame {
 		}
 		client = null;
 		stop();
-		EventQueue.invokeLater(new Runnable() {
-			@Override
-			public void run() {
-				JOptionPane.showMessageDialog(PortMapClientFrame.this,
-						"Mapping Connection Failed", getTitle(),
-						JOptionPane.WARNING_MESSAGE);
-			}
-		});
+		EventQueue.invokeLater(() ->
+				JOptionPane.showMessageDialog(this, "Mapping Connection Failed",
+				getTitle(), JOptionPane.WARNING_MESSAGE));
 	}
 
 	public PortMapClientFrame() {

@@ -2,11 +2,11 @@ package com.xqbase.net;
 
 import java.util.LinkedHashSet;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TestClient {
-	static int connections = 0;
-	static int responses = 0;
-	static int errors = 0;
+	static AtomicInteger connections = new AtomicInteger(0),
+			responses = new AtomicInteger(0), errors = new AtomicInteger(0);
 
 	private static Connector newConnector() {
 		return new Connector();
@@ -29,9 +29,8 @@ public class TestClient {
 					conn.send(data);
 				}
 			}
-			if (!connector.doEvents()) {
-				Thread.sleep(16);
-			}
+			// Increase connection every 16 milliseconds
+			connector.doEvents(16);
 			count ++;
 			if (count == 100) {
 				count = 0;
@@ -44,19 +43,19 @@ public class TestClient {
 			connector.connect(new Connection() {
 				@Override
 				protected void onRecv(byte[] b, int off, int len) {
-					responses ++;
+					responses.incrementAndGet();
 				}
 
 				@Override
 				protected void onConnect() {
 					connectionSet.add(this);
-					connections ++;
+					connections.incrementAndGet();
 				}
 
 				@Override
 				protected void onDisconnect() {
 					connectionSet.remove(this);
-					errors ++;
+					errors.incrementAndGet();
 				}
 			}, "localhost", 2626);
 		}

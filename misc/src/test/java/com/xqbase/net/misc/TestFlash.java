@@ -1,7 +1,6 @@
 package com.xqbase.net.misc;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 
@@ -9,7 +8,6 @@ import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
 import com.xqbase.net.FilterFactory;
 import com.xqbase.net.ServerConnection;
-import com.xqbase.net.Connection.Writer;
 
 public class TestFlash {
 	private static Connector newConnector() {
@@ -24,15 +22,12 @@ public class TestFlash {
 
 		final LinkedHashSet<Connection> connections = new LinkedHashSet<>();
 		final Connection broadcast = new Connection();
-		broadcast.setWriter(new Writer() {
-			@Override
-			public int write(byte[] b, int off, int len) throws IOException {
-				for (Connection connection : connections.toArray(new Connection[0])) {
-					// "connection.onDisconnect()" might change "connections"
-					connection.getNetWriter().write(b, off, len);
-				}
-				return len;
+		broadcast.setWriter((b, off, len) -> {
+			for (Connection connection : connections.toArray(new Connection[0])) {
+				// "connection.onDisconnect()" might change "connections"
+				connection.getNetWriter().write(b, off, len);
 			}
+			return len;
 		});
 
 		ServerConnection broadcastServer = new ServerConnection(23) {
@@ -61,7 +56,7 @@ public class TestFlash {
 		ArrayList<FilterFactory> ffs = broadcastServer.getFilterFactories();
 		// Application Data Dumped onto System.out
 		ffs.add(new DumpFilterFactory().setDumpText(true));
-		ffs.add(new ZLibFilterFactory());
+		ffs.add(ZLibFilter::new);
 		// Network Data Dumped onto System.err
 		ffs.add(new DumpFilterFactory().setDumpStream(System.err));
 		broadcast.appendFilters(ffs);

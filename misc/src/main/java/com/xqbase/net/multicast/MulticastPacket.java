@@ -22,21 +22,18 @@ class MulticastPacket {
 
 	private static final int HEAD_TAG = 0x234c;
 
-	private static PacketParser parser = new PacketParser() {
-		@Override
-		public int getPacketSize(byte[] b, int off, int len) throws PacketException {
-			if (len < HEAD_SIZE) {
-				return 0;
-			}
-			if (Bytes.toShort(b, off) != HEAD_TAG) {
-				throw new PacketException("Wrong Packet Head");
-			}
-			int packetSize = Bytes.toShort(b, off + 2) & 0xffff;
-			if (packetSize < HEAD_SIZE) {
-				throw new PacketException("Wrong Packet Size");
-			}
-			return packetSize;
+	private static PacketParser parser = (b, off, len) -> {
+		if (len < HEAD_SIZE) {
+			return 0;
 		}
+		if (Bytes.toShort(b, off) != HEAD_TAG) {
+			throw new PacketException("Wrong Packet Head");
+		}
+		int packetSize = Bytes.toShort(b, off + 2) & 0xffff;
+		if (packetSize < HEAD_SIZE) {
+			throw new PacketException("Wrong Packet Size");
+		}
+		return packetSize;
 	};
 
 	static PacketParser getParser() {

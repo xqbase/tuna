@@ -6,8 +6,6 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 
 import com.xqbase.net.Connector;
 import com.xqbase.net.misc.DoSFilterFactory;
@@ -93,17 +91,14 @@ public class PortMapServerFrame extends ConnectorFrame {
 
 		slider.setBounds(110, 5, 65, 20);
 		slider.setSnapToTicks(true);
-		slider.addChangeListener(new ChangeListener() {
-			@Override
-			public void stateChanged(ChangeEvent e) {
-				int sliderValue = ((JSlider) e.getSource()).getValue();
-				lblSlider.setText(sliderValue == SLIDER_NO_LIMIT ?
-						"No Limit" : (1 << (sliderValue << 1)) + "KB/s");
-				// Speed Limit -> Buffer Size:
-				// 1KB/s -> 16, 4KB/s -> 64, 16KB/s -> 256, 64KB/s -> 1024
-				connector.setBufferSize(sliderValue == SLIDER_NO_LIMIT ?
-						Connector.MAX_BUFFER_SIZE : 16 << (sliderValue << 1));
-			}
+		slider.addChangeListener(e -> {
+			int sliderValue = ((JSlider) e.getSource()).getValue();
+			lblSlider.setText(sliderValue == SLIDER_NO_LIMIT ?
+					"No Limit" : (1 << (sliderValue << 1)) + "KB/s");
+			// Speed Limit -> Buffer Size:
+			// 1KB/s -> 16, 4KB/s -> 64, 16KB/s -> 256, 64KB/s -> 1024
+			connector.setBufferSize(sliderValue == SLIDER_NO_LIMIT ?
+					Connector.MAX_BUFFER_SIZE : 16 << (sliderValue << 1));
 		});
 		add(slider);
 

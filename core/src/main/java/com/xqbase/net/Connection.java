@@ -26,6 +26,7 @@ public class Connection {
 	 *      InetSocketAddress, InetSocketAddress, Collection, Collection)
 	 * @see Connection#getNetWriter()
 	 */
+	@FunctionalInterface
 	public static interface Writer {
 		/**
 		 * Consumes sent data in the network end of a connection.
@@ -179,13 +180,12 @@ public class Connection {
 		}
 	}
 
+	// available to non-virtual connections only 
+	SocketChannel socketChannel;
+	SelectionKey selectionKey;
+
 	// available to both virtual and non-virtual connections 
-	private Writer writer = new Writer() {
-		@Override
-		public int write(byte[] b, int off, int len) throws IOException {
-			return socketChannel.write(ByteBuffer.wrap(b, off, len));
-		}
-	};
+	private Writer writer = (b, off, len) -> socketChannel.write(ByteBuffer.wrap(b, off, len));
 	private InetSocketAddress local, remote;
 
 	Consumer<Event> events, concurrentEvents;
@@ -226,12 +226,9 @@ public class Connection {
 	/** @return The network end of the writer where data can be sent directly. */
 	public Writer getNetWriter() {
 		if (netWriter == null) {
-			netWriter = new Writer() {
-				@Override
-				public int write(byte[] b, int off, int len) {
-					Connection.this.write(b, off, len);
-					return len;
-				}
+			netWriter = (b, off, len) -> {
+				Connection.this.write(b, off, len);
+				return len;
 			};
 		}
 		return netWriter;
@@ -266,9 +263,6 @@ public class Connection {
 	}
 
 	// the following fields and methods are available to non-virtual connections only 
-	SocketChannel socketChannel;
-	SelectionKey selectionKey;
-
 	private static final int STATUS_IDLE = 0;
 	private static final int STATUS_BUSY = 1;
 	private static final int STATUS_DISCONNECTING = 2;

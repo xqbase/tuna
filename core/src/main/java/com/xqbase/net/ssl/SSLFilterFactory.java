@@ -6,6 +6,7 @@ import java.util.concurrent.Executors;
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.net.FilterFactory;
+import com.xqbase.util.Runnables;
 
 public class SSLFilterFactory implements FilterFactory, AutoCloseable {
 	private ExecutorService executor = Executors.newCachedThreadPool();
@@ -24,6 +25,6 @@ public class SSLFilterFactory implements FilterFactory, AutoCloseable {
 
 	@Override
 	public void close() {
-		executor.shutdown();
+		Runnables.shutdown(executor);
 	}
 }
