@@ -19,7 +19,6 @@ import com.xqbase.net.Connection.Event;
  * which makes {@link Connection} and {@link ServerConnection} working.<p>
  */
 public class Connector implements AutoCloseable {
-	private static final Event INTERRUPTED = new Connection().new Event(0);
 	/** Maximum buffer size. {@link #setBufferSize(int)} should not exceed this value */
 	public static final int MAX_BUFFER_SIZE = 32768;
 
@@ -33,16 +32,11 @@ public class Connector implements AutoCloseable {
 	}
 
 	private Selector selector;
-	private boolean interrupted = false;
 	private LinkedHashSet<Listener> listeners = new LinkedHashSet<>();
 	private int bufferSize = MAX_BUFFER_SIZE;
 	private byte[] buffer = new byte[MAX_BUFFER_SIZE];
 	private ArrayList<FilterFactory> filterFactories = new ArrayList<>();
-	private Consumer<Event> events = event -> {
-		if (event == INTERRUPTED) {
-			interrupted = true;
-			return;
-		}
+	private Consumer<Event> consumer = event -> {
 		Connection connection = event.getConnection();
 		if (!connection.isOpen()) {
 			return;
@@ -62,6 +56,7 @@ public class Connector implements AutoCloseable {
 		}
 	};
 	private ConcurrentLinkedQueue<Event> eventQueue = new ConcurrentLinkedQueue<>();
+	private volatile boolean interrupted = false;
 
 	{
 		try {
@@ -72,11 +67,9 @@ public class Connector implements AutoCloseable {
 	}
 
 	private void add(Connection connection, int ops) {
-		connection.events = events;
-		connection.concurrentEvents = event -> {
-			eventQueue.add(event);
-			selector.wakeup();
-		};
+		connection.selector = selector;
+		connection.consumer = consumer;
+		connection.eventQueue = eventQueue;
 		try {
 			connection.selectionKey = connection.socketChannel.
 					register(selector, ops, connection);
@@ -210,7 +203,7 @@ public class Connector implements AutoCloseable {
 					if (bytesRead > 0) {
 						connection.netFilter.onRecv(buffer, 0, bytesRead);
 					} else if (bytesRead < 0) {
-						connection.dispatchEvent(-1);
+						connection.dispatchNow(-1);
 					}
 				} else if (key.isWritable()) {
 					connection.write();
@@ -220,14 +213,14 @@ public class Connector implements AutoCloseable {
 					}
 				}
 			} catch (IOException e) {
-				connection.dispatchEvent(-1);
+				connection.dispatchNow(-1);
 			}
 		}
 		selectedKeys.clear();
 
 		Event event;
 		while ((event = eventQueue.poll()) != null) {
-			events.accept(event);
+			consumer.accept(event);
 		}
 		for (Listener listener : listeners.toArray(new Listener[0])) {
 			// "listener.onEvent()" might change "listeners" 
@@ -237,7 +230,7 @@ public class Connector implements AutoCloseable {
 	}
 
 	public void interrupt() {
-		eventQueue.add(INTERRUPTED);
+		interrupted = true;
 		selector.wakeup();
 	}
 

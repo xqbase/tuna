@@ -4,8 +4,10 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
 import com.xqbase.util.ByteArrayQueue;
@@ -188,7 +190,9 @@ public class Connection {
 	private Writer writer = (b, off, len) -> socketChannel.write(ByteBuffer.wrap(b, off, len));
 	private InetSocketAddress local, remote;
 
-	Consumer<Event> events, concurrentEvents;
+	Selector selector;
+	Consumer<Event> consumer;
+	ConcurrentLinkedQueue<Event> eventQueue;
 
 	/**
 	 * Makes the connection virtual and write-only.
@@ -205,19 +209,19 @@ public class Connection {
 	 * @param writer - The writer which consumes sent data.
 	 * @param local - Local IP address and port.
 	 * @param remote - Remote IP address and port.
-	 * @param events - A collection to consume events via {@link Collection#add(Object)}.
-	 * @param concurrentEvents - A collection to consume concurrent events
-	 *        (raised by another thread) via {@link Collection#add(Object)}.
+	 * @param consumer - Event consumer raised by {@link #dispatchNow(int type)}.
+	 * @param laterConsumer - Event consumer raised by {@link #dispatchLater(int type)}
+	 *        in another thread.
 	 * @see #getNetReader()
 	 */
 	public void setWriter(Writer writer,
 			InetSocketAddress local, InetSocketAddress remote,
-			Consumer<Event> events, Consumer<Event> concurrentEvents) {
+			Consumer<Event> consumer, ConcurrentLinkedQueue<Event> eventQueue) {
 		this.writer = writer;
 		this.local = local;
 		this.remote = remote;
-		this.events = events;
-		this.concurrentEvents = concurrentEvents;
+		this.consumer = consumer;
+		this.eventQueue = eventQueue;
 	}
 
 	private Writer netWriter = null;
@@ -283,11 +287,11 @@ public class Connection {
 			queue.remove(bytesWritten);
 		}
 		if (status == STATUS_DISCONNECTING) {
-			dispatchEvent(Event.DISCONNECT);
+			dispatchNow(Event.DISCONNECT);
 		} else {
 			selectionKey.interestOps(SelectionKey.OP_READ);
 			status = STATUS_IDLE;
-			dispatchEvent(Event.EMPTY);
+			dispatchNow(Event.EMPTY);
 		}
 	}
 	// the above fields and methods are available to non-virtual connections only 
@@ -309,7 +313,7 @@ public class Connection {
 			queue.add(b, off + bytesWritten, len - bytesWritten);
 			selectionKey.interestOps(SelectionKey.OP_WRITE);
 			status = STATUS_BUSY;
-			dispatchEvent(Event.QUEUED);
+			dispatchNow(Event.QUEUED);
 		}
 	}
 
@@ -329,14 +333,14 @@ public class Connection {
 		}
 		if (queue.length() == 0) {
 			if (status == STATUS_DISCONNECTING) {
-				dispatchEvent(Event.DISCONNECT);
+				dispatchNow(Event.DISCONNECT);
 			} else {
 				selectionKey.interestOps(SelectionKey.OP_READ);
 				status = STATUS_IDLE;
 			}
 		} else {
 			selectionKey.interestOps(SelectionKey.OP_WRITE);
-			dispatchEvent(Event.QUEUED);
+			dispatchNow(Event.QUEUED);
 		}
 	}
 
@@ -361,34 +365,24 @@ public class Connection {
 	}
 
 	/** Raises an event with a given type immediately. */
-	public void dispatchEvent(int type) {
-		dispatchEvent(type, false);
+	public void dispatchNow(int type) {
+		dispatchNow(new Event(type));
 	}
 
-	/** 
-	 * Raises an event with a given type.
-	 *
-	 * @see #dispatchEvent(Event, boolean)
-	 */
-	public void dispatchEvent(int type, boolean concurrent) {
-		dispatchEvent(new Event(type), concurrent);
+	/** Raises an event with a given event immediately. */
+	public void dispatchNow(Event event) {
+		consumer.accept(event);
 	}
 
-	/** Raises an event immediately. */
-	public void dispatchEvent(Event event) {
-		dispatchEvent(event, false);
+	/** Raises an event with a given type later in another thread. */
+	public void dispatchLater(int type) {
+		dispatchLater(new Event(type));
 	}
 
-	/**
-	 * Raises an event.
-	 *
-	 * @param event - The event to be raised.
-	 * @param concurrent - Set <code>true</code> to add the event
-	 *        in the event queue (only necessary when called in another thread),
-	 *        and set <code>false</code> to consume the event immediately. 
-	 */
-	public void dispatchEvent(Event event, boolean concurrent) {
-		(concurrent ? concurrentEvents : events).accept(event);
+	/** Raises an event with a given event later in another thread. */
+	public void dispatchLater(Event event) {
+		eventQueue.offer(event);
+		selector.wakeup();
 	}
 
 	/**
@@ -399,7 +393,7 @@ public class Connection {
 	 */
 	public void disconnect() {
 		if (status == STATUS_IDLE) {
-			dispatchEvent(Event.DISCONNECT);
+			dispatchNow(Event.DISCONNECT);
 		} else if (status == STATUS_BUSY) {
 			status = STATUS_DISCONNECTING;
 		}

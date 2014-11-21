@@ -51,8 +51,7 @@ public class TestSSLClient {
 		connection2.appendFilter(sslf2);
 		connector.connect(connection2, "localhost", 2323);
 		while (!connected) {
-			while (connector.doEvents()) {/**/}
-			Thread.sleep(16);
+			connector.doEvents(-1);
 		}
 		// Evade resource leak warning
 		closeConnector(connector);

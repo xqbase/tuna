@@ -38,9 +38,6 @@ public class TestMulticast {
 		edge = new EdgeServer(2525);
 		connector.add(edge);
 		connector.connect(edge.getOriginConnection(), "localhost", 2323);
-		while (true) {
-			while (connector.doEvents()) {/**/}
-			Thread.sleep(16);
-		}
+		connector.doEvents();
 	}
 }
