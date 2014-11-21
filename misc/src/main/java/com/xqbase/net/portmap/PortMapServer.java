@@ -9,8 +9,8 @@ import java.util.LinkedHashSet;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
-import com.xqbase.net.ServerConnection;
 import com.xqbase.net.Connector.Listener;
+import com.xqbase.net.ServerConnection;
 import com.xqbase.net.packet.PacketFilter;
 
 class IdPool {

@@ -70,19 +70,9 @@ public abstract class ConnectorFrame extends JFrame {
 		setLocationByPlatform(true);
 		setResizable(false);
 
-		startButton.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				start();
-			}
-		});
+		startButton.addActionListener(e -> start());
 		add(startButton);
-		exitButton.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				dispose();
-			}
-		});
+		exitButton.addActionListener(e -> dispose());
 		add(exitButton);
 		addWindowListener(new WindowAdapter() {
 			@Override
@@ -153,26 +143,15 @@ public abstract class ConnectorFrame extends JFrame {
 			}
 		});
 
-		miOpen.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				SystemTray.getSystemTray().remove(trayIcon);
-				setVisible(true);
-				setState(NORMAL);
-			}
+		miOpen.addActionListener(e -> {
+			SystemTray.getSystemTray().remove(trayIcon);
+			setVisible(true);
+			setState(NORMAL);
 		});
-		startMenuItem.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				start();
-			}
-		});
-		miExit.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				SystemTray.getSystemTray().remove(trayIcon);
-				dispose();
-			}
+		startMenuItem.addActionListener(e -> start());
+		miExit.addActionListener(e -> {
+			SystemTray.getSystemTray().remove(trayIcon);
+			dispose();
 		});
 	}
 
@@ -193,6 +172,7 @@ public abstract class ConnectorFrame extends JFrame {
 			return;
 		}
 		running = true;
+		// Unable to change to lambda here
 		EventQueue.invokeLater(new Runnable() {
 			@Override
 			public void run() {
@@ -221,11 +201,6 @@ public abstract class ConnectorFrame extends JFrame {
 		}
 		UIManager.put("AuditoryCues.playList",
 				UIManager.get("AuditoryCues.allAuditoryCues"));
-		EventQueue.invokeLater(new Runnable() {
-			@Override
-			public void run() {
-				frame.setVisible(true);
-			}
-		});
+		EventQueue.invokeLater(() -> frame.setVisible(true));
 	}
 }

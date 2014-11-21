@@ -120,61 +120,6 @@ class EdgeConnection extends Connection {
 	}
 }
 
-class MulticastWriter implements Writer {
-	private OriginServer origin;
-	private Iterable<? extends Connection> connections;
-
-	MulticastWriter(OriginServer origin, Iterable<? extends Connection> connections) {
-		this.origin = origin;
-		this.connections = connections;
-	}
-
-	@Override
-	public int write(byte[] b, int off, int len) throws IOException {
-		int maxNumConns = (65535 - 16 - len) / 4;
-		if (maxNumConns < 1) {
-			throw new IOException("Data Too Long");
-		}
-		HashMap<EdgeConnection, ArrayList<Integer>> connListMap = new HashMap<>();
-		// "connections.iterator()" is called
-		for (Connection conn : connections) {
-			// nothing can change "connections", so the iteration is safe
-			VirtualWriter writer = origin.writerMap.get(conn);
-			if (writer == null) {
-				continue;
-			}
-			EdgeConnection edge = writer.edge;
-			ArrayList<Integer> connList = connListMap.get(edge);
-			if (connList == null) {
-				connList = new ArrayList<>();
-				connListMap.put(edge, connList);
-			}
-			connList.add(Integer.valueOf(writer.connId));
-		}
-		for (Entry<EdgeConnection, ArrayList<Integer>> entry : connListMap.entrySet()) {
-			EdgeConnection edge = entry.getKey();
-			ArrayList<Integer> connList = entry.getValue();
-			int numConnsToSend = connList.size();
-			int numConnsSent = 0;
-			while (numConnsToSend > 0) {
-				int numConns = Math.min(numConnsToSend, maxNumConns);
-				edge.send(new MulticastPacket(0,
-						MulticastPacket.ORIGIN_MULTICAST, numConns, len).getHead());
-				byte[] connListBytes = new byte[numConns * 4];
-				for (int i = 0; i < numConns; i ++) {
-					Bytes.setInt(connList.get(numConnsSent + i).intValue(),
-							connListBytes, i * 4);
-				}
-				edge.send(connListBytes);
-				edge.send(b, off, len);
-				numConnsToSend -= numConns;
-				numConnsSent += numConns;
-			}
-		}
-		return len;
-	}
-}
-
 /**
  * An origin server can manage a large number of virtual {@link Connection}s
  * via several {@link EdgeServer}s.
@@ -257,7 +202,49 @@ public class OriginServer extends ServerConnection implements Listener {
 	 */
 	public Connection createMulticast(Iterable<? extends Connection> connections) {
 		Connection multicast = createVirtualConnection();
-		multicast.setWriter(new MulticastWriter(this, connections));
+		multicast.setWriter((b, off, len) -> {
+			int maxNumConns = (65535 - 16 - len) / 4;
+			if (maxNumConns < 1) {
+				throw new IOException("Data Too Long");
+			}
+			HashMap<EdgeConnection, ArrayList<Integer>> connListMap = new HashMap<>();
+			// "connections.iterator()" is called
+			for (Connection conn : connections) {
+				// nothing can change "connections", so the iteration is safe
+				VirtualWriter writer = writerMap.get(conn);
+				if (writer == null) {
+					continue;
+				}
+				EdgeConnection edge = writer.edge;
+				ArrayList<Integer> connList = connListMap.get(edge);
+				if (connList == null) {
+					connList = new ArrayList<>();
+					connListMap.put(edge, connList);
+				}
+				connList.add(Integer.valueOf(writer.connId));
+			}
+			for (Entry<EdgeConnection, ArrayList<Integer>> entry : connListMap.entrySet()) {
+				EdgeConnection edge = entry.getKey();
+				ArrayList<Integer> connList = entry.getValue();
+				int numConnsToSend = connList.size();
+				int numConnsSent = 0;
+				while (numConnsToSend > 0) {
+					int numConns = Math.min(numConnsToSend, maxNumConns);
+					edge.send(new MulticastPacket(0,
+							MulticastPacket.ORIGIN_MULTICAST, numConns, len).getHead());
+					byte[] connListBytes = new byte[numConns * 4];
+					for (int i = 0; i < numConns; i ++) {
+						Bytes.setInt(connList.get(numConnsSent + i).intValue(),
+								connListBytes, i * 4);
+					}
+					edge.send(connListBytes);
+					edge.send(b, off, len);
+					numConnsToSend -= numConns;
+					numConnsSent += numConns;
+				}
+			}
+			return len;
+		});
 		multicast.appendFilters(virtualFilterFactories);
 		return multicast;
 	}

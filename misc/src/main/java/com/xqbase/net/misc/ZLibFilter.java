@@ -15,21 +15,18 @@ import com.xqbase.util.Bytes;
 
 /** A {@link Filter} which compresses application data and uncompresses network data. */
 public class ZLibFilter extends PacketFilter {
-	private static PacketParser parser = new PacketParser() {
-		@Override
-		public int getPacketSize(byte[] b, int off, int len) throws PacketException {
-			if (len < 4) {
-				return 0;
-			}
-			if (Bytes.toShort(b, off + 2) % 31 != 0) {
-				throw new PacketException("Wrong Packet Head");
-			}
-			int size = Bytes.toShort(b, off) & 0xffff;
-			if (size < 4) {
-				throw new PacketException("Wrong Packet Size");
-			}
-			return size;
+	private static PacketParser parser = (b, off, len) -> {
+		if (len < 4) {
+			return 0;
 		}
+		if (Bytes.toShort(b, off + 2) % 31 != 0) {
+			throw new PacketException("Wrong Packet Head");
+		}
+		int size = Bytes.toShort(b, off) & 0xffff;
+		if (size < 4) {
+			throw new PacketException("Wrong Packet Size");
+		}
+		return size;
 	};
 
 	/** Creates a ZLibFilter. */

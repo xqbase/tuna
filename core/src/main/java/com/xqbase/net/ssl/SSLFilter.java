@@ -17,7 +17,7 @@ import com.xqbase.util.ByteArrayQueue;
 import com.xqbase.util.Bytes;
 
 /** An SSL filter which makes a connection secure */
-public class SSLFilter extends Filter implements Runnable {
+public class SSLFilter extends Filter {
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * NO client authentication desired.
@@ -97,15 +97,6 @@ public class SSLFilter extends Filter implements Runnable {
 		appBBSize = ssle.getSession().getApplicationBufferSize();
 		requestBytes = new byte[appBBSize];
 		requestBB = ByteBuffer.wrap(requestBytes);
-	}
-
-	@Override
-	public void run() {
-		Runnable task;
-		while ((task = ssle.getDelegatedTask()) != null) {
-			task.run();
-		}
-		getConnection().dispatchEvent(EVENT_TASK, true);
 	}
 
 	@Override
@@ -215,6 +206,14 @@ public class SSLFilter extends Filter implements Runnable {
 		return result;
 	}
 
+	private void doTask() {
+		Runnable task;
+		while ((task = ssle.getDelegatedTask()) != null) {
+			task.run();
+		}
+		getConnection().dispatchEvent(EVENT_TASK, true);
+	}
+
 	private void doHandshake() throws IOException {
 		while (hs != HandshakeStatus.FINISHED) {
 			switch (hs) {
@@ -227,7 +226,7 @@ public class SSLFilter extends Filter implements Runnable {
 						throw new IOException();
 					}
 					if (hs == HandshakeStatus.NEED_TASK) {
-						executor.execute(this);
+						executor.execute(this::doTask);
 						return;
 					}
 					break;
@@ -247,7 +246,7 @@ public class SSLFilter extends Filter implements Runnable {
 				result = wrap(Bytes.EMPTY_BYTES, 0, 0);
 				hs = result.getHandshakeStatus();
 				if (hs == HandshakeStatus.NEED_TASK) {
-					executor.execute(this);
+					executor.execute(this::doTask);
 					return;
 				}
 				break;

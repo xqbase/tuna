@@ -3,8 +3,6 @@ package com.xqbase.net.tools;
 import java.awt.EventQueue;
 import java.awt.Frame;
 import java.awt.Toolkit;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
@@ -19,8 +17,6 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.UIManager;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 
 import com.xqbase.net.Connection;
 
@@ -110,18 +106,15 @@ public class TerminalFrame extends ConnectorFrame {
 				if (status == STATUS_DISCONNECTED) {
 					return;
 				}
-				EventQueue.invokeLater(new Runnable() {
-					@Override
-					public void run() {
-						if (status == STATUS_CONNECTED) {
-							JOptionPane.showMessageDialog(TerminalFrame.this,
-									"Connection Lost", getTitle(),
-									JOptionPane.INFORMATION_MESSAGE);
-						} else {
-							JOptionPane.showMessageDialog(TerminalFrame.this,
-									"Connection Failed", getTitle(),
-									JOptionPane.WARNING_MESSAGE);
-						}
+				EventQueue.invokeLater(() -> {
+					if (status == STATUS_CONNECTED) {
+						JOptionPane.showMessageDialog(TerminalFrame.this,
+								"Connection Lost", getTitle(),
+								JOptionPane.INFORMATION_MESSAGE);
+					} else {
+						JOptionPane.showMessageDialog(TerminalFrame.this,
+								"Connection Failed", getTitle(),
+								JOptionPane.WARNING_MESSAGE);
 					}
 				});
 			}
@@ -166,19 +159,16 @@ public class TerminalFrame extends ConnectorFrame {
 		add(txtPort);
 
 		btnConnect.setBounds(270, 6, 96, 30);
-		btnConnect.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				if (btnSend.isEnabled()) {
-					if (!chkAnonymous.isSelected()) {
-						connection.send(String.format("[%s Disconnected at %s]\r\n",
-								txtName.getText(), now()).getBytes());
-					}
-					status = STATUS_DISCONNECTED;
-					connection.disconnect();
-				} else {
-					start();
+		btnConnect.addActionListener(e -> {
+			if (btnSend.isEnabled()) {
+				if (!chkAnonymous.isSelected()) {
+					connection.send(String.format("[%s Disconnected at %s]\r\n",
+							txtName.getText(), now()).getBytes());
 				}
+				status = STATUS_DISCONNECTED;
+				connection.disconnect();
+			} else {
+				start();
 			}
 		});
 		add(btnConnect);
@@ -191,12 +181,8 @@ public class TerminalFrame extends ConnectorFrame {
 		add(txtName);
 
 		chkAnonymous.setBounds(168, 36, 96, 24);
-		chkAnonymous.addChangeListener(new ChangeListener() {
-			@Override
-			public void stateChanged(ChangeEvent e) {
-				txtName.setEnabled(!chkAnonymous.isSelected());
-			}
-		});
+		chkAnonymous.addChangeListener(e ->
+				txtName.setEnabled(!chkAnonymous.isSelected()));
 		add(chkAnonymous);
 
 		chkQuiet.setBounds(264, 36, 96, 24);
@@ -242,22 +228,12 @@ public class TerminalFrame extends ConnectorFrame {
 
 		btnSend.setBounds(36, 252, 84, 30);
 		btnSend.setEnabled(false);
-		btnSend.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				send();
-			}
-		});
+		btnSend.addActionListener(e -> send());
 		add(btnSend);
 
 		JButton btnClear = new JButton("Clear");
 		btnClear.setBounds(144, 252, 84, 30);
-		btnClear.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				txtRecv.setText("");
-			}
-		});
+		btnClear.addActionListener(e -> txtRecv.setText(""));
 		add(btnClear);
 
 		startButton.setVisible(false);

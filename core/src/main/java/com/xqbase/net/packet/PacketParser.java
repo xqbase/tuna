@@ -1,6 +1,7 @@
 package com.xqbase.net.packet;
 
 /** This interface provides the way to parse packets. */
+@FunctionalInterface
 public interface PacketParser {
 	/**
 	 * @return Packet size according to the beginning bytes of a packet,
