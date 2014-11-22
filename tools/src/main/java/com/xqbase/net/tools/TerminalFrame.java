@@ -122,7 +122,7 @@ public class TerminalFrame extends ConnectorFrame {
 		try {
 			connector.connect(connection, txtHost.getText(),
 					Integer.parseInt(txtPort.getText()));
-		} catch (IOException | NumberFormatException e) {
+		} catch (IOException | IllegalArgumentException e) {
 			stop();
 			JOptionPane.showMessageDialog(TerminalFrame.this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);

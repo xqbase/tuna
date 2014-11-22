@@ -6,10 +6,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
-import com.xqbase.net.Connector.Listener;
 import com.xqbase.net.ServerConnection;
 import com.xqbase.net.packet.PacketFilter;
 
@@ -186,10 +188,12 @@ class MapConnection extends Connection {
  * This server will open public ports, which map private ports provided by PortMapClients.
  * @see PortMapClient
  */
-public class PortMapServer extends ServerConnection implements Listener {
+public class PortMapServer extends ServerConnection {
 	LinkedHashSet<MapConnection> timeoutSet = new LinkedHashSet<>();
 	Connector connector;
 	int portFrom, portTo;
+
+	private ScheduledFuture<?> future;
 
 	/**
 	 * Creates a PortMapServer.
@@ -197,14 +201,29 @@ public class PortMapServer extends ServerConnection implements Listener {
 	 * @param port - The mapping service port which {@link PortMapClient} connects to.
 	 * @param portFrom - The lowest port the client can open.
 	 * @param portTo - The highest port the client can open.
+	 * @param timer - The {@link ScheduledExecutorService} to clear expired connections.
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	public PortMapServer(Connector connector,
-			int port, int portFrom, int portTo) throws IOException {
+	public PortMapServer(Connector connector, int port, int portFrom,
+			int portTo, ScheduledExecutorService timer) throws IOException {
 		super(port);
 		this.connector = connector;
 		this.portFrom = portFrom;
 		this.portTo = portTo;
+		// in main thread
+		future = timer.scheduleAtFixedRate(() -> {
+			// in timer thread
+			invokeLater(() -> {
+				// in main thread
+				long now = System.currentTimeMillis();
+				Iterator<MapConnection> i = timeoutSet.iterator();
+				MapConnection mapConn;
+				while (i.hasNext() && now > (mapConn = i.next()).accessed + 60000) {
+					i.remove();
+					mapConn.disconnect();
+				}
+			});
+		}, 45000, 45000, TimeUnit.MILLISECONDS);
 	}
 
 	@Override
@@ -215,13 +234,7 @@ public class PortMapServer extends ServerConnection implements Listener {
 	}
 
 	@Override
-	public void onEvent() {
-		long now = System.currentTimeMillis();
-		Iterator<MapConnection> i = timeoutSet.iterator();
-		MapConnection mapConn;
-		while (i.hasNext() && now > (mapConn = i.next()).accessed + 60000) {
-			i.remove();
-			mapConn.disconnect();
-		}
+	protected void onClose() {
+		future.cancel(false);
 	}
 }

@@ -4,11 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.util.Collection;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.function.Consumer;
 
 import com.xqbase.util.ByteArrayQueue;
 
@@ -17,51 +13,9 @@ import com.xqbase.util.ByteArrayQueue;
  * which corresponds to a TCP Socket.
  */
 public class Connection {
-	private static final InetSocketAddress NULL_ADDRESS = new InetSocketAddress(0);
-
 	/**
-	 * This interface provides the way to consume sent data
-	 * in the network end of a connection.
-	 * 
-	 * @see Connection#setWriter(Writer)
-	 * @see Connection#setWriter(Writer,
-	 *      InetSocketAddress, InetSocketAddress, Collection, Collection)
-	 * @see Connection#getNetWriter()
-	 */
-	@FunctionalInterface
-	public static interface Writer {
-		/**
-		 * Consumes sent data in the network end of a connection.
-		 *
-		 * @return The number of bytes actually sent,
-		 *         must equals to <b>len</b> in virtual connections.
-		 * @throws IOException If fail to send and the connection must close.
-		 *         Note that IOException should not be thrown in virtual connections.
-		 */
-		public int write(byte[] b, int off, int len) throws IOException;
-	}
-
-	/**
-	 * This interface provides the way to consume received data
-	 * and events (including connecting and disconnecting events)
-	 * in the network end of a connection.
-	 * 
-	 * @see Connection#getNetReader()
-	 */
-	public static interface Reader {
-		/** Consumes received data in the NETWORK end of the connection */
-		public void onRecv(byte[] b, int off, int len);
-		/** Consumes events in the NETWORK end of the connection */
-		public void onEvent(Event event);
-		/** Consumes connecting events in the NETWORK end of the connection */
-		public void onConnect();
-		/** Consumes disconnected events in the NETWORK end of the connection */
-		public void onDisconnect();
-	}
-
-	/**
-	 * A event which can be raised by {@link Connection#dispatchEvent(Event)}
-	 * and consumed by {@link Connection#onEvent(Event)}.
+	 * An event which can be raised by {@link #dispatchNow(Event)}
+	 * or {@link #dispatchLater(Event)}.
 	 */
 	public class Event {
 		/** Reserved event type which indicates an active disconnecting */
@@ -76,11 +30,11 @@ public class Connection {
 		/**
 		 * Creates an Event with a given type.<p>
 		 * A zero type means an active disconnecting, which will successively
-		 * be consumed by {@link Connection#onEvent(Event)} and
+		 * be consumed by {@link #onEvent(Event)} and
 		 * {@link Connection#onDisconnect()}.<p>
 		 * A negative type means a passive disconnecting or a socket error,
 		 * which will be consumed by {@link Connection#onDisconnect()} but
-		 * will NOT be consumed by {@link Connection#onEvent(Event)}.
+		 * will NOT be consumed by {@link #onEvent(Event)}.
 		 */
 		protected Event(int type) {
 			this.type = type;
@@ -89,11 +43,6 @@ public class Connection {
 		/** @return The type of the event. */
 		public int getType() {
 			return type;
-		}
-
-		/** @return The connection where the event initially occurred. */
-		public Connection getConnection() {
-			return Connection.this;
 		}
 	}
 
@@ -182,105 +131,23 @@ public class Connection {
 		}
 	}
 
-	// available to non-virtual connections only 
-	SocketChannel socketChannel;
-	SelectionKey selectionKey;
-
-	// available to both virtual and non-virtual connections 
-	private Writer writer = (b, off, len) -> socketChannel.write(ByteBuffer.wrap(b, off, len));
-	private InetSocketAddress local, remote;
-
-	Selector selector;
-	Consumer<Event> consumer;
-	ConcurrentLinkedQueue<Event> eventQueue;
-
-	/**
-	 * Makes the connection virtual and write-only.
-	 *
-	 * @param writer - The writer which consumes sent data.
-	 */
-	public void setWriter(Writer writer) {
-		setWriter(writer, NULL_ADDRESS, NULL_ADDRESS, null, null);
-	}
-
-	/**
-	 * Makes the connection virtual.
-	 *
-	 * @param writer - The writer which consumes sent data.
-	 * @param local - Local IP address and port.
-	 * @param remote - Remote IP address and port.
-	 * @param consumer - Event consumer raised by {@link #dispatchNow(int type)}.
-	 * @param laterConsumer - Event consumer raised by {@link #dispatchLater(int type)}
-	 *        in another thread.
-	 * @see #getNetReader()
-	 */
-	public void setWriter(Writer writer,
-			InetSocketAddress local, InetSocketAddress remote,
-			Consumer<Event> consumer, ConcurrentLinkedQueue<Event> eventQueue) {
-		this.writer = writer;
-		this.local = local;
-		this.remote = remote;
-		this.consumer = consumer;
-		this.eventQueue = eventQueue;
-	}
-
-	private Writer netWriter = null;
-	private Reader netReader = null;
-
-	/** @return The network end of the writer where data can be sent directly. */
-	public Writer getNetWriter() {
-		if (netWriter == null) {
-			netWriter = (b, off, len) -> {
-				Connection.this.write(b, off, len);
-				return len;
-			};
-		}
-		return netWriter;
-	}
-
-	/** @return The network end of the reader from which data and events can be raised. */
-	public Reader getNetReader() {
-		if (netReader == null) {
-			netReader = new Reader() {
-				@Override
-				public void onRecv(byte[] b, int off, int len) {
-					netFilter.onRecv(b, off, len);
-				}
-
-				@Override
-				public void onEvent(Event event) {
-					netFilter.onEvent(event);
-				}
-
-				@Override
-				public void onConnect() {
-					netFilter.onConnect();
-				}
-
-				@Override
-				public void onDisconnect() {
-					netFilter.onDisconnect();
-				}
-			};
-		}
-		return netReader;
-	}
-
-	// the following fields and methods are available to non-virtual connections only 
 	private static final int STATUS_IDLE = 0;
 	private static final int STATUS_BUSY = 1;
 	private static final int STATUS_DISCONNECTING = 2;
 	private static final int STATUS_CLOSED = 3;
 
-	// always STATUS_IDLE for virtual connections
+	private InetSocketAddress local, remote;
 	private int status = STATUS_IDLE;
-	// always empty for virtual connections
 	private ByteArrayQueue queue = new ByteArrayQueue();
+
+	SocketChannel socketChannel;
+	SelectionKey selectionKey;
+	Connector connector;
 
 	void write() throws IOException {
 		while (queue.length() > 0) {
-			int bytesWritten = writer.write(queue.array(),
-					queue.offset(), queue.length());
+			int bytesWritten = 	socketChannel.write(ByteBuffer.wrap(queue.array(),
+					queue.offset(), queue.length()));
 			if (bytesWritten == 0) {
 				return;
 			}
@@ -294,7 +161,6 @@ public class Connection {
 			dispatchNow(Event.EMPTY);
 		}
 	}
-	// the above fields and methods are available to non-virtual connections only 
 
 	void write(byte[] b, int off, int len) {
 		if (status != STATUS_IDLE) {
@@ -303,12 +169,11 @@ public class Connection {
 		}
 		int bytesWritten;
 		try {
-			bytesWritten = writer.write(b, off, len);
+			bytesWritten = socketChannel.write(ByteBuffer.wrap(b, off, len));
 		} catch (IOException e) {
 			disconnect();
 			return;
 		}
-		// Should never reached in virtual connections
 		if (bytesWritten < len) {
 			queue.add(b, off + bytesWritten, len - bytesWritten);
 			selectionKey.interestOps(SelectionKey.OP_WRITE);
@@ -369,9 +234,26 @@ public class Connection {
 		dispatchNow(new Event(type));
 	}
 
+	private Runnable getRunnable(Event event) {
+		return () -> {
+			if (!isOpen()) {
+				return;
+			}
+			if (event.getType() >= 0) {
+				netFilter.onEvent(event);
+			}
+			if (event.getType() <= 0) {
+				close();
+				// Call "close()" before "onDisconnect()"
+				// to avoid recursive "disconnect()".
+				netFilter.onDisconnect();
+			}
+		};
+	}
+
 	/** Raises an event with a given event immediately. */
 	public void dispatchNow(Event event) {
-		consumer.accept(event);
+		getRunnable(event).run();
 	}
 
 	/** Raises an event with a given type later in another thread. */
@@ -381,8 +263,12 @@ public class Connection {
 
 	/** Raises an event with a given event later in another thread. */
 	public void dispatchLater(Event event) {
-		eventQueue.offer(event);
-		selector.wakeup();
+		invokeLater(getRunnable(event));
+	}
+
+	/** Invokes a {@link Runnable} in main thread */
+	public void invokeLater(Runnable runnable) {
+		connector.invokeLater(runnable);
 	}
 
 	/**

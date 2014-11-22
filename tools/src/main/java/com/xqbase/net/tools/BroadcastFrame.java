@@ -41,7 +41,7 @@ public class BroadcastFrame extends ConnectorFrame {
 		try {
 			server = new BroadcastServer(Integer.parseInt(txtPort.getText()),
 					chkNoEcho.isSelected());
-		} catch (IOException | NumberFormatException e) {
+		} catch (IOException | IllegalArgumentException e) {
 			stop();
 			JOptionPane.showMessageDialog(BroadcastFrame.this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);

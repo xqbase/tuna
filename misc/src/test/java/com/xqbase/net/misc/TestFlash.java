@@ -19,24 +19,18 @@ public class TestFlash {
 		Connector connector = newConnector();
 		connector.add(new CrossDomainServer(new File(TestFlash.class.
 				getResource("/crossdomain.xml").toURI())));
-
-		final LinkedHashSet<Connection> connections = new LinkedHashSet<>();
-		final Connection broadcast = new Connection();
-		broadcast.setWriter((b, off, len) -> {
-			for (Connection connection : connections.toArray(new Connection[0])) {
-				// "connection.onDisconnect()" might change "connections"
-				connection.getNetWriter().write(b, off, len);
-			}
-			return len;
-		});
-
 		ServerConnection broadcastServer = new ServerConnection(23) {
+			LinkedHashSet<Connection> connections = new LinkedHashSet<>();
+
 			@Override
 			protected Connection createConnection() {
 				return new Connection() {
 					@Override
 					protected void onRecv(byte[] b, int off, int len) {
-						broadcast.send(b, off, len);
+						for (Connection connection : connections.toArray(new Connection[0])) {
+							// "connection.onDisconnect()" might change "connections"
+							connection.send(b, off, len);
+						}
 					}
 
 					@Override
@@ -59,7 +53,6 @@ public class TestFlash {
 		ffs.add(ZLibFilter::new);
 		// Network Data Dumped onto System.err
 		ffs.add(new DumpFilterFactory().setDumpStream(System.err));
-		broadcast.appendFilters(ffs);
 
 		DoSFilterFactory dosff = new DoSFilterFactory(60000, 65536, 60, 10);
 		connector.getFilterFactories().add(dosff);
