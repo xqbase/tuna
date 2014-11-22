@@ -1,6 +1,7 @@
 package com.xqbase.net.tools;
 
 import java.io.IOException;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -10,6 +11,7 @@ import javax.swing.JTextField;
 import com.xqbase.net.Connector;
 import com.xqbase.net.misc.DoSFilterFactory;
 import com.xqbase.net.portmap.PortMapServer;
+import com.xqbase.util.Runnables;
 
 public class PortMapServerFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -25,6 +27,7 @@ public class PortMapServerFrame extends ConnectorFrame {
 
 	private DoSFilterFactory dosff = new DoSFilterFactory(65536, 0, 0, 0);
 	private PortMapServer server = null;
+	private ScheduledThreadPoolExecutor timer;
 
 	void stop() {
 		trayIcon.setToolTip(getTitle());
@@ -40,6 +43,7 @@ public class PortMapServerFrame extends ConnectorFrame {
 	@Override
 	protected void start() {
 		if (server != null) {
+			Runnables.shutdown(timer);
 			connector.remove(server);
 			server = null;
 			stop();
@@ -55,14 +59,16 @@ public class PortMapServerFrame extends ConnectorFrame {
 		txtRequests.setEnabled(false);
 		txtConnections.setEnabled(false);
 
+		timer = new ScheduledThreadPoolExecutor(1);
 		int requests, connections;
 		try {
 			requests = Integer.parseInt(txtRequests.getText());
 			connections = Integer.parseInt(txtConnections.getText());
 			server = new PortMapServer(connector, Integer.parseInt(txtMapPort.getText()),
 					Integer.parseInt(txtPortFrom.getText()),
-					Integer.parseInt(txtPortTo.getText()));
-		} catch (IOException | NumberFormatException e) {
+					Integer.parseInt(txtPortTo.getText()), timer);
+		} catch (IOException | IllegalArgumentException e) {
+			Runnables.shutdown(timer);
 			stop();
 			JOptionPane.showMessageDialog(this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);
@@ -76,6 +82,14 @@ public class PortMapServerFrame extends ConnectorFrame {
 	protected void doEvents() {
 		super.doEvents();
 		dosff.onEvent();
+	}
+
+	@Override
+	protected void onClose() {
+		if (server != null) {
+			Runnables.shutdown(timer);
+			server = null;
+		}
 	}
 
 	public PortMapServerFrame() {

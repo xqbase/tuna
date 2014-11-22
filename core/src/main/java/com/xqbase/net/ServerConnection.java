@@ -18,6 +18,7 @@ public class ServerConnection {
 
 	ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
 	SelectionKey selectionKey;
+	Connector connector;
 
 	/**
 	 * Opens a listening port and binds to 0.0.0.0.
@@ -65,6 +66,13 @@ public class ServerConnection {
 	public ArrayList<FilterFactory> getFilterFactories() {
 		return filterFactories;
 	}
+
+	/** Invokes a {@link Runnable} in main thread */
+	public void invokeLater(Runnable runnable) {
+		connector.invokeLater(runnable);
+	}
+
+	protected void onClose() {/**/}
 
 	void close() {
 		for (FilterFactory filterFactory : filterFactories) {

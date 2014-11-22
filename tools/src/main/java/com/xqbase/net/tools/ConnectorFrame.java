@@ -155,11 +155,13 @@ public abstract class ConnectorFrame extends JFrame {
 
 	protected void doEvents() {
 		if (connector.getBufferSize() == Connector.MAX_BUFFER_SIZE) {
-			while (connector.doEvents(0) > 0) {/**/}
+			while (connector.doEvents(0)) {/**/}
 		} else {
 			connector.doEvents(0);
 		}
 	}
+
+	protected void onClose() {/**/}
 
 	boolean running = false;
 
@@ -183,6 +185,7 @@ public abstract class ConnectorFrame extends JFrame {
 				if (running) {
 					EventQueue.invokeLater(this);
 				} else {
+					onClose();
 					connector.close();
 				}
 			}

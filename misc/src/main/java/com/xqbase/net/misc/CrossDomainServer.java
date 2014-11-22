@@ -6,15 +6,35 @@ import java.io.IOException;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
-import com.xqbase.net.Connector.Listener;
 import com.xqbase.net.ServerConnection;
 import com.xqbase.util.ByteArrayQueue;
 import com.xqbase.util.Bytes;
 
 /** A {@link ServerConnection} which provides cross-domain policy service for Adobe Flash. */
-public class CrossDomainServer extends ServerConnection implements Listener {
-	private File policyFile;
+public class CrossDomainServer extends ServerConnection {
 	private long lastAccessed = 0;
+	private File policyFile;
+
+	byte[] policyBytes = Bytes.EMPTY_BYTES;
+
+	void loadPolicy() {
+		long now = System.currentTimeMillis();
+		if (now < lastAccessed + 60000) {
+			return;
+		}
+		lastAccessed = now;
+		try (FileInputStream fin = new FileInputStream(policyFile)) {
+			ByteArrayQueue baq = new ByteArrayQueue();
+			byte[] buffer = new byte[Connector.MAX_BUFFER_SIZE];
+			int bytesRead;
+			while ((bytesRead = fin.read(buffer)) > 0) {
+				baq.add(buffer, 0, bytesRead);
+			}
+			policyBytes = new byte[baq.length() + 1];
+			baq.remove(policyBytes, 0, policyBytes.length - 1);
+			policyBytes[policyBytes.length - 1] = 0;
+		} catch (IOException e) {/**/}
+	}
 
 	/**
 	 * Creates a CrossDomainServer with a given policy file and
@@ -31,32 +51,12 @@ public class CrossDomainServer extends ServerConnection implements Listener {
 	}
 
 	@Override
-	public void onEvent() {
-		long now = System.currentTimeMillis();
-		if (now > lastAccessed + 60000) {
-			lastAccessed = now;
-			try (FileInputStream fin = new FileInputStream(policyFile)) {
-				ByteArrayQueue baq = new ByteArrayQueue();
-				byte[] buffer = new byte[Connector.MAX_BUFFER_SIZE];
-				int bytesRead;
-				while ((bytesRead = fin.read(buffer)) > 0) {
-					baq.add(buffer, 0, bytesRead);
-				}
-				policyBytes = new byte[baq.length() + 1];
-				baq.remove(policyBytes, 0, policyBytes.length - 1);
-				policyBytes[policyBytes.length - 1] = 0;
-			} catch (IOException e) {/**/}
-		}
-	}
-
-	byte[] policyBytes = Bytes.EMPTY_BYTES;
-
-	@Override
 	protected Connection createConnection() {
 		return new Connection() {
 			@Override
 			protected void onRecv(byte[] b, int off, int len) {
 				if (b[len - 1] == 0) {
+					loadPolicy();
 					send(policyBytes);
 					disconnect();
 				}

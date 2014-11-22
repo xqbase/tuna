@@ -74,7 +74,7 @@ public class ForwardFrame extends ConnectorFrame {
 		try {
 			server = new ForwardServer(connector, Integer.parseInt(txtPort.getText()),
 					txtRemoteHost.getText(), Integer.parseInt(txtRemotePort.getText()));
-		} catch (IOException | NumberFormatException e) {
+		} catch (IOException | IllegalArgumentException e) {
 			stop();
 			JOptionPane.showMessageDialog(this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);

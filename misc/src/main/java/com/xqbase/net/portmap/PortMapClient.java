@@ -2,10 +2,12 @@ package com.xqbase.net.portmap;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
-import com.xqbase.net.Connector.Listener;
 import com.xqbase.net.packet.PacketFilter;
 
 class PrivateConnection extends Connection {
@@ -42,12 +44,14 @@ class PrivateConnection extends Connection {
  * This connection will open a public port in PortMapServer, which maps a private port.
  * @see PortMapServer
  */
-public class PortMapClient extends Connection implements Listener {
+public class PortMapClient extends Connection {
 	HashMap<Integer, PrivateConnection> connMap = new HashMap<>();
 
 	private Connector connector;
 	private String privateHost;
 	private int publicPort, privatePort;
+	private ScheduledExecutorService timer;
+	private ScheduledFuture<?> future = null;
 
 	/**
 	 * Creates a PortMapClient.
@@ -55,14 +59,16 @@ public class PortMapClient extends Connection implements Listener {
 	 * @param publicPort - The port to open in {@link PortMapServer}
 	 * @param privateHost - The host of the mapped private server.
 	 * @param privatePort - The port of the mapped private server.
+	 * @param timer - The {@link ScheduledExecutorService} to send heart beat packet.
 	 * @see PortMapServer
 	 */
-	public PortMapClient(Connector connector,
-			int publicPort, String privateHost, int privatePort) {
+	public PortMapClient(Connector connector, int publicPort, String privateHost,
+			int privatePort, ScheduledExecutorService timer) {
 		this.connector = connector;
 		this.publicPort = publicPort;
 		this.privateHost = privateHost;
 		this.privatePort = privatePort;
+		this.timer = timer;
 		appendFilter(new PacketFilter(PortMapPacket.getParser()));
 	}
 
@@ -116,26 +122,27 @@ public class PortMapClient extends Connection implements Listener {
 	protected void onConnect() {
 		send(new PortMapPacket(0,
 				PortMapPacket.CLIENT_OPEN, publicPort, 0).getHead());
+		// in main thread
+		future = timer.scheduleAtFixedRate(() -> {
+			// in timer thread
+			invokeLater(() -> {
+				// in main thread
+				send(new PortMapPacket(0, PortMapPacket.CLIENT_PING, 0, 0).getHead());
+			});
+		}, 45000, 45000, TimeUnit.MILLISECONDS);
 	}
 
 	@Override
 	protected void onDisconnect() {
+		if (future != null) {
+			future.cancel(false);
+			future = null;
+		}
 		for (PrivateConnection conn : connMap.values().
 				toArray(new PrivateConnection[0])) {
 			// "conn.onDisconnect()" might change "connMap"
 			conn.activeClose = true;
 			conn.disconnect();
-		}
-	}
-
-	private long lastAccessed = System.currentTimeMillis();
-
-	@Override
-	public void onEvent() {
-		long now = System.currentTimeMillis();
-		if (now > lastAccessed + 45000) {
-			send(new PortMapPacket(0, PortMapPacket.CLIENT_PING, 0, 0).getHead());
-			lastAccessed = now;
 		}
 	}
 }
