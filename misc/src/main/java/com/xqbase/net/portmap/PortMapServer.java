@@ -64,7 +64,7 @@ class PublicConnection extends Connection {
 	boolean activeClose = false;
 
 	@Override
-	protected void onDisconnect() {
+	protected void onDisconnect(boolean active) {
 		if (activeClose) {
 			return;
 		}
@@ -168,7 +168,7 @@ class MapConnection extends Connection {
 	}
 
 	@Override
-	protected void onDisconnect() {
+	protected void onDisconnect(boolean active) {
 		mapServer.timeoutSet.remove(this);
 		if (serverConn == null) {
 			return;

@@ -1,7 +1,5 @@
 package com.xqbase.net;
 
-import com.xqbase.net.Connection.Event;
-
 /**
  * Provides a filtering task on a {@link Connection}.<p>
  * 
@@ -28,18 +26,13 @@ public class Filter {
 		appFilter.onRecv(b, off, len);
 	}
 
-	/** Filters events from the network side to the application side */
-	protected void onEvent(Event event) {
-		appFilter.onEvent(event);
-	}
-
 	/** Filters connecting events from the network side to the application side */
 	protected void onConnect() {
 		appFilter.onConnect();
 	}
 
 	/** Filters disconnecting events from the network side to the application side */
-	protected void onDisconnect() {
-		appFilter.onDisconnect();
+	protected void onDisconnect(boolean active) {
+		appFilter.onDisconnect(active);
 	}
 }

@@ -101,7 +101,7 @@ public class TerminalFrame extends ConnectorFrame {
 			}
 
 			@Override
-			protected void onDisconnect() {
+			protected void onDisconnect(boolean active) {
 				stop();
 				if (status == STATUS_DISCONNECTED) {
 					return;

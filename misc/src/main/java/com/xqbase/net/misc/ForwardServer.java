@@ -22,7 +22,7 @@ class PeerConnection extends Connection {
 	}
 
 	@Override
-	protected void onDisconnect() {
+	protected void onDisconnect(boolean active) {
 		if (peer != null) {
 			peer.peer = null;
 			peer.disconnect();

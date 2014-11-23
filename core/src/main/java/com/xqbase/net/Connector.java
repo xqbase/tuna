@@ -158,7 +158,7 @@ public class Connector implements AutoCloseable {
 					if (bytesRead > 0) {
 						connection.netFilter.onRecv(buffer, 0, bytesRead);
 					} else if (bytesRead < 0) {
-						connection.dispatchNow(-1);
+						connection.disconnect(false);
 					}
 				} else if (key.isWritable()) {
 					connection.write();
@@ -168,7 +168,7 @@ public class Connector implements AutoCloseable {
 					}
 				}
 			} catch (IOException e) {
-				connection.dispatchNow(-1);
+				connection.disconnect(false);
 			}
 		}
 		selectedKeys.clear();
