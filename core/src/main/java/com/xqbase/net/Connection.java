@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.util.List;
 
 import com.xqbase.util.ByteArrayQueue;
 
@@ -13,40 +14,7 @@ import com.xqbase.util.ByteArrayQueue;
  * which corresponds to a TCP Socket.
  */
 public class Connection {
-	/**
-	 * An event which can be raised by {@link #dispatchNow(Event)}
-	 * or {@link #dispatchLater(Event)}.
-	 */
-	public class Event {
-		/** Reserved event type which indicates an active disconnecting */
-		public static final int DISCONNECT = 0;
-		/** Reserved event type which indicates a queued sending */
-		public static final int QUEUED = 1;
-		/** Reserved event type which indicates that sending is no longer queued */
-		public static final int EMPTY = 2;
-
-		private int type;
-
-		/**
-		 * Creates an Event with a given type.<p>
-		 * A zero type means an active disconnecting, which will successively
-		 * be consumed by {@link #onEvent(Event)} and
-		 * {@link Connection#onDisconnect()}.<p>
-		 * A negative type means a passive disconnecting or a socket error,
-		 * which will be consumed by {@link Connection#onDisconnect()} but
-		 * will NOT be consumed by {@link #onEvent(Event)}.
-		 */
-		protected Event(int type) {
-			this.type = type;
-		}
-
-		/** @return The type of the event. */
-		public int getType() {
-			return type;
-		}
-	}
-
-	/**
+	/** 
 	 * Consumes received data in the application end of the connection.
 	 *
 	 * @param b
@@ -54,16 +22,14 @@ public class Connection {
 	 * @param len
 	 */
 	protected void onRecv(byte[] b, int off, int len) {/**/}
-	/**
-	 * Consumes events in the APPLICATION end of the connection.
-	 *
-	 * @param event
-	 */
-	protected void onEvent(Event event) {/**/}
 	/** Consumes connecting events in the APPLICATION end of the connection. */
 	protected void onConnect() {/**/}
-	/** Consumes disconnecting events in the APPLICATION end of the connection. */
-	protected void onDisconnect() {/**/}
+	/** 
+	 * Consumes disconnecting events in the APPLICATION end of the connection.
+	 *
+	 * @param active
+	 */
+	protected void onDisconnect(boolean active) {/**/}
 
 	Filter netFilter = new Filter() {
 		@Override
@@ -78,18 +44,13 @@ public class Connection {
 		}
 
 		@Override
-		protected void onEvent(Event event) {
-			Connection.this.onEvent(event);
-		}
-
-		@Override
 		protected void onConnect() {
 			Connection.this.onConnect();
 		}
 
 		@Override
-		protected void onDisconnect() {
-			Connection.this.onDisconnect();
+		protected void onDisconnect(boolean active) {
+			Connection.this.onDisconnect(active);
 		}
 	};
 	private Filter lastFilter = appFilter;
@@ -125,7 +86,7 @@ public class Connection {
 	 * @see Connector#getFilterFactories()
 	 * @see ServerConnection#getFilterFactories()
 	 */
-	public void appendFilters(Iterable<FilterFactory> filterFactories) {
+	public void appendFilters(List<FilterFactory> filterFactories) {
 		for (FilterFactory filterFactory : filterFactories) {
 			appendFilter(filterFactory.createFilter());
 		}
@@ -154,11 +115,11 @@ public class Connection {
 			queue.remove(bytesWritten);
 		}
 		if (status == STATUS_DISCONNECTING) {
-			dispatchNow(Event.DISCONNECT);
+			disconnect(true);
 		} else {
 			selectionKey.interestOps(SelectionKey.OP_READ);
 			status = STATUS_IDLE;
-			dispatchNow(Event.EMPTY);
+			// TODO notify completed writing
 		}
 	}
 
@@ -178,7 +139,7 @@ public class Connection {
 			queue.add(b, off + bytesWritten, len - bytesWritten);
 			selectionKey.interestOps(SelectionKey.OP_WRITE);
 			status = STATUS_BUSY;
-			dispatchNow(Event.QUEUED);
+			// TODO notify queued writing
 		}
 	}
 
@@ -198,15 +159,33 @@ public class Connection {
 		}
 		if (queue.length() == 0) {
 			if (status == STATUS_DISCONNECTING) {
-				dispatchNow(Event.DISCONNECT);
+				disconnect(true);
 			} else {
 				selectionKey.interestOps(SelectionKey.OP_READ);
 				status = STATUS_IDLE;
 			}
 		} else {
 			selectionKey.interestOps(SelectionKey.OP_WRITE);
-			dispatchNow(Event.QUEUED);
+			// TODO notify queued writing
 		}
+	}
+
+	void disconnect(boolean active) {
+		if (!isOpen()) {
+			return;
+		}
+		close();
+		// Call "close()" before "onDisconnect()"
+		// to avoid recursive "disconnect()".
+		netFilter.onDisconnect(active);
+	}
+
+	void close() {
+		status = STATUS_CLOSED;
+		selectionKey.cancel();
+		try {
+			socketChannel.close();
+		} catch (IOException e) {/**/}
 	}
 
 	/** @return Local IP address of the Connection. */
@@ -229,43 +208,6 @@ public class Connection {
 		return remote.getPort();
 	}
 
-	/** Raises an event with a given type immediately. */
-	public void dispatchNow(int type) {
-		dispatchNow(new Event(type));
-	}
-
-	private Runnable getRunnable(Event event) {
-		return () -> {
-			if (!isOpen()) {
-				return;
-			}
-			if (event.getType() >= 0) {
-				netFilter.onEvent(event);
-			}
-			if (event.getType() <= 0) {
-				close();
-				// Call "close()" before "onDisconnect()"
-				// to avoid recursive "disconnect()".
-				netFilter.onDisconnect();
-			}
-		};
-	}
-
-	/** Raises an event with a given event immediately. */
-	public void dispatchNow(Event event) {
-		getRunnable(event).run();
-	}
-
-	/** Raises an event with a given type later in another thread. */
-	public void dispatchLater(int type) {
-		dispatchLater(new Event(type));
-	}
-
-	/** Raises an event with a given event later in another thread. */
-	public void dispatchLater(Event event) {
-		invokeLater(getRunnable(event));
-	}
-
 	/** Invokes a {@link Runnable} in main thread */
 	public void invokeLater(Runnable runnable) {
 		connector.invokeLater(runnable);
@@ -279,7 +221,7 @@ public class Connection {
 	 */
 	public void disconnect() {
 		if (status == STATUS_IDLE) {
-			dispatchNow(Event.DISCONNECT);
+			disconnect(true);
 		} else if (status == STATUS_BUSY) {
 			status = STATUS_DISCONNECTING;
 		}
@@ -306,13 +248,5 @@ public class Connection {
 	/** Sends a sequence of bytes in the application end. */ 
 	public void send(byte[] b, int off, int len) {
 		appFilter.send(b, off, len);
-	}
-
-	void close() {
-		status = STATUS_CLOSED;
-		selectionKey.cancel();
-		try {
-			socketChannel.close();
-		} catch (IOException e) {/**/}
 	}
 }

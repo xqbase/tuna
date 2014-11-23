@@ -11,7 +11,6 @@ import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 import javax.net.ssl.SSLEngineResult.Status;
 import javax.net.ssl.SSLSession;
 
-import com.xqbase.net.Connection.Event;
 import com.xqbase.net.Filter;
 import com.xqbase.util.ByteArrayQueue;
 import com.xqbase.util.Bytes;
@@ -49,8 +48,6 @@ public class SSLFilter extends Filter {
 	 * @see #SSLFilter(ExecutorService, SSLContext, int, String, int)
 	 */
 	public static final int CLIENT = 3;
-
-	private static final int EVENT_TASK = 443;
 
 	private ExecutorService executor;
 	private SSLEngine ssle;
@@ -149,19 +146,6 @@ public class SSLFilter extends Filter {
 	}
 
 	@Override
-	protected void onEvent(Event event) {
-		if (event.getType() == EVENT_TASK) {
-			hs = ssle.getHandshakeStatus();
-			try {
-				doHandshake();
-			} catch (IOException e) {
-				getConnection().disconnect();
-			}
-		}
-		super.onEvent(event);
-	}
-
-	@Override
 	protected void onConnect() {
 		try {
 			doHandshake();
@@ -211,7 +195,14 @@ public class SSLFilter extends Filter {
 		while ((task = ssle.getDelegatedTask()) != null) {
 			task.run();
 		}
-		getConnection().dispatchLater(EVENT_TASK);
+		getConnection().invokeLater(() -> {
+			hs = ssle.getHandshakeStatus();
+			try {
+				doHandshake();
+			} catch (IOException e) {
+				getConnection().disconnect();
+			}
+		});
 	}
 
 	private void doHandshake() throws IOException {

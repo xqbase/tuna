@@ -29,7 +29,7 @@ class PrivateConnection extends Connection {
 	boolean activeClose = false;
 
 	@Override
-	protected void onDisconnect() {
+	protected void onDisconnect(boolean active) {
 		if (activeClose) {
 			return;
 		}
@@ -133,7 +133,7 @@ public class PortMapClient extends Connection {
 	}
 
 	@Override
-	protected void onDisconnect() {
+	protected void onDisconnect(boolean active) {
 		if (future != null) {
 			future.cancel(false);
 			future = null;

@@ -10,6 +10,7 @@ import java.security.KeyStore;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashMap;
 
@@ -40,7 +41,7 @@ public class CertMap extends HashMap<X500Principal, X509Certificate> {
 		}
 	}
 
-	public void add(Iterable<X509Certificate> certs) {
+	public void add(Collection<X509Certificate> certs) {
 		for (X509Certificate cert : certs) {
 			put(cert.getSubjectX500Principal(), cert);
 		}

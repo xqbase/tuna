@@ -28,8 +28,8 @@ public class ConnectionSet extends LinkedHashSet<Connection>
 			}
 
 			@Override
-			protected void onDisconnect() {
-				super.onDisconnect();
+			protected void onDisconnect(boolean active) {
+				super.onDisconnect(active);
 				remove(getConnection());
 			}
 		};

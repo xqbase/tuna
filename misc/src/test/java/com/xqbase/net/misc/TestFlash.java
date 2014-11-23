@@ -39,7 +39,7 @@ public class TestFlash {
 					}
 
 					@Override
-					protected void onDisconnect() {
+					protected void onDisconnect(boolean active) {
 						connections.remove(this);
 					}
 				};

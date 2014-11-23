@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Calendar;
 
-import com.xqbase.net.Connection.Event;
 import com.xqbase.net.Filter;
 import com.xqbase.util.Bytes;
 
@@ -137,16 +136,6 @@ public class DumpFilter extends Filter {
 		super.onRecv(b, off, len);
 	}
 
-	private boolean activeClose = false;
-
-	@Override
-	protected void onEvent(Event event) {
-		if (event.getType() == Event.DISCONNECT) {
-			activeClose = true;
-		}
-		super.onEvent(event);
-	}
-
 	@Override
 	protected void onConnect() {
 		if (useClientMode) {
@@ -170,10 +159,10 @@ public class DumpFilter extends Filter {
 	}
 
 	@Override
-	protected void onDisconnect() {
-		super.onDisconnect();
+	protected void onDisconnect(boolean active) {
+		super.onDisconnect(active);
 		printfln("[%s:%s %s at %s]", host, "" + port,
-				(useClientMode ? activeClose : !activeClose) ? "Disconnected" : "Kicked",
+				(useClientMode ? active : !active) ? "Disconnected" : "Kicked",
 				now());
 		if (dumpFolder != null) {
 			dumpFolder = null;
