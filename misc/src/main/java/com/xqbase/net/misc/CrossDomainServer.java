@@ -5,10 +5,10 @@ import java.io.FileInputStream;
 import java.io.IOException;
 
 import com.xqbase.net.Connection;
-import com.xqbase.net.Connector;
 import com.xqbase.net.ServerConnection;
 import com.xqbase.util.ByteArrayQueue;
 import com.xqbase.util.Bytes;
+import com.xqbase.util.Streams;
 
 /** A {@link ServerConnection} which provides cross-domain policy service for Adobe Flash. */
 public class CrossDomainServer extends ServerConnection {
@@ -25,11 +25,7 @@ public class CrossDomainServer extends ServerConnection {
 		lastAccessed = now;
 		try (FileInputStream fin = new FileInputStream(policyFile)) {
 			ByteArrayQueue baq = new ByteArrayQueue();
-			byte[] buffer = new byte[Connector.MAX_BUFFER_SIZE];
-			int bytesRead;
-			while ((bytesRead = fin.read(buffer)) > 0) {
-				baq.add(buffer, 0, bytesRead);
-			}
+			Streams.copy(fin, baq.getOutputStream());
 			policyBytes = new byte[baq.length() + 1];
 			baq.remove(policyBytes, 0, policyBytes.length - 1);
 			policyBytes[policyBytes.length - 1] = 0;
