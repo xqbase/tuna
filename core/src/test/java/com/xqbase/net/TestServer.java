@@ -32,7 +32,7 @@ public class TestServer {
 					}
 
 					@Override
-					protected void onDisconnect(boolean active) {
+					protected void onDisconnect() {
 						errors.incrementAndGet();
 					}
 				};

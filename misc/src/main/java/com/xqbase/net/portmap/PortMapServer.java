@@ -61,13 +61,8 @@ class PublicConnection extends Connection {
 				PortMapPacket.SERVER_CONNECT, 0, 0).getHead());
 	}
 
-	boolean activeClose = false;
-
 	@Override
-	protected void onDisconnect(boolean active) {
-		if (activeClose) {
-			return;
-		}
+	protected void onDisconnect() {
 		mapConn.serverConn.connMap.remove(Integer.valueOf(connId));
 		// Do not return connId until CLIENT_CLOSE received
 		// mapConn.serverConn.idPool.returnId(connId);
@@ -161,14 +156,13 @@ class MapConnection extends Connection {
 			} else {
 				serverConn.connMap.remove(Integer.valueOf(connId));
 				serverConn.idPool.returnId(connId);
-				conn.activeClose = true;
 				conn.disconnect();
 			}
 		}
 	}
 
 	@Override
-	protected void onDisconnect(boolean active) {
+	protected void onDisconnect() {
 		mapServer.timeoutSet.remove(this);
 		if (serverConn == null) {
 			return;
@@ -177,9 +171,14 @@ class MapConnection extends Connection {
 		for (PublicConnection conn : serverConn.connMap.values().
 				toArray(new PublicConnection[0])) {
 			// "conn.onDisconnect()" might change "connMap"
-			conn.activeClose = true;
 			conn.disconnect();
 		}
+	}
+
+	@Override
+	public void disconnect() {
+		super.disconnect();
+		onDisconnect();
 	}
 }
 

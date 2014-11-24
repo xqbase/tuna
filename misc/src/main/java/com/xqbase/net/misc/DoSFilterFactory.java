@@ -67,8 +67,16 @@ public class DoSFilterFactory implements FilterFactory {
 		}
 
 		@Override
-		protected void onDisconnect(boolean active) {
-			super.onDisconnect(active);
+		protected void onDisconnect() {
+			super.onDisconnect();
+			if (ipTracker != null) {
+				ipTracker.connections --;
+			}
+		}
+
+		@Override
+		protected void disconnect() {
+			super.disconnect();
 			if (ipTracker != null) {
 				ipTracker.connections --;
 			}
