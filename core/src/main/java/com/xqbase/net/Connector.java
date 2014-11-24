@@ -158,17 +158,21 @@ public class Connector implements AutoCloseable {
 					if (bytesRead > 0) {
 						connection.netFilter.onRecv(buffer, 0, bytesRead);
 					} else if (bytesRead < 0) {
-						connection.disconnect(false);
+						connection.startClose();
 					}
 				} else if (key.isWritable()) {
 					connection.write();
-				} else { // key.isConnectable()
-					if (connection.socketChannel.finishConnect()) {
-						connection.finishConnect();
+				// } else if (key.isConnectable()) {
+				} else if (connection.socketChannel.finishConnect()) {
+					connection.finishConnect();
+					// "onConnect()" might call "disconnect()"
+					if (connection.status != Connection.STATUS_CLOSED &&
+							connection.status != Connection.STATUS_IDLE) {
+						connection.write();
 					}
 				}
 			} catch (IOException e) {
-				connection.disconnect(false);
+				connection.startClose();
 			}
 		}
 		selectedKeys.clear();
@@ -212,6 +216,11 @@ public class Connector implements AutoCloseable {
 		connect(connection, new InetSocketAddress(host, port));
 	}
 
+	private static void closeSocketChannel(SocketChannel socketChannel)
+			throws IOException {
+		socketChannel.close();
+	}
+
 	/**
 	 * registers a {@link Connection} and connects to a remote address
 	 *
@@ -225,7 +234,8 @@ public class Connector implements AutoCloseable {
 		try {
 			socketChannel.connect(remote);
 		} catch (IOException e) {
-			socketChannel.close();
+			// Evade resource leak warning
+			closeSocketChannel(socketChannel);
 			throw e;
 		}
 		connection.socketChannel = socketChannel;
@@ -251,7 +261,7 @@ public class Connector implements AutoCloseable {
 			if (o instanceof ServerConnection) {
 				((ServerConnection) o).close();
 			} else {
-				((Connection) o).close();
+				((Connection) o).finishClose();
 			}
 		}
 		try {

@@ -26,13 +26,8 @@ class PrivateConnection extends Connection {
 		mapClient.send(b, off, len);
 	}
 
-	boolean activeClose = false;
-
 	@Override
-	protected void onDisconnect(boolean active) {
-		if (activeClose) {
-			return;
-		}
+	protected void onDisconnect() {
 		mapClient.connMap.remove(Integer.valueOf(connId));
 		mapClient.send(new PortMapPacket(connId,
 				PortMapPacket.CLIENT_DISCONNECT, 0, 0).getHead());
@@ -113,7 +108,6 @@ public class PortMapClient extends Connection {
 			send(new PortMapPacket(connId,
 					PortMapPacket.CLIENT_CLOSE, 0, 0).getHead());
 			connMap.remove(Integer.valueOf(connId));
-			conn.activeClose = true;
 			conn.disconnect();
 		}
 	}
@@ -133,7 +127,7 @@ public class PortMapClient extends Connection {
 	}
 
 	@Override
-	protected void onDisconnect(boolean active) {
+	protected void onDisconnect() {
 		if (future != null) {
 			future.cancel(false);
 			future = null;
@@ -141,8 +135,13 @@ public class PortMapClient extends Connection {
 		for (PrivateConnection conn : connMap.values().
 				toArray(new PrivateConnection[0])) {
 			// "conn.onDisconnect()" might change "connMap"
-			conn.activeClose = true;
 			conn.disconnect();
 		}
+	}
+
+	@Override
+	public void disconnect() {
+		super.disconnect();
+		onDisconnect();
 	}
 }

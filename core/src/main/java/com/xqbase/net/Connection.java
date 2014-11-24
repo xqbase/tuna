@@ -15,26 +15,37 @@ import com.xqbase.util.ByteArrayQueue;
  */
 public class Connection {
 	/** 
-	 * Consumes received data in the application end of the connection.
+	 * Consumes received data in the APPLICATION end of the connection.
 	 *
 	 * @param b
 	 * @param off
 	 * @param len
 	 */
 	protected void onRecv(byte[] b, int off, int len) {/**/}
+	/** 
+	 * Consumes queued/completed sending events in the APPLICATION end of the connection.
+	 *
+	 * @param queued
+	 */
+	protected void onSend(boolean queued) {/**/}
 	/** Consumes connecting events in the APPLICATION end of the connection. */
 	protected void onConnect() {/**/}
-	/** 
-	 * Consumes disconnecting events in the APPLICATION end of the connection.
-	 *
-	 * @param active
-	 */
-	protected void onDisconnect(boolean active) {/**/}
+	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
+	protected void onDisconnect() {/**/}
 
 	Filter netFilter = new Filter() {
 		@Override
 		protected void send(byte[] b, int off, int len) {
 			write(b, off, len);
+		}
+
+		@Override
+		protected void disconnect() {
+			if (status == STATUS_IDLE) {
+				finishClose();
+			} else if (status == STATUS_BUSY) {
+				status = STATUS_DISCONNECTING;
+			}
 		}
 	};
 	private Filter appFilter = new Filter() {
@@ -44,13 +55,18 @@ public class Connection {
 		}
 
 		@Override
+		protected void onSend(boolean queued) {
+			Connection.this.onSend(queued);
+		}
+
+		@Override
 		protected void onConnect() {
 			Connection.this.onConnect();
 		}
 
 		@Override
-		protected void onDisconnect(boolean active) {
-			Connection.this.onDisconnect(active);
+		protected void onDisconnect() {
+			Connection.this.onDisconnect();
 		}
 	};
 	private Filter lastFilter = appFilter;
@@ -92,34 +108,34 @@ public class Connection {
 		}
 	}
 
-	private static final int STATUS_IDLE = 0;
-	private static final int STATUS_BUSY = 1;
-	private static final int STATUS_DISCONNECTING = 2;
-	private static final int STATUS_CLOSED = 3;
+	static final int STATUS_IDLE = 0;
+	static final int STATUS_BUSY = 1;
+	static final int STATUS_DISCONNECTING = 2;
+	static final int STATUS_CLOSED = 3;
 
 	private InetSocketAddress local, remote;
-	private int status = STATUS_IDLE;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 
+	int status = STATUS_IDLE;
 	SocketChannel socketChannel;
 	SelectionKey selectionKey;
 	Connector connector;
 
 	void write() throws IOException {
 		while (queue.length() > 0) {
-			int bytesWritten = 	socketChannel.write(ByteBuffer.wrap(queue.array(),
+			int bytesWritten = socketChannel.write(ByteBuffer.wrap(queue.array(),
 					queue.offset(), queue.length()));
 			if (bytesWritten == 0) {
 				return;
 			}
 			queue.remove(bytesWritten);
 		}
+		netFilter.onSend(false);
 		if (status == STATUS_DISCONNECTING) {
-			disconnect(true);
+			finishClose();
 		} else {
 			selectionKey.interestOps(SelectionKey.OP_READ);
 			status = STATUS_IDLE;
-			// TODO notify completed writing
 		}
 	}
 
@@ -139,7 +155,7 @@ public class Connection {
 			queue.add(b, off + bytesWritten, len - bytesWritten);
 			selectionKey.interestOps(SelectionKey.OP_WRITE);
 			status = STATUS_BUSY;
-			// TODO notify queued writing
+			netFilter.onSend(true);
 		}
 	}
 
@@ -153,34 +169,18 @@ public class Connection {
 		remote = ((InetSocketAddress) socketChannel.
 				socket().getRemoteSocketAddress());
 		netFilter.onConnect();
-		// "onConnect()" might call "disconnect()"
-		if (status == STATUS_IDLE || status == STATUS_CLOSED) {
-			return;
-		}
-		if (queue.length() == 0) {
-			if (status == STATUS_DISCONNECTING) {
-				disconnect(true);
-			} else {
-				selectionKey.interestOps(SelectionKey.OP_READ);
-				status = STATUS_IDLE;
-			}
-		} else {
-			selectionKey.interestOps(SelectionKey.OP_WRITE);
-			// TODO notify queued writing
-		}
 	}
 
-	void disconnect(boolean active) {
-		if (!isOpen()) {
-			return;
+	void startClose() {
+		if (isOpen()) {
+			finishClose();
 		}
-		close();
 		// Call "close()" before "onDisconnect()"
 		// to avoid recursive "disconnect()".
-		netFilter.onDisconnect(active);
+		netFilter.onDisconnect();
 	}
 
-	void close() {
+	void finishClose() {
 		status = STATUS_CLOSED;
 		selectionKey.cancel();
 		try {
@@ -220,16 +220,7 @@ public class Connection {
 	 * the connection will not be closed until all queued data sent out. 
 	 */
 	public void disconnect() {
-		if (status == STATUS_IDLE) {
-			disconnect(true);
-		} else if (status == STATUS_BUSY) {
-			status = STATUS_DISCONNECTING;
-		}
-	}
-
-	/** @return <code>true</code> if the connection is connecting or sending data. */
-	public boolean isBusy() {
-		return status != STATUS_IDLE;
+		appFilter.disconnect();
 	}
 
 	/** @return <code>true</code> if the connection is not closed. */

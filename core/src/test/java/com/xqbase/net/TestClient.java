@@ -53,7 +53,7 @@ public class TestClient {
 				}
 
 				@Override
-				protected void onDisconnect(boolean active) {
+				protected void onDisconnect() {
 					connectionSet.remove(this);
 					errors.incrementAndGet();
 				}

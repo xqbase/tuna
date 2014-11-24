@@ -15,10 +15,10 @@ public class PortMapClientFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
 
 	private JTextField txtPrivateHost = new JTextField("localhost");
-	private JTextField txtPrivatePort = new JTextField("8080");
+	private JTextField txtPrivatePort = new JTextField("80");
 	private JTextField txtMappingHost = new JTextField("localhost");
 	private JTextField txtMappingPort = new JTextField("8341");
-	private JTextField txtPublicPort = new JTextField("80");
+	private JTextField txtPublicPort = new JTextField("8080");
 
 	private PortMapClient client = null;
 	private ScheduledThreadPoolExecutor timer;

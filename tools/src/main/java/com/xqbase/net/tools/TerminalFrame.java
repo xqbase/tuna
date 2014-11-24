@@ -101,7 +101,7 @@ public class TerminalFrame extends ConnectorFrame {
 			}
 
 			@Override
-			protected void onDisconnect(boolean active) {
+			protected void onDisconnect() {
 				stop();
 				if (status == STATUS_DISCONNECTED) {
 					return;
@@ -117,6 +117,12 @@ public class TerminalFrame extends ConnectorFrame {
 								JOptionPane.WARNING_MESSAGE);
 					}
 				});
+			}
+
+			@Override
+			public void disconnect() {
+				super.disconnect();
+				onDisconnect();
 			}
 		};
 		try {

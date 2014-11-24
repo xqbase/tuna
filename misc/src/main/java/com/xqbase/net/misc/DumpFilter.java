@@ -159,11 +159,20 @@ public class DumpFilter extends Filter {
 	}
 
 	@Override
-	protected void onDisconnect(boolean active) {
-		super.onDisconnect(active);
+	protected void onDisconnect() {
+		super.onDisconnect();
+		disconnect(!useClientMode);
+	}
+
+	@Override
+	protected void disconnect() {
+		super.disconnect();
+		disconnect(useClientMode);
+	}
+
+	private void disconnect(boolean active) {
 		printfln("[%s:%s %s at %s]", host, "" + port,
-				(useClientMode ? active : !active) ? "Disconnected" : "Kicked",
-				now());
+				active ? "Disconnected" : "Kicked", now());
 		if (dumpFolder != null) {
 			dumpFolder = null;
 			try {

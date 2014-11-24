@@ -16,23 +16,33 @@ public class Filter {
 		return connection;
 	}
 
-	/** Filters sent data from the application side to the network side */
+	/** Filters sent data, from the application side to the network side */
 	protected void send(byte[] b, int off, int len) {
 		netFilter.send(b, off, len);
 	}
 
-	/** Filters received data from the network side to the application side */
+	/** Filters active disconnecting events, from the application side to the network side */
+	protected void disconnect() {
+		netFilter.disconnect();
+	}
+
+	/** Filters received data, from the network side to the application side */
 	protected void onRecv(byte[] b, int off, int len) {
 		appFilter.onRecv(b, off, len);
 	}
 
-	/** Filters connecting events from the network side to the application side */
+	/** Filters queued/completed sending events, from the network side to the application side */
+	protected void onSend(boolean queued) {
+		appFilter.onSend(queued);
+	}
+
+	/** Filters connecting events, from the network side to the application side */
 	protected void onConnect() {
 		appFilter.onConnect();
 	}
 
-	/** Filters disconnecting events from the network side to the application side */
-	protected void onDisconnect(boolean active) {
-		appFilter.onDisconnect(active);
+	/** Filters passive disconnecting events, from the network side to the application side */
+	protected void onDisconnect() {
+		appFilter.onDisconnect();
 	}
 }
