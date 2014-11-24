@@ -121,7 +121,7 @@ public class DoSFilterFactory implements FilterFactory {
 		this.connections = connections;
 	}
 
-	public void onEvent() {
+	public void onTimer() {
 		long now = System.currentTimeMillis();
 		IPTracker ipTracker;
 		while ((ipTracker = timeoutQueue.peek()) != null && now > ipTracker.timeout) {

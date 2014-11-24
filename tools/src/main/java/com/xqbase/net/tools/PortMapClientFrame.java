@@ -71,8 +71,7 @@ public class PortMapClientFrame extends ConnectorFrame {
 	}
 
 	@Override
-	protected void doEvents() {
-		super.doEvents();
+	protected void onEvent() {
 		if (client == null || client.isOpen()) {
 			return;
 		}

@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
-import com.xqbase.net.Connector;
 import com.xqbase.net.Filter;
 import com.xqbase.net.packet.PacketException;
 import com.xqbase.net.packet.PacketFilter;
@@ -44,7 +43,7 @@ public class ZLibFilter extends PacketFilter {
 			while ((bytesRead = inflater.read(buffer)) > 0) {
 				baq.add(buffer, 0, bytesRead);
 				// Prevent attack
-				if (baq.length() > Connector.MAX_BUFFER_SIZE) {
+				if (baq.length() >= 32768) {
 					break;
 				}
 			}

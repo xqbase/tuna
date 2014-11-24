@@ -15,13 +15,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * which makes {@link Connection} and {@link ServerConnection} working.<p>
  */
 public class Connector implements AutoCloseable {
-	/** Maximum buffer size. {@link #setBufferSize(int)} should not exceed this value */
-	public static final int MAX_BUFFER_SIZE = 32768;
+	private static final int BUFFER_SIZE = 32768;
 
 	private Selector selector;
 	private boolean interrupted = false;
-	private int bufferSize = MAX_BUFFER_SIZE;
-	private byte[] buffer = new byte[MAX_BUFFER_SIZE];
+	private byte[] buffer = new byte[BUFFER_SIZE];
 	private ArrayList<FilterFactory> filterFactories = new ArrayList<>();
 	private ConcurrentLinkedQueue<Runnable> eventQueue = new ConcurrentLinkedQueue<>();
 
@@ -74,7 +72,7 @@ public class Connector implements AutoCloseable {
 	}
 
 	/**
-	 * @return An {@link ArrayList} of {@link FilterFactory}s,  to create a series of
+	 * @return An {@link ArrayList} of {@link FilterFactory}s, to create a series of
 	 *         {@link Filter}s and append into the end of filter chain when a
 	 *         {@link Connection} connected, or accepted after
 	 *         {@link ServerConnection#getFilterFactories()} takes effect.
@@ -84,26 +82,17 @@ public class Connector implements AutoCloseable {
 		return filterFactories;
 	}
 
-	/**
-	 * @return The buffer size of the Connector, shared by all Connections.
-	 * @see #setBufferSize(int)
-	 */
-	public int getBufferSize() {
-		return bufferSize;
-	}
-
-	/**
-	 * @param bufferSize - Buffer size of every Connection, shared by all Connections.
-	 * @see #getBufferSize()
-	 */
-	public void setBufferSize(int bufferSize) {
-		this.bufferSize = bufferSize;
-	}
-
 	/** Consume events until interrupted */
 	public void doEvents() {
 		while (!isInterrupted()) {
 			doEvents(-1);
+		}
+	}
+
+	private void invokeQueue() {
+		Runnable runnable;
+		while ((runnable = eventQueue.poll()) != null) {
+			runnable.run();
 		}
 	}
 
@@ -112,7 +101,7 @@ public class Connector implements AutoCloseable {
 	 * including network events (accept/connect/read/write) and user-defined events.<p>
 	 *
 	 * @param timeout Block for up to timeout milliseconds, or -1 to block indefinitely,
-	 *        or 0 without blocking. 
+	 *        or 0 without blocking.
 	 * @return <b>true</b> if NETWORK events consumed;<br>
 	 *         <b>false</b> if no NETWORK events raised,
 	 *         whether or not user-defined events raised.<br>
@@ -124,6 +113,10 @@ public class Connector implements AutoCloseable {
 					timeout < 0 ? selector.select() : selector.select(timeout);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
+		}
+		if (keySize == 0) {
+			invokeQueue();
+			return false;
 		}
 
 		Set<SelectionKey> selectedKeys = selector.selectedKeys();
@@ -148,15 +141,18 @@ public class Connector implements AutoCloseable {
 				connection.appendFilters(serverConnection.getFilterFactories());
 				add(connection, SelectionKey.OP_READ);
 				connection.finishConnect();
+				acceptCount ++;
 				continue;
 			}
 			Connection connection = (Connection) key.attachment();
 			try {
 				if (key.isReadable()) {
 					int bytesRead = connection.socketChannel.
-							read(ByteBuffer.wrap(buffer, 0, bufferSize));
+							read(ByteBuffer.wrap(buffer, 0, BUFFER_SIZE));
 					if (bytesRead > 0) {
 						connection.netFilter.onRecv(buffer, 0, bytesRead);
+						connection.bytesRecv += bytesRead;
+						totalBytesRecv += bytesRead;
 					} else if (bytesRead < 0) {
 						connection.startClose();
 					}
@@ -165,9 +161,9 @@ public class Connector implements AutoCloseable {
 				// } else if (key.isConnectable()) {
 				} else if (connection.socketChannel.finishConnect()) {
 					connection.finishConnect();
+					connectCount ++;
 					// "onConnect()" might call "disconnect()"
-					if (connection.status != Connection.STATUS_CLOSED &&
-							connection.status != Connection.STATUS_IDLE) {
+					if (connection.isOpen() && connection.isBusy()) {
 						connection.write();
 					}
 				}
@@ -176,12 +172,8 @@ public class Connector implements AutoCloseable {
 			}
 		}
 		selectedKeys.clear();
-
-		Runnable runnable;
-		while ((runnable = eventQueue.poll()) != null) {
-			runnable.run();
-		}
-		return keySize > 0;
+		invokeQueue();
+		return true;
 	}
 
 	/** Invokes a {@link Runnable} in main thread */
@@ -262,10 +254,44 @@ public class Connector implements AutoCloseable {
 				((ServerConnection) o).close();
 			} else {
 				((Connection) o).finishClose();
+				activeDisconnectCount ++;
 			}
 		}
 		try {
 			selector.close();
 		} catch (IOException e) {/**/}
+	}
+
+	private int acceptCount = 0, connectCount = 0;
+	int activeDisconnectCount = 0, passiveDisconnectCount = 0, totalQueueSize = 0;
+	private long totalBytesRecv = 0;
+	long totalBytesSent = 0;
+
+	public int getAcceptCount() {
+		return acceptCount;
+	}
+
+	public int getConnectCount() {
+		return connectCount;
+	}
+
+	public int getActiveDisconnectCount() {
+		return activeDisconnectCount;
+	}
+
+	public int getPassiveDisconnectCount() {
+		return passiveDisconnectCount;
+	}
+
+	public int getTotalQueueSize() {
+		return totalQueueSize;
+	}
+
+	public long getTotalBytesRecv() {
+		return totalBytesRecv;
+	}
+
+	public long getTotalBytesSent() {
+		return totalBytesSent;
 	}
 }

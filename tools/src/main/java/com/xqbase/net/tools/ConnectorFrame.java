@@ -153,13 +153,7 @@ public abstract class ConnectorFrame extends JFrame {
 		});
 	}
 
-	protected void doEvents() {
-		if (connector.getBufferSize() == Connector.MAX_BUFFER_SIZE) {
-			while (connector.doEvents(0)) {/**/}
-		} else {
-			connector.doEvents(0);
-		}
-	}
+	protected void onEvent() {/**/}
 
 	protected void onClose() {/**/}
 
@@ -176,12 +170,8 @@ public abstract class ConnectorFrame extends JFrame {
 		EventQueue.invokeLater(new Runnable() {
 			@Override
 			public void run() {
-				doEvents();
-				try {
-					Thread.sleep(1);
-				} catch (InterruptedException e) {
-					Thread.currentThread().interrupt();
-				}
+				onEvent();
+				connector.doEvents(16);
 				if (running) {
 					EventQueue.invokeLater(this);
 				} else {

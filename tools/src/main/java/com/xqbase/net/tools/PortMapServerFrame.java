@@ -8,7 +8,6 @@ import javax.swing.JOptionPane;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
 
-import com.xqbase.net.Connector;
 import com.xqbase.net.misc.DoSFilterFactory;
 import com.xqbase.net.portmap.PortMapServer;
 import com.xqbase.util.Runnables;
@@ -79,9 +78,8 @@ public class PortMapServerFrame extends ConnectorFrame {
 	}
 
 	@Override
-	protected void doEvents() {
-		super.doEvents();
-		dosff.onEvent();
+	protected void onEvent() {
+		dosff.onTimer();
 	}
 
 	@Override
@@ -109,10 +107,7 @@ public class PortMapServerFrame extends ConnectorFrame {
 			int sliderValue = ((JSlider) e.getSource()).getValue();
 			lblSlider.setText(sliderValue == SLIDER_NO_LIMIT ?
 					"No Limit" : (1 << (sliderValue << 1)) + "KB/s");
-			// Speed Limit -> Buffer Size:
-			// 1KB/s -> 16, 4KB/s -> 64, 16KB/s -> 256, 64KB/s -> 1024
-			connector.setBufferSize(sliderValue == SLIDER_NO_LIMIT ?
-					Connector.MAX_BUFFER_SIZE : 16 << (sliderValue << 1));
+			// TODO Speed Limit
 		});
 		add(slider);
 
