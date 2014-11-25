@@ -153,7 +153,7 @@ public class Connection {
 	void write(byte[] b, int off, int len) {
 		if (status != STATUS_IDLE) {
 			if (queue.length() == 0) {
-				onSend(true);
+				netFilter.onSend(true);
 			}
 			queue.add(b, off, len);
 			connector.totalQueueSize += len;
