@@ -13,18 +13,14 @@ public class TestBlockServer {
 			@Override
 			protected void onSend(boolean queued) {
 				super.onSend(queued);
-				System.out.printf("Local: " + getConnection().getRemotePort() + " " + queued +
-						" " + connector.getTotalBytesRecv() + " " + connector.getTotalBytesSent());
-				System.out.println();
+				System.out.println("Local.onSend(" + queued + "): " + getConnection());
 			}
 		});
 		server.getRemoteFilterFactories().add(() -> new Filter() {
 			@Override
 			protected void onSend(boolean queued) {
 				super.onSend(queued);
-				System.out.printf("Remote: " + getConnection().getLocalPort() + " " + queued +
-						" " + connector.getTotalBytesRecv() + " " + connector.getTotalBytesSent());
-				System.out.println();
+				System.out.println("Remote.onSend(" + queued + "): " + getConnection());
 			}
 		});
 		connector.doEvents();
