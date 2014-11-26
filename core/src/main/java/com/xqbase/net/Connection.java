@@ -124,6 +124,11 @@ public class Connection {
 	SelectionKey selectionKey;
 	Connector connector;
 
+	void interestOps() {
+		selectionKey.interestOps((blocked ? 0 : SelectionKey.OP_READ) |
+				(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
+	}
+
 	void write() throws IOException {
 		boolean queued = false;
 		while (queue.length() > 0) {
@@ -131,6 +136,7 @@ public class Connection {
 			int bytesWritten = socketChannel.write(ByteBuffer.wrap(queue.array(),
 					queue.offset(), queue.length()));
 			if (bytesWritten == 0) {
+				interestOps();
 				return;
 			}
 			bytesSent += bytesWritten;
@@ -145,8 +151,8 @@ public class Connection {
 			finishClose();
 			connector.activeDisconnectCount ++;
 		} else {
-			selectionKey.interestOps(blocked ? 0 : SelectionKey.OP_READ);
 			status = STATUS_IDLE;
+			interestOps();
 		}
 	}
 
@@ -163,16 +169,16 @@ public class Connection {
 		try {
 			bytesWritten = socketChannel.write(ByteBuffer.wrap(b, off, len));
 		} catch (IOException e) {
-			disconnect();
+			startClose();
 			return;
 		}
 		connector.totalBytesSent += bytesWritten;
 		if (bytesWritten < len) {
 			queue.add(b, off + bytesWritten, len - bytesWritten);
-			connector.totalQueueSize += len;
-			selectionKey.interestOps(SelectionKey.OP_WRITE);
-			status = STATUS_BUSY;
+			connector.totalQueueSize += len - bytesWritten;
 			netFilter.onSend(true);
+			status = STATUS_BUSY;
+			interestOps();
 		}
 	}
 
@@ -235,9 +241,9 @@ public class Connection {
 
 	/** Block or unblock receiving */
 	public void blockRecv(boolean blocked_) {
-		this.blocked = blocked_;
-		if (status == STATUS_IDLE) {
-			selectionKey.interestOps(blocked_ ? 0 : SelectionKey.OP_READ);
+		blocked = blocked_;
+		if (status != STATUS_CLOSED) {
+			interestOps();
 		}
 	}
 
@@ -287,5 +293,14 @@ public class Connection {
 
 	public long getBytesSent() {
 		return bytesSent;
+	}
+
+	/** Only for debug. */
+	@Override
+	public String toString() {
+		return String.format("%s<->%s: queueSize=%s, bytesRecv=%s, " +
+				"bytesSent=%s, status=%s, interestOps=%s%s", local, remote,
+				"" + queue.length(), "" + bytesRecv, "" + bytesSent, "" + status,
+				"" + selectionKey.interestOps(), blocked ? ", blocked" : "");
 	}
 }

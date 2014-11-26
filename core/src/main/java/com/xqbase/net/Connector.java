@@ -155,11 +155,14 @@ public class Connector implements AutoCloseable {
 						totalBytesRecv += bytesRead;
 					} else if (bytesRead < 0) {
 						connection.startClose();
+						// Disconnected, so skip onSend and onConnect
+						continue;
 					}
-				} else if (key.isWritable()) {
+				}
+				// may be both isReadable() and isWritable() ?
+				if (key.isWritable()) {
 					connection.write();
-				// } else if (key.isConnectable()) {
-				} else if (connection.socketChannel.finishConnect()) {
+				} else if (key.isConnectable() && connection.socketChannel.finishConnect()) {
 					connection.finishConnect();
 					connectCount ++;
 					// "onConnect()" might call "disconnect()"

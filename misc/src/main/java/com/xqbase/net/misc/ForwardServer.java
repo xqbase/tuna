@@ -18,12 +18,16 @@ class PeerConnection extends Connection {
 
 	@Override
 	protected void onSend(boolean queued) {
-		peer.blockRecv(queued);
+		if (peer != null) {
+			peer.blockRecv(queued);
+		}
 	}
 
 	@Override
 	protected void onRecv(byte[] b, int off, int len) {
-		peer.send(b, off, len);
+		if (peer != null) {
+			peer.send(b, off, len);
+		}
 	}
 
 	@Override
