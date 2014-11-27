@@ -153,6 +153,10 @@ public class Connector implements AutoCloseable {
 						connection.netFilter.onRecv(buffer, 0, bytesRead);
 						connection.bytesRecv += bytesRead;
 						totalBytesRecv += bytesRead;
+						// may be closed by "onRecv"
+						if (!key.isValid()) {
+							continue;
+						}
 					} else if (bytesRead < 0) {
 						connection.startClose();
 						// Disconnected, so skip onSend and onConnect
