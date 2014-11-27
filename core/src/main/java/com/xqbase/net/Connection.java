@@ -301,6 +301,7 @@ public class Connection {
 		return String.format("%s<->%s: queueSize=%s, bytesRecv=%s, " +
 				"bytesSent=%s, status=%s, interestOps=%s%s", local, remote,
 				"" + queue.length(), "" + bytesRecv, "" + bytesSent, "" + status,
-				"" + selectionKey.interestOps(), blocked ? ", blocked" : "");
+				"" + (selectionKey.isValid() ? selectionKey.interestOps() : 0),
+				blocked ? ", blocked" : "");
 	}
 }
