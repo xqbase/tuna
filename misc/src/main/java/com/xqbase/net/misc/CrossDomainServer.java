@@ -4,14 +4,16 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 
-import com.xqbase.net.Connection;
+import com.xqbase.net.Handler;
+import com.xqbase.net.Listener;
+import com.xqbase.net.ListenerFactory;
 import com.xqbase.net.ServerConnection;
 import com.xqbase.util.ByteArrayQueue;
 import com.xqbase.util.Bytes;
 import com.xqbase.util.Streams;
 
 /** A {@link ServerConnection} which provides cross-domain policy service for Adobe Flash. */
-public class CrossDomainServer extends ServerConnection {
+public class CrossDomainServer implements ListenerFactory {
 	private long lastAccessed = 0;
 	private File policyFile;
 
@@ -32,29 +34,27 @@ public class CrossDomainServer extends ServerConnection {
 		} catch (IOException e) {/**/}
 	}
 
-	/**
-	 * Creates a CrossDomainServer with a given policy file and
-	 * the default listening port 843.
-	 */
-	public CrossDomainServer(File policyFile) throws IOException {
-		this(policyFile, 843);
-	}
-
-	/** Creates a CrossDomainServer with a given policy file and a given listening port. */
-	public CrossDomainServer(File policyFile, int port) throws IOException {
-		super(port);
+	/** Creates a CrossDomainServer with a given policy file. */
+	public CrossDomainServer(File policyFile) {
 		this.policyFile = policyFile;
 	}
 
 	@Override
-	protected Connection createConnection() {
-		return new Connection() {
+	public Listener onAccept() {
+		return new Listener() {
+			private Handler handler;
+
 			@Override
-			protected void onRecv(byte[] b, int off, int len) {
+			public void setHandler(Handler handler) {
+				this.handler = handler;
+			}
+
+			@Override
+			public void onRecv(byte[] b, int off, int len) {
 				if (b[len - 1] == 0) {
 					loadPolicy();
-					send(policyBytes);
-					disconnect();
+					handler.send(policyBytes);
+					handler.disconnect();
 				}
 			}
 		};

@@ -3,7 +3,6 @@ package com.xqbase.net.misc;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 
-import com.xqbase.net.Connection;
 import com.xqbase.net.Filter;
 import com.xqbase.net.FilterFactory;
 
@@ -36,18 +35,18 @@ public class DoSFilterFactory implements FilterFactory {
 		private IPTracker ipTracker = null;
 
 		@Override
-		protected void onRecv(byte[] b, int off, int len) {
+		public void onRecv(byte[] b, int off, int len) {
 			ipTracker.bytes += len;
 			if (bytes > 0 && ipTracker.bytes > bytes) {
-				onBlock(getConnection(), ipTracker);
+				onBlock(this, ipTracker);
 			} else {
 				super.onRecv(b, off, len);
 			}
 		}
 
 		@Override
-		protected void onConnect() {
-			String ip = getConnection().getRemoteAddr();
+		public void onConnect() {
+			String ip = getRemoteAddr();
 			ipTracker = ipMap.get(ip);
 			if (ipTracker == null) {
 				ipTracker = new IPTracker();
@@ -60,14 +59,14 @@ public class DoSFilterFactory implements FilterFactory {
 			ipTracker.connections ++;
 			if ((requests > 0 && ipTracker.requests > requests) ||
 					(connections > 0 && ipTracker.connections > connections)) {
-				onBlock(getConnection(), ipTracker);
+				onBlock(this, ipTracker);
 			} else {
 				super.onConnect();
 			}
 		}
 
 		@Override
-		protected void onDisconnect() {
+		public void onDisconnect() {
 			super.onDisconnect();
 			if (ipTracker != null) {
 				ipTracker.connections --;
@@ -75,7 +74,7 @@ public class DoSFilterFactory implements FilterFactory {
 		}
 
 		@Override
-		protected void disconnect() {
+		public void disconnect() {
 			super.disconnect();
 			if (ipTracker != null) {
 				ipTracker.connections --;
@@ -88,8 +87,9 @@ public class DoSFilterFactory implements FilterFactory {
 	 * @param connection - The blocked connection.
 	 * @param ipTracker - The IPTracker.
 	 */
-	protected void onBlock(Connection connection, IPTracker ipTracker) {
-		connection.disconnect();
+	protected void onBlock(Filter filter, IPTracker ipTracker) {
+		filter.disconnect();
+		filter.onDisconnect();
 	}
 
 	int period, bytes, requests, connections;

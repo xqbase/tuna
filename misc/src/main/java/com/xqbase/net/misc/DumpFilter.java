@@ -125,25 +125,25 @@ public class DumpFilter extends Filter {
 	}
 
 	@Override
-	protected void send(byte[] b, int off, int len) {
+	public void send(byte[] b, int off, int len) {
 		super.send(b, off, len);
 		dump(b, off, len, useClientMode);
 	}
 
 	@Override
-	protected void onRecv(byte[] b, int off, int len) {
+	public void onRecv(byte[] b, int off, int len) {
 		dump(b, off, len, !useClientMode);
 		super.onRecv(b, off, len);
 	}
 
 	@Override
-	protected void onConnect() {
+	public void onConnect() {
 		if (useClientMode) {
-			host = getConnection().getLocalAddr();
-			port = getConnection().getLocalPort();
+			host = getLocalAddr();
+			port = getLocalPort();
 		} else {
-			host = getConnection().getRemoteAddr();
-			port = getConnection().getRemotePort();
+			host = getRemoteAddr();
+			port = getRemotePort();
 		}
 		if (dumpFolder != null) {
 			try {
@@ -159,13 +159,13 @@ public class DumpFilter extends Filter {
 	}
 
 	@Override
-	protected void onDisconnect() {
+	public void onDisconnect() {
 		super.onDisconnect();
 		disconnect(!useClientMode);
 	}
 
 	@Override
-	protected void disconnect() {
+	public void disconnect() {
 		super.disconnect();
 		disconnect(useClientMode);
 	}

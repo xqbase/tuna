@@ -20,11 +20,12 @@ public class PacketFilter extends Filter implements PacketHandler {
 	}
 
 	@Override
-	protected void onRecv(byte[] b, int off, int len) {
+	public void onRecv(byte[] b, int off, int len) {
 		try {
 			reader.onData(b, off, len);
 		} catch (PacketException e) {
-			getConnection().disconnect();
+			disconnect();
+			onDisconnect();
 		}
 	}
 }

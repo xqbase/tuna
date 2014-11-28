@@ -11,40 +11,19 @@ import java.util.ArrayList;
  * which corresponds to a TCP Server Socket 
  */
 public class ServerConnection {
-	/** @return The {@link Connection} accepted by this ServerConnection. */
-	protected Connection createConnection() {
-		return new Connection();
-	}
-
+	ListenerFactory listenerFactory;
 	ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
 	SelectionKey selectionKey;
 	Connector connector;
-
-	/**
-	 * Opens a listening port and binds to 0.0.0.0.
-	 * @param port - The port to listen.
-	 * @throws IOException If an I/O error occurs when opening the port.
-	 */
-	public ServerConnection(int port) throws IOException {
-		this(new InetSocketAddress(port));
-	}
-
-	/**
-	 * Opens a listening port and binds to a given address.
-	 * @param host - The IP address to bind. 
-	 * @param port - The port to listen.
-	 * @throws IOException If an I/O error occurs when opening the port.
-	 */
-	public ServerConnection(String host, int port) throws IOException {
-		this(new InetSocketAddress(host, port));
-	}
 
 	/** 
 	 * Opens a listening port and binds to a given address.
 	 * @param addr - The IP address to bind and the port to listen. 
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	public ServerConnection(InetSocketAddress addr) throws IOException {
+	ServerConnection(ListenerFactory listenerFactory,
+			InetSocketAddress addr) throws IOException {
+		this.listenerFactory = listenerFactory;
 		serverSocketChannel.configureBlocking(false);
 		try {
 			serverSocketChannel.socket().bind(addr);
@@ -65,11 +44,6 @@ public class ServerConnection {
 	 */
 	public ArrayList<FilterFactory> getFilterFactories() {
 		return filterFactories;
-	}
-
-	/** Invokes a {@link Runnable} in main thread */
-	public void invokeLater(Runnable runnable) {
-		connector.invokeLater(runnable);
 	}
 
 	protected void onClose() {/**/}

@@ -15,7 +15,7 @@ public class TestClient {
 	// To test under Windows, you should add a registry item "MaxUserPort = 65534" in
 	// HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
 	public static void main(String[] args) throws Exception {
-		final LinkedHashSet<Connection> connectionSet = new LinkedHashSet<>();
+		final LinkedHashSet<Handler> handlerSet = new LinkedHashSet<>();
 		Random random = new Random();
 		// Evade resource leak warning
 		Connector connector = newConnector();
@@ -23,10 +23,10 @@ public class TestClient {
 		long startTime = System.currentTimeMillis();
 		byte[] data = new byte[] {'-'};
 		while (true) {
-			for (Connection conn : connectionSet.toArray(new Connection[0])) {
+			for (Handler handler : handlerSet.toArray(new Handler[0])) {
 				// "conn.onDisconnect()" might change "connectionSet"
 				if (random.nextDouble() < .01) {
-					conn.send(data);
+					handler.send(data);
 				}
 			}
 			// Increase connection every 16 milliseconds
@@ -40,21 +40,28 @@ public class TestClient {
 				System.out.print("Errors: " + errors + ", ");
 				System.out.println("Responses: " + responses);
 			}
-			connector.connect(new Connection() {
+			connector.connect(new Listener() {
+				private Handler handler;
+
 				@Override
-				protected void onRecv(byte[] b, int off, int len) {
+				public void setHandler(Handler handler) {
+					this.handler = handler;
+				}
+
+				@Override
+				public void onRecv(byte[] b, int off, int len) {
 					responses.incrementAndGet();
 				}
 
 				@Override
-				protected void onConnect() {
-					connectionSet.add(this);
+				public void onConnect() {
+					handlerSet.add(handler);
 					connections.incrementAndGet();
 				}
 
 				@Override
-				protected void onDisconnect() {
-					connectionSet.remove(this);
+				public void onDisconnect() {
+					handlerSet.remove(handler);
 					errors.incrementAndGet();
 				}
 			}, "localhost", 2626);

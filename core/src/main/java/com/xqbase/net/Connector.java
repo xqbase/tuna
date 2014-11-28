@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * The encapsulation of {@link Selector},
  * which makes {@link Connection} and {@link ServerConnection} working.<p>
  */
-public class Connector implements AutoCloseable {
+public class Connector implements EventQueue, AutoCloseable {
 	private static final int BUFFER_SIZE = 32768;
 
 	private Selector selector;
@@ -43,19 +43,85 @@ public class Connector implements AutoCloseable {
 	}
 
 	/**
+	 * Registers a {@link Connection} and connects to a remote address
+	 *
+	 * @throws IOException If the remote address is invalid.
+	 * @see #connect(Listener, InetSocketAddress)
+	 */
+	public Connection connect(Listener listener,
+			String host, int port) throws IOException {
+		return connect(listener, new InetSocketAddress(host, port));
+	}
+
+	private static void closeSocketChannel(SocketChannel socketChannel)
+			throws IOException {
+		socketChannel.close();
+	}
+
+	/**
+	 * registers a {@link Connection} and connects to a remote address
+	 *
+	 * @throws IOException If the remote address is invalid.
+	 * @see #connect(Listener, String, int)
+	 */
+	public Connection connect(Listener listener,
+			InetSocketAddress remote) throws IOException {
+		SocketChannel socketChannel = SocketChannel.open();
+		socketChannel.configureBlocking(false);
+		try {
+			socketChannel.connect(remote);
+		} catch (IOException e) {
+			// Evade resource leak warning
+			closeSocketChannel(socketChannel);
+			throw e;
+		}
+		Connection connection = new Connection(listener);
+		connection.socketChannel = socketChannel;
+		connection.startConnect();
+		add(connection, SelectionKey.OP_CONNECT);
+		return connection;
+	}
+
+	/**
 	 * Registers a <b>ServerConnection</b>
 	 * 
-	 * @param serverConnection - The ServerConnection to register.
+	 * @param listenerFactory
 	 * @see #remove(ServerConnection)
 	 */
-	public void add(ServerConnection serverConnection) {
+	public ServerConnection add(ListenerFactory listenerFactory,
+			String host, int port) throws IOException {
+		return add(listenerFactory, new InetSocketAddress(host, port));
+	}
+
+	/**
+	 * Registers a <b>ServerConnection</b>
+	 * 
+	 * @param listenerFactory
+	 * @see #remove(ServerConnection)
+	 */
+	public ServerConnection add(ListenerFactory listenerFactory,
+			int port) throws IOException {
+		return add(listenerFactory, new InetSocketAddress(port));
+	}
+
+	/**
+	 * Registers a <b>ServerConnection</b>
+	 * 
+	 * @param listenerFactory
+	 * @see #remove(ServerConnection)
+	 */
+	public ServerConnection add(ListenerFactory listenerFactory,
+			InetSocketAddress addr) throws IOException {
+		ServerConnection serverConnection = new ServerConnection(listenerFactory, addr);
 		serverConnection.connector = this;
+		serverConnection.listenerFactory.setEventQueue(this);
 		try {
 			serverConnection.selectionKey = serverConnection.serverSocketChannel.
 					register(selector, SelectionKey.OP_ACCEPT, serverConnection);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
+		return serverConnection;
 	}
 
 	/**
@@ -136,7 +202,7 @@ public class Connector implements AutoCloseable {
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
-				Connection connection = serverConnection.createConnection();
+				Connection connection = new Connection(serverConnection.listenerFactory.onAccept());
 				connection.socketChannel = socketChannel;
 				connection.appendFilters(serverConnection.getFilterFactories());
 				add(connection, SelectionKey.OP_READ);
@@ -183,7 +249,7 @@ public class Connector implements AutoCloseable {
 		return true;
 	}
 
-	/** Invokes a {@link Runnable} in main thread */
+	@Override
 	public void invokeLater(Runnable runnable) {
 		eventQueue.offer(runnable);
 		selector.wakeup();
@@ -202,44 +268,6 @@ public class Connector implements AutoCloseable {
 		boolean interrupted_ = interrupted;
 		interrupted = false;
 		return interrupted_;
-	}
-
-	/**
-	 * Registers a {@link Connection} and connects to a remote address
-	 *
-	 * @throws IOException If the remote address is invalid.
-	 * @see #connect(Connection, InetSocketAddress)
-	 */
-	public void connect(Connection connection,
-			String host, int port) throws IOException {
-		connect(connection, new InetSocketAddress(host, port));
-	}
-
-	private static void closeSocketChannel(SocketChannel socketChannel)
-			throws IOException {
-		socketChannel.close();
-	}
-
-	/**
-	 * registers a {@link Connection} and connects to a remote address
-	 *
-	 * @throws IOException If the remote address is invalid.
-	 * @see #connect(Connection, String, int)
-	 */
-	public void connect(Connection connection,
-			InetSocketAddress remote) throws IOException {
-		SocketChannel socketChannel = SocketChannel.open();
-		socketChannel.configureBlocking(false);
-		try {
-			socketChannel.connect(remote);
-		} catch (IOException e) {
-			// Evade resource leak warning
-			closeSocketChannel(socketChannel);
-			throw e;
-		}
-		connection.socketChannel = socketChannel;
-		connection.startConnect();
-		add(connection, SelectionKey.OP_CONNECT);
 	}
 
 	/**

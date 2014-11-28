@@ -28,11 +28,12 @@ public class IPTrustSet extends HashSet<String> implements FilterFactory {
 	public Filter createFilter() {
 		return new Filter() {
 			@Override
-			protected void onConnect() {
-				if (contains(getConnection().getRemoteAddr())) {
+			public void onConnect() {
+				if (contains(getRemoteAddr())) {
 					super.onConnect();
 				} else {
-					getConnection().disconnect();
+					disconnect();
+					onDisconnect();
 				}
 			}
 		};

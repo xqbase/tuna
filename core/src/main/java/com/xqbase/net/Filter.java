@@ -7,42 +7,85 @@ package com.xqbase.net;
  * or filter received data and events (including connecting and disconnecting events)
  * from the network side to the application side.
  */
-public class Filter {
-	Connection connection;
+public class Filter implements Listener, Handler {
+	Handler handler;
 	Filter netFilter, appFilter;
 
-	/** @return The {@link Connection} which the <b>Filter</b> applies to. */
-	protected Connection getConnection() {
-		return connection;
-	}
-
-	/** Filters sent data, from the application side to the network side */
-	protected void send(byte[] b, int off, int len) {
-		netFilter.send(b, off, len);
-	}
-
-	/** Filters active disconnecting events, from the application side to the network side */
-	protected void disconnect() {
-		netFilter.disconnect();
-	}
-
 	/** Filters received data, from the network side to the application side */
-	protected void onRecv(byte[] b, int off, int len) {
+	@Override
+	public void onRecv(byte[] b, int off, int len) {
 		appFilter.onRecv(b, off, len);
 	}
 
 	/** Filters queued/completed sending events, from the network side to the application side */
-	protected void onSend(boolean queued) {
+	@Override
+	public void onSend(boolean queued) {
 		appFilter.onSend(queued);
 	}
 
 	/** Filters connecting events, from the network side to the application side */
-	protected void onConnect() {
+	@Override
+	public void onConnect() {
 		appFilter.onConnect();
 	}
 
 	/** Filters passive disconnecting events, from the network side to the application side */
-	protected void onDisconnect() {
+	@Override
+	public void onDisconnect() {
 		appFilter.onDisconnect();
+	}
+
+	/** Filters sent data, from the application side to the network side */
+	@Override
+	public void send(byte[] b, int off, int len) {
+		netFilter.send(b, off, len);
+	}
+
+	/** Filters active disconnecting events, from the application side to the network side */
+	@Override
+	public void disconnect() {
+		netFilter.disconnect();
+	}
+
+	// Following methods are just wraps of "handler"
+
+	@Override
+	public String getLocalAddr() {
+		return handler.getLocalAddr();
+	}
+
+	@Override
+	public int getLocalPort() {
+		return handler.getLocalPort();
+	}
+
+	@Override
+	public String getRemoteAddr() {
+		return handler.getRemoteAddr();
+	}
+
+	@Override
+	public int getRemotePort() {
+		return handler.getRemotePort();
+	}
+
+	@Override
+	public int getQueueSize() {
+		return handler.getQueueSize();
+	}
+
+	@Override
+	public long getBytesRecv() {
+		return handler.getBytesRecv();
+	}
+
+	@Override
+	public long getBytesSent() {
+		return handler.getBytesSent();
+	}
+
+	@Override
+	public void invokeLater(Runnable runnable) {
+		handler.invokeLater(runnable);
 	}
 }

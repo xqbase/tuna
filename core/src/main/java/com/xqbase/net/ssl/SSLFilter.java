@@ -97,7 +97,7 @@ public class SSLFilter extends Filter {
 	}
 
 	@Override
-	protected void send(byte[] b, int off, int len) {
+	public void send(byte[] b, int off, int len) {
 		if (hs != HandshakeStatus.FINISHED) {
 			baqToSend.add(b, off, len);
 			return;
@@ -105,19 +105,21 @@ public class SSLFilter extends Filter {
 		try {
 			wrap(b, off, len);
 		} catch (IOException e) {
-			getConnection().disconnect();
+			disconnect();
+			onDisconnect();
 		}
 	}
 
 	@Override
-	protected void onRecv(byte[] b, int off, int len) {
+	public void onRecv(byte[] b, int off, int len) {
 		baqRecv.add(b, off, len);
 		if (hs != HandshakeStatus.FINISHED) {
 			if (hs != HandshakeStatus.NEED_TASK) {
 				try {
 					doHandshake();
 				} catch (IOException e) {
-					getConnection().disconnect();
+					disconnect();
+					onDisconnect();
 				}
 			}
 			return;
@@ -127,7 +129,8 @@ public class SSLFilter extends Filter {
 			try {
 				result = unwrap();
 			} catch (IOException e) {
-				getConnection().disconnect();
+				disconnect();
+				onDisconnect();
 				return;
 			}
 			switch (result.getStatus()) {
@@ -138,7 +141,8 @@ public class SSLFilter extends Filter {
 				appBBSize = ssle.getSession().getApplicationBufferSize();
 				break;
 			default:
-				getConnection().disconnect();
+				disconnect();
+				onDisconnect();
 				return;
 			}
 		} while (result.getStatus() != Status.BUFFER_UNDERFLOW);
@@ -146,11 +150,12 @@ public class SSLFilter extends Filter {
 	}
 
 	@Override
-	protected void onConnect() {
+	public void onConnect() {
 		try {
 			doHandshake();
 		} catch (IOException e) {
-			getConnection().disconnect();
+			disconnect();
+			onDisconnect();
 		}
 	}
 
@@ -195,12 +200,13 @@ public class SSLFilter extends Filter {
 		while ((task = ssle.getDelegatedTask()) != null) {
 			task.run();
 		}
-		getConnection().invokeLater(() -> {
+		invokeLater(() -> {
 			hs = ssle.getHandshakeStatus();
 			try {
 				doHandshake();
 			} catch (IOException e) {
-				getConnection().disconnect();
+				disconnect();
+				onDisconnect();
 			}
 		});
 	}
