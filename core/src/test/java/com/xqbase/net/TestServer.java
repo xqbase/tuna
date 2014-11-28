@@ -16,28 +16,32 @@ public class TestServer {
 	public static void main(String[] args) throws IOException {
 		// Evade resource leak warning
 		Connector connector = newConnector();
-		connector.add(new ServerConnection(2626) {
-			@Override
-			protected Connection createConnection() {
-				return new Connection() {
-					@Override
-					protected void onRecv(byte[] b, int off, int len) {
-						send(b, off, len);
-						requests.incrementAndGet();
-					}
+		connector.add(() -> {
+			return new Listener() {
+				private Handler handler;
 
-					@Override
-					protected void onConnect() {
-						accepts.incrementAndGet();
-					}
+				@Override
+				public void setHandler(Handler handler) {
+					this.handler = handler;
+				}
 
-					@Override
-					protected void onDisconnect() {
-						errors.incrementAndGet();
-					}
-				};
-			}
-		});
+				@Override
+				public void onRecv(byte[] b, int off, int len) {
+					handler.send(b, off, len);
+					requests.incrementAndGet();
+				}
+
+				@Override
+				public void onConnect() {
+					accepts.incrementAndGet();
+				}
+
+				@Override
+				public void onDisconnect() {
+					errors.incrementAndGet();
+				}
+			};
+		}, 2626);
 		ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1);
 		long startTime = System.currentTimeMillis();
 		timer.scheduleAtFixedRate(() -> {

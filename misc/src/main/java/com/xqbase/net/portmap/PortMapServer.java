@@ -83,7 +83,7 @@ class PublicServerConnection extends ServerConnection {
 	IdPool idPool = new IdPool();
 
 	@Override
-	protected Connection createConnection() {
+	protected Connection onAccept() {
 		int connId = idPool.borrowId();
 		PublicConnection conn = new PublicConnection(mapConn, connId);
 		connMap.put(Integer.valueOf(connId), conn);
@@ -226,7 +226,7 @@ public class PortMapServer extends ServerConnection {
 	}
 
 	@Override
-	protected Connection createConnection() {
+	protected Connection onAccept() {
 		MapConnection mapConn = new MapConnection(this);
 		timeoutSet.add(mapConn);
 		return mapConn;

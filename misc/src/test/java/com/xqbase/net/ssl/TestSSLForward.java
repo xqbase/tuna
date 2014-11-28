@@ -28,8 +28,8 @@ public class TestSSLForward {
 		ForwardServer forwardServer = new ForwardServer(connector, 2424, "localhost", 2323);
 		SSLFilterFactory sslffClient = new SSLFilterFactory(SSLUtil.
 				getSSLContext(certKey, certMap), SSLFilter.CLIENT);
-		forwardServer.getRemoteFilterFactories().add(sslffClient);
-		forwardServer.getRemoteFilterFactories().add(new DumpFilterFactory().
+		forwardServer.getFilterFactories().add(sslffClient);
+		forwardServer.getFilterFactories().add(new DumpFilterFactory().
 				setDumpStream(System.err).setUseClientMode(true));
 		connector.add(forwardServer);
 

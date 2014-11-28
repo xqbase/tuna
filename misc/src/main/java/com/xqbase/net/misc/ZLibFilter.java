@@ -48,7 +48,7 @@ public class ZLibFilter extends PacketFilter {
 				}
 			}
 		} catch (IOException e) {
-			getConnection().disconnect();
+			disconnect();
 			return;
 		}
 		super.onData(baq.array(), baq.offset(), baq.length());
@@ -57,7 +57,7 @@ public class ZLibFilter extends PacketFilter {
 	private static final byte[] EMPTY_HEAD = new byte[] {0, 0};
 
 	@Override
-	protected void send(byte[] b, int off, int len) {
+	public void send(byte[] b, int off, int len) {
 		ByteArrayQueue baq = new ByteArrayQueue();
 		baq.add(EMPTY_HEAD);
 		try (DeflaterOutputStream dos = new

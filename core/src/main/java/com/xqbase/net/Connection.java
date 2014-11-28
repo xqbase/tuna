@@ -13,34 +13,22 @@ import com.xqbase.util.ByteArrayQueue;
  * The encapsulation of a {@link SocketChannel} and its {@link SelectionKey},
  * which corresponds to a TCP Socket.
  */
-public class Connection {
-	/** 
-	 * Consumes received data in the APPLICATION end of the connection.
-	 *
-	 * @param b
-	 * @param off
-	 * @param len
-	 */
-	protected void onRecv(byte[] b, int off, int len) {/**/}
-	/** 
-	 * Consumes queued/completed sending events in the APPLICATION end of the connection.
-	 *
-	 * @param queued
-	 */
-	protected void onSend(boolean queued) {/**/}
-	/** Consumes connecting events in the APPLICATION end of the connection. */
-	protected void onConnect() {/**/}
-	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
-	protected void onDisconnect() {/**/}
+public class Connection implements Handler {
+	Listener listener;
+
+	Connection(Listener listener) {
+		this.listener = listener;
+		listener.setHandler(this);
+	}
 
 	Filter netFilter = new Filter() {
 		@Override
-		protected void send(byte[] b, int off, int len) {
+		public void send(byte[] b, int off, int len) {
 			write(b, off, len);
 		}
 
 		@Override
-		protected void disconnect() {
+		public void disconnect() {
 			if (status == STATUS_IDLE) {
 				finishClose();
 				connector.activeDisconnectCount ++;
@@ -51,23 +39,23 @@ public class Connection {
 	};
 	private Filter appFilter = new Filter() {
 		@Override
-		protected void onRecv(byte[] b, int off, int len) {
-			Connection.this.onRecv(b, off, len);
+		public void onRecv(byte[] b, int off, int len) {
+			listener.onRecv(b, off, len);
 		}
 
 		@Override
-		protected void onSend(boolean queued) {
-			Connection.this.onSend(queued);
+		public void onSend(boolean queued) {
+			listener.onSend(queued);
 		}
 
 		@Override
-		protected void onConnect() {
-			Connection.this.onConnect();
+		public void onConnect() {
+			listener.onConnect();
 		}
 
 		@Override
-		protected void onDisconnect() {
-			Connection.this.onDisconnect();
+		public void onDisconnect() {
+			listener.onDisconnect();
 		}
 	};
 	private Filter lastFilter = appFilter;
@@ -84,7 +72,7 @@ public class Connection {
 	 * @see ServerConnection#getFilterFactories()
 	 */
 	public void appendFilter(Filter filter) {
-		filter.connection = this;
+		filter.handler = this;
 		// lastFilter <-> filter
 		lastFilter.netFilter = filter;
 		filter.appFilter = lastFilter;
@@ -214,32 +202,32 @@ public class Connection {
 		} catch (IOException e) {/**/}
 	}
 
-	/** @return Local IP address of the Connection. */
+	@Override
 	public String getLocalAddr() {
 		return local.getAddress().getHostAddress();
 	}
 
-	/** @return Local port of the Connection. */
+	@Override
 	public int getLocalPort() {
 		return local.getPort();
 	}
 
-	/** @return Remote IP address of the Connection. */
+	@Override
 	public String getRemoteAddr() {
 		return remote.getAddress().getHostAddress();
 	}
 
-	/** @return Remote port of the Connection. */
+	@Override
 	public int getRemotePort() {
 		return remote.getPort();
 	}
 
-	/** Invokes a {@link Runnable} in main thread */
+	@Override
 	public void invokeLater(Runnable runnable) {
 		connector.invokeLater(runnable);
 	}
 
-	/** Block or unblock receiving */
+	@Override
 	public void blockRecv(boolean blocked_) {
 		blocked = blocked_;
 		if (status != STATUS_CLOSED) {
@@ -247,12 +235,7 @@ public class Connection {
 		}
 	}
 
-	/**
-	 * Closes the connection actively.<p>
-	 *
-	 * If <code>send()</code> is called before <code>disconnect()</code>,
-	 * the connection will not be closed until all queued data sent out. 
-	 */
+	@Override
 	public void disconnect() {
 		appFilter.disconnect();
 	}
@@ -267,15 +250,7 @@ public class Connection {
 		return status != STATUS_IDLE;
 	}
 
-	/**
-	 * Sends a sequence of bytes in the application end,
-	 * equivalent to <code>send(b, 0, b.length).</code>
-	 */ 
-	public void send(byte[] b) {
-		send(b, 0, b.length);
-	}
-
-	/** Sends a sequence of bytes in the application end. */ 
+	@Override
 	public void send(byte[] b, int off, int len) {
 		appFilter.send(b, off, len);
 	}
@@ -283,14 +258,17 @@ public class Connection {
 	long bytesRecv = 0;
 	private long bytesSent = 0;
 
+	@Override
 	public int getQueueSize() {
 		return queue.length();
 	}
 
+	@Override
 	public long getBytesRecv() {
 		return bytesRecv;
 	}
 
+	@Override
 	public long getBytesSent() {
 		return bytesSent;
 	}

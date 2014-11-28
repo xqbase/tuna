@@ -4,83 +4,87 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 
-import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
 import com.xqbase.net.FilterFactory;
-import com.xqbase.net.ServerConnection;
+import com.xqbase.net.Handler;
+import com.xqbase.net.Listener;
+import com.xqbase.net.ListenerFactory;
 
-class PeerConnection extends Connection {
-	PeerConnection peer;
+class PeerListener implements Listener {
+	PeerListener peer;
+	Handler handler;
 
-	PeerConnection(PeerConnection peer) {
+	PeerListener(PeerListener peer) {
 		this.peer = peer;
 	}
 
 	@Override
-	protected void onSend(boolean queued) {
+	public void setHandler(Handler handler) {
+		this.handler = handler;
+	}
+
+	@Override
+	public void onSend(boolean queued) {
 		if (peer != null) {
-			peer.blockRecv(queued);
+			peer.handler.blockRecv(queued);
 		}
 	}
 
 	@Override
-	protected void onRecv(byte[] b, int off, int len) {
+	public void onRecv(byte[] b, int off, int len) {
 		if (peer != null) {
-			peer.send(b, off, len);
+			peer.handler.send(b, off, len);
 		}
 	}
 
 	@Override
-	protected void onDisconnect() {
+	public void onDisconnect() {
 		if (peer != null) {
 			peer.peer = null;
-			peer.disconnect();
+			peer.handler.disconnect();
 		}
 	}
 }
 
-class ForwardConnection extends PeerConnection {
+class ForwardListener extends PeerListener {
 	private ForwardServer forward;
 
-	ForwardConnection(ForwardServer forward) {
+	ForwardListener(ForwardServer forward) {
 		super(null);
 		this.forward = forward;
 	}
 
 	@Override
-	protected void onConnect() {
-		peer = new PeerConnection(this);
-		peer.appendFilters(forward.getRemoteFilterFactories());
+	public void onConnect() {
+		peer = new PeerListener(this);
 		try {
-			forward.connector.connect(peer, forward.remote);
+			forward.connector.connect(peer, forward.remote).
+					appendFilters(forward.getFilterFactories());
 		} catch (IOException e) {
 			peer = null;
-			disconnect();
+			handler.disconnect();
 		}
 	}
 }
 
 /** A port redirecting server. */
-public class ForwardServer extends ServerConnection {
+public class ForwardServer implements ListenerFactory {
 	Connector connector;
 	InetSocketAddress remote;
 
 	@Override
-	protected Connection createConnection() {
-		return new ForwardConnection(this);
+	public Listener onAccept() {
+		return new ForwardListener(this);
 	}
 
 	/**
 	 * Creates a ForwardServer.
 	 * @param connector - A connector which remote connections registered to.
-	 * @param port - The listening port to redirect.
 	 * @param remoteHost - The remote (redirected) host.
 	 * @param remotePort - The remote (redirected) port.
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	public ForwardServer(Connector connector,
-			int port, String remoteHost, int remotePort) throws IOException {
-		super(port);
+	public ForwardServer(Connector connector, String remoteHost, int remotePort) throws IOException {
 		this.connector = connector;
 		remote = new InetSocketAddress(remoteHost, remotePort);
 	}
@@ -88,21 +92,17 @@ public class ForwardServer extends ServerConnection {
 	/**
 	 * Creates a ForwardServer.
 	 * @param connector - A connector which remote connections registered to.
-	 * @param local - The binding / listening address to redirect.
 	 * @param remote - The remote (redirected) address.
-	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	public ForwardServer(Connector connector,
-			InetSocketAddress local, InetSocketAddress remote) throws IOException {
-		super(local);
+	public ForwardServer(Connector connector, InetSocketAddress remote) {
 		this.connector = connector;
 		this.remote = remote;
 	}
 
-	private ArrayList<FilterFactory> remoteFilterFactories = new ArrayList<>();
+	private ArrayList<FilterFactory> filterFactories = new ArrayList<>();
 
 	/** @return A list of {@link FilterFactory}s applied to remote connections. */
-	public ArrayList<FilterFactory> getRemoteFilterFactories() {
-		return remoteFilterFactories;
+	public ArrayList<FilterFactory> getFilterFactories() {
+		return filterFactories;
 	}
 }
