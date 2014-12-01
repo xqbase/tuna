@@ -1,6 +1,8 @@
 package com.xqbase.net;
 
-public interface Handler extends EventQueue {
+import java.util.concurrent.Executor;
+
+public interface Handler extends Executor {
 	/**
 	 * Sends a sequence of bytes in the application end,
 	 * equivalent to <code>send(b, 0, b.length).</code>
@@ -32,10 +34,4 @@ public interface Handler extends EventQueue {
 	 * @param blocked
 	 */
 	public default void blockRecv(boolean blocked) {/**/}
-	/** @return Queue Size */
-	public int getQueueSize();
-	/** @return Received Bytes */
-	public long getBytesRecv();
-	/** @return Sent Bytes */
-	public long getBytesSent();
 }

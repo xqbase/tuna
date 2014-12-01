@@ -70,22 +70,7 @@ public class Filter implements Listener, Handler {
 	}
 
 	@Override
-	public int getQueueSize() {
-		return handler.getQueueSize();
-	}
-
-	@Override
-	public long getBytesRecv() {
-		return handler.getBytesRecv();
-	}
-
-	@Override
-	public long getBytesSent() {
-		return handler.getBytesSent();
-	}
-
-	@Override
-	public void invokeLater(Runnable runnable) {
-		handler.invokeLater(runnable);
+	public void execute(Runnable runnable) {
+		handler.execute(runnable);
 	}
 }

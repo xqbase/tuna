@@ -2,7 +2,7 @@ package com.xqbase.net.ssl;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -21,35 +21,35 @@ public class SSLFilter extends Filter {
 	 * Indicates that SSLFilter is created in server mode with
 	 * NO client authentication desired.
 	 *
-	 * @see #SSLFilter(ExecutorService, SSLContext, int)
-	 * @see #SSLFilter(ExecutorService, SSLContext, int, String, int)
+	 * @see #SSLFilter(Executor, SSLContext, int)
+	 * @see #SSLFilter(Executor, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_NO_AUTH = 0;
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * client authentication REQUESTED.
 	 *
-	 * @see #SSLFilter(ExecutorService, SSLContext, int)
-	 * @see #SSLFilter(ExecutorService, SSLContext, int, String, int)
+	 * @see #SSLFilter(Executor, SSLContext, int)
+	 * @see #SSLFilter(Executor, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_WANT_AUTH = 1;
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * client authentication REQUIRED.
 	 *
-	 * @see #SSLFilter(ExecutorService, SSLContext, int)
-	 * @see #SSLFilter(ExecutorService, SSLContext, int, String, int)
+	 * @see #SSLFilter(Executor, SSLContext, int)
+	 * @see #SSLFilter(Executor, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_NEED_AUTH = 2;
 	/**
 	 * Indicates that SSLFilter is created in client mode.
 	 *
-	 * @see #SSLFilter(ExecutorService, SSLContext, int)
-	 * @see #SSLFilter(ExecutorService, SSLContext, int, String, int)
+	 * @see #SSLFilter(Executor, SSLContext, int)
+	 * @see #SSLFilter(Executor, SSLContext, int, String, int)
 	 */
 	public static final int CLIENT = 3;
 
-	private ExecutorService executor;
+	private Executor executor;
 	private SSLEngine ssle;
 	private int appBBSize;
 	private byte[] requestBytes;
@@ -59,24 +59,24 @@ public class SSLFilter extends Filter {
 	private ByteArrayQueue baqToSend = new ByteArrayQueue();
 
 	/**
-	 * Creates an SSLFilter with the given {@link ExecutorService},
+	 * Creates an SSLFilter with the given {@link Executor},
 	 * {@link SSLContext} and mode
 	 * @param mode - SSL mode, must be {@link #SERVER_NO_AUTH},
 	 *        {@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
 	 */
-	public SSLFilter(ExecutorService executor, SSLContext sslc, int mode) {
+	public SSLFilter(Executor executor, SSLContext sslc, int mode) {
 		this(executor, sslc, mode, null, 0);
 	}
 
 	/**
-	 * Creates an SSLFilter with the given {@link ExecutorService},
+	 * Creates an SSLFilter with the given {@link Executor},
 	 * {@link SSLContext}, mode and advisory peer information
 	 * @param mode - SSL mode, must be {@link #SERVER_NO_AUTH},
 	 *        {@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
 	 * @param peerHost - Advisory peer information.
 	 * @param peerPort - Advisory peer information.
 	 */
-	public SSLFilter(ExecutorService executor, SSLContext sslc, int mode,
+	public SSLFilter(Executor executor, SSLContext sslc, int mode,
 			String peerHost, int peerPort) {
 		this.executor = executor;
 		if (peerHost == null) {
@@ -200,7 +200,7 @@ public class SSLFilter extends Filter {
 		while ((task = ssle.getDelegatedTask()) != null) {
 			task.run();
 		}
-		invokeLater(() -> {
+		execute(() -> {
 			hs = ssle.getHandshakeStatus();
 			try {
 				doHandshake();

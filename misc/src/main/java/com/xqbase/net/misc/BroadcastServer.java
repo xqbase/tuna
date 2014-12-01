@@ -3,7 +3,6 @@ package com.xqbase.net.misc;
 import java.util.LinkedHashSet;
 
 import com.xqbase.net.Connection;
-import com.xqbase.net.Filter;
 import com.xqbase.net.Handler;
 import com.xqbase.net.Listener;
 import com.xqbase.net.ListenerFactory;
@@ -26,10 +25,10 @@ class BroadcastListener implements Listener {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		for (Listener listener : listeners.toArray(new Filter[0])) {
+		for (BroadcastListener listener : listeners.toArray(new BroadcastListener[0])) {
 			// "listener.onDisconnect()" might change "listeners"
 			if (!noEcho || listener != this) {
-				handler.send(b, off, len);
+				listener.handler.send(b, off, len);
 			}
 		}
 	}
@@ -55,6 +54,10 @@ class BroadcastListener implements Listener {
 public class BroadcastServer implements ListenerFactory {
 	private LinkedHashSet<BroadcastListener> listeners = new LinkedHashSet<>();
 	private boolean noEcho;
+
+	public BroadcastServer() {
+		this(false);
+	}
 
 	/**
 	 * Creates a BroadcastServer

@@ -223,8 +223,8 @@ public class Connection implements Handler {
 	}
 
 	@Override
-	public void invokeLater(Runnable runnable) {
-		connector.invokeLater(runnable);
+	public void execute(Runnable runnable) {
+		connector.execute(runnable);
 	}
 
 	@Override
@@ -258,17 +258,14 @@ public class Connection implements Handler {
 	long bytesRecv = 0;
 	private long bytesSent = 0;
 
-	@Override
 	public int getQueueSize() {
 		return queue.length();
 	}
 
-	@Override
 	public long getBytesRecv() {
 		return bytesRecv;
 	}
 
-	@Override
 	public long getBytesSent() {
 		return bytesSent;
 	}

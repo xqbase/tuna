@@ -9,12 +9,13 @@ import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executor;
 
 /**
  * The encapsulation of {@link Selector},
  * which makes {@link Connection} and {@link ServerConnection} working.<p>
  */
-public class Connector implements EventQueue, AutoCloseable {
+public class Connector implements Executor, AutoCloseable {
 	private static final int BUFFER_SIZE = 32768;
 
 	private Selector selector;
@@ -114,7 +115,7 @@ public class Connector implements EventQueue, AutoCloseable {
 			InetSocketAddress addr) throws IOException {
 		ServerConnection serverConnection = new ServerConnection(listenerFactory, addr);
 		serverConnection.connector = this;
-		serverConnection.listenerFactory.setEventQueue(this);
+		serverConnection.listenerFactory.setExecutor(this);
 		try {
 			serverConnection.selectionKey = serverConnection.serverSocketChannel.
 					register(selector, SelectionKey.OP_ACCEPT, serverConnection);
@@ -132,7 +133,11 @@ public class Connector implements EventQueue, AutoCloseable {
 	 */
 	public void remove(ServerConnection serverConnection) {
 		if (serverConnection.selectionKey.isValid()) {
-			serverConnection.onClose();
+			if (serverConnection.listenerFactory instanceof AutoCloseable) {
+				try {
+					((AutoCloseable) serverConnection.listenerFactory).close();
+				} catch (Exception e) {/**/}
+			}
 			serverConnection.close();
 		}
 	}
@@ -250,14 +255,14 @@ public class Connector implements EventQueue, AutoCloseable {
 	}
 
 	@Override
-	public void invokeLater(Runnable runnable) {
+	public void execute(Runnable runnable) {
 		eventQueue.offer(runnable);
 		selector.wakeup();
 	}
 
 	/** Interrupts {@link #doEvents()} or {@link #doEvents(long)} */
 	public void interrupt() {
-		invokeLater(() -> interrupted = true);
+		execute(() -> interrupted = true);
 	}
 
 	/**

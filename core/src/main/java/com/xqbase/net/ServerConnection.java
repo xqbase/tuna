@@ -46,8 +46,6 @@ public class ServerConnection {
 		return filterFactories;
 	}
 
-	protected void onClose() {/**/}
-
 	void close() {
 		for (FilterFactory filterFactory : filterFactories) {
 			if (filterFactory instanceof AutoCloseable) {

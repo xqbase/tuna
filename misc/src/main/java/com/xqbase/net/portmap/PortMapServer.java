@@ -6,12 +6,15 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
+import com.xqbase.net.Listener;
+import com.xqbase.net.ListenerFactory;
 import com.xqbase.net.ServerConnection;
 import com.xqbase.net.packet.PacketFilter;
 
@@ -91,7 +94,7 @@ class PublicServerConnection extends ServerConnection {
 	}
 }
 
-class MapConnection extends Connection {
+class MapConnection implements Listener {
 	private PortMapServer mapServer;
 
 	long accessed = System.currentTimeMillis();
@@ -103,7 +106,7 @@ class MapConnection extends Connection {
 	}
 
 	@Override
-	protected void onRecv(byte[] b, int off, int len) {
+	public void onRecv(byte[] b, int off, int len) {
 		mapServer.timeoutSet.remove(this);
 		accessed = System.currentTimeMillis();
 		mapServer.timeoutSet.add(this);
@@ -187,11 +190,11 @@ class MapConnection extends Connection {
  * This server will open public ports, which map private ports provided by PortMapClients.
  * @see PortMapClient
  */
-public class PortMapServer extends ServerConnection {
+public class PortMapServer implements ListenerFactory, AutoCloseable {
 	LinkedHashSet<MapConnection> timeoutSet = new LinkedHashSet<>();
 	Connector connector;
-	int portFrom, portTo;
 
+	private Executor executor;
 	private ScheduledFuture<?> future;
 
 	/**
@@ -203,16 +206,12 @@ public class PortMapServer extends ServerConnection {
 	 * @param timer - The {@link ScheduledExecutorService} to clear expired connections.
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	public PortMapServer(Connector connector, int port, int portFrom,
-			int portTo, ScheduledExecutorService timer) throws IOException {
-		super(port);
+	public PortMapServer(Connector connector, ScheduledExecutorService timer) throws IOException {
 		this.connector = connector;
-		this.portFrom = portFrom;
-		this.portTo = portTo;
 		// in main thread
 		future = timer.scheduleAtFixedRate(() -> {
 			// in timer thread
-			invokeLater(() -> {
+			executor.execute(() -> {
 				// in main thread
 				long now = System.currentTimeMillis();
 				Iterator<MapConnection> i = timeoutSet.iterator();
@@ -226,14 +225,19 @@ public class PortMapServer extends ServerConnection {
 	}
 
 	@Override
-	protected Connection onAccept() {
+	public Listener onAccept() {
 		MapConnection mapConn = new MapConnection(this);
 		timeoutSet.add(mapConn);
 		return mapConn;
 	}
 
 	@Override
-	protected void onClose() {
+	public void setExecutor(Executor executor) {
+		this.executor = executor;
+	}
+
+	@Override
+	public void close() {
 		future.cancel(false);
 	}
 }
