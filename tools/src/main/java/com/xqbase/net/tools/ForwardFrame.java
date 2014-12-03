@@ -30,7 +30,7 @@ public class ForwardFrame extends ConnectorFrame {
 			String[] {DUMP_NONE, DUMP_BINARY, DUMP_TEXT, DUMP_FOLDER});
 	private JFileChooser chooser = new JFileChooser();
 
-	private ForwardServer server = null;
+	private AutoCloseable server = null;
 
 	void choose() {
 		if (!cmbDump.getSelectedItem().equals(DUMP_FOLDER)) {
@@ -56,7 +56,9 @@ public class ForwardFrame extends ConnectorFrame {
 	@Override
 	protected void start() {
 		if (server != null) {
-			connector.remove(server);
+			try {
+				server.close();
+			} catch (Exception e) {/**/}
 			server = null;
 			stop();
 			return;
@@ -70,19 +72,6 @@ public class ForwardFrame extends ConnectorFrame {
 		txtRemotePort.setEnabled(false);
 		cmbDump.setEnabled(false);
 
-		try {
-			server = new ForwardServer(connector, Integer.parseInt(txtPort.getText()),
-					txtRemoteHost.getText(), Integer.parseInt(txtRemotePort.getText()));
-		} catch (IOException | IllegalArgumentException e) {
-			stop();
-			JOptionPane.showMessageDialog(this, e.getMessage(),
-					getTitle(), JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-		connector.add(server);
-		if (cmbDump.getSelectedItem().equals(DUMP_NONE)) {
-			return;
-		}
 		DumpFilterFactory dff = new DumpFilterFactory();
 		if (cmbDump.getSelectedItem().equals(DUMP_TEXT)) {
 			dff.setDumpText(true);
@@ -90,7 +79,22 @@ public class ForwardFrame extends ConnectorFrame {
 			dff.setDumpStream(null);
 			dff.setDumpFolder(chooser.getSelectedFile());
 		}
-		server.getFilterFactories().add(dff);
+
+		ForwardServer forward;
+		try {
+			forward = new ForwardServer(connector, txtRemoteHost.getText(),
+					Integer.parseInt(txtRemotePort.getText()));
+			server = connector.add(forward.appendFilter(dff),
+					Integer.parseInt(txtPort.getText()));
+		} catch (IOException | IllegalArgumentException e) {
+			stop();
+			JOptionPane.showMessageDialog(this, e.getMessage(),
+					getTitle(), JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+		if (cmbDump.getSelectedItem().equals(DUMP_NONE)) {
+			return;
+		}
 	}
 
 	public ForwardFrame() {

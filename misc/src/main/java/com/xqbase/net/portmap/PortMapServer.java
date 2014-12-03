@@ -11,11 +11,11 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import com.xqbase.net.Connection;
+import com.xqbase.net.Client;
 import com.xqbase.net.Connector;
 import com.xqbase.net.Listener;
 import com.xqbase.net.ListenerFactory;
-import com.xqbase.net.ServerConnection;
+import com.xqbase.net.Server;
 import com.xqbase.net.packet.PacketFilter;
 
 class IdPool {
@@ -42,7 +42,7 @@ class IdPool {
 	}
 }
 
-class PublicConnection extends Connection {
+class PublicConnection extends Client {
 	private MapConnection mapConn;
 	private int connId;
 
@@ -74,7 +74,7 @@ class PublicConnection extends Connection {
 	}
 }
 
-class PublicServerConnection extends ServerConnection {
+class PublicServerConnection extends Server {
 	private MapConnection mapConn;
 
 	PublicServerConnection(int port, MapConnection mapConn) throws IOException {
@@ -86,7 +86,7 @@ class PublicServerConnection extends ServerConnection {
 	IdPool idPool = new IdPool();
 
 	@Override
-	protected Connection onAccept() {
+	protected Client onAccept() {
 		int connId = idPool.borrowId();
 		PublicConnection conn = new PublicConnection(mapConn, connId);
 		connMap.put(Integer.valueOf(connId), conn);

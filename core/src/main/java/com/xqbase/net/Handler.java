@@ -19,6 +19,12 @@ public interface Handler extends Executor {
 	 * the connection will not be closed until all queued data sent out. 
 	 */
 	public void disconnect();
+	/**
+	 * Block or unblock receiving
+	 *
+	 * @param blocked
+	 */
+	public void blockRecv(boolean blocked);
 
 	/** @return Local IP address of the Connection. */
 	public String getLocalAddr();
@@ -28,10 +34,4 @@ public interface Handler extends Executor {
 	public String getRemoteAddr();
 	/** @return Remote port of the Connection. */
 	public int getRemotePort();
-	/**
-	 * Block or unblock receiving
-	 *
-	 * @param blocked
-	 */
-	public default void blockRecv(boolean blocked) {/**/}
 }

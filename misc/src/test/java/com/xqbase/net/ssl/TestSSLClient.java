@@ -6,7 +6,6 @@ import java.util.concurrent.Executors;
 
 import javax.net.ssl.SSLContext;
 
-import com.xqbase.net.Connection;
 import com.xqbase.net.Connector;
 import com.xqbase.net.Listener;
 import com.xqbase.util.Bytes;
@@ -34,12 +33,11 @@ public class TestSSLClient {
 				public void onConnect() {
 					System.out.println(Bytes.toHexLower(sslf2.getSession().getId()));
 					try {
-						connector.connect(listener1, "localhost", 2323).appendFilter(sslf1);
+						connector.connect(listener1.appendFilter(sslf1), "localhost", 2323);
 					} catch (IOException e) {/**/}
 				}
 			};
-			Connection connection2 = connector.connect(listener2, "localhost", 2323);
-			connection2.appendFilter(sslf2);
+			connector.connect(listener2.appendFilter(sslf2), "localhost", 2323);
 			while (!connected) {
 				connector.doEvents(-1);
 			}

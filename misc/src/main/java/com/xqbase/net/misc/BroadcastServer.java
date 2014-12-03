@@ -2,11 +2,9 @@ package com.xqbase.net.misc;
 
 import java.util.LinkedHashSet;
 
-import com.xqbase.net.Connection;
 import com.xqbase.net.Handler;
 import com.xqbase.net.Listener;
 import com.xqbase.net.ListenerFactory;
-import com.xqbase.net.ServerConnection;
 
 class BroadcastListener implements Listener {
 	private LinkedHashSet<BroadcastListener> listeners = new LinkedHashSet<>();
@@ -45,8 +43,8 @@ class BroadcastListener implements Listener {
 }
 
 /**
- * A {@link ServerConnection} which sends received data
- * from one {@link Connection} to all its accepted connections.<p>
+ * A {@link ListenerFactory} which sends received data
+ * from one {@link Listener} to all its accepted listeners.<p>
  *
  * Note that all its accepted connections will be closed automatically
  * when it is removed from a connector.

@@ -156,7 +156,7 @@ public class PortMapServerFrame extends ConnectorFrame {
 		startButton.setBounds(198, 84, 78, 30);
 		exitButton.setBounds(198, 120, 78, 30);
 
-		connector.getFilterFactories().add(dosff);
+		connector.getFilters().add(dosff);
 	}
 
 	public static void main(String[] args) {

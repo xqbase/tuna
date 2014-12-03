@@ -57,9 +57,12 @@ class ForwardListener extends PeerListener {
 	@Override
 	public void onConnect() {
 		peer = new PeerListener(this);
+		Listener listener = peer;
+		for (FilterFactory filterFactory : forward.filterFactories) {
+			listener = listener.appendFilter(filterFactory.createFilter());
+		}
 		try {
-			forward.connector.connect(peer, forward.remote).
-					appendFilters(forward.getFilterFactories());
+			forward.connector.connect(listener, forward.remote);
 		} catch (IOException e) {
 			peer = null;
 			handler.disconnect();
@@ -71,6 +74,7 @@ class ForwardListener extends PeerListener {
 public class ForwardServer implements ListenerFactory {
 	Connector connector;
 	InetSocketAddress remote;
+	ArrayList<FilterFactory> filterFactories = new ArrayList<>();
 
 	@Override
 	public Listener onAccept() {
@@ -99,10 +103,8 @@ public class ForwardServer implements ListenerFactory {
 		this.remote = remote;
 	}
 
-	private ArrayList<FilterFactory> filterFactories = new ArrayList<>();
-
 	/** @return A list of {@link FilterFactory}s applied to remote connections. */
-	public ArrayList<FilterFactory> getFilterFactories() {
-		return filterFactories;
+	public void appendRemoteFilter(FilterFactory filterFactory) {
+		filterFactories.add(filterFactory);
 	}
 }
