@@ -15,7 +15,7 @@ public class BroadcastFrame extends ConnectorFrame {
 	private JTextField txtPort = new JTextField("23");
 	private JCheckBox chkNoEcho = new JCheckBox("No Echo");
 
-	private BroadcastServer server = null;
+	private AutoCloseable server = null;
 
 	void stop() {
 		trayIcon.setToolTip(getTitle());
@@ -28,7 +28,9 @@ public class BroadcastFrame extends ConnectorFrame {
 	@Override
 	protected void start() {
 		if (server != null) {
-			connector.remove(server);
+			try {
+				server.close();
+			} catch (Exception e) {/**/}
 			server = null;
 			stop();
 			return;
@@ -39,15 +41,14 @@ public class BroadcastFrame extends ConnectorFrame {
 		txtPort.setEnabled(false);
 		chkNoEcho.setEnabled(false);
 		try {
-			server = new BroadcastServer(Integer.parseInt(txtPort.getText()),
-					chkNoEcho.isSelected());
+			server = connector.add(new BroadcastServer(chkNoEcho.isSelected()),
+					Integer.parseInt(txtPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
 			stop();
 			JOptionPane.showMessageDialog(BroadcastFrame.this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);
 			return;
 		}
-		connector.add(server);
 	}
 
 	public BroadcastFrame() {

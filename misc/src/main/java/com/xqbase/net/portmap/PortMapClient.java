@@ -6,11 +6,11 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import com.xqbase.net.Connection;
+import com.xqbase.net.Client;
 import com.xqbase.net.Connector;
 import com.xqbase.net.packet.PacketFilter;
 
-class PrivateConnection extends Connection {
+class PrivateConnection extends Client {
 	private PortMapClient mapClient;
 	private int connId;
 
@@ -35,11 +35,11 @@ class PrivateConnection extends Connection {
 }
 
 /**
- * A Port Mapping Client, which is a {@link Connection} to a {@link PortMapServer}.
+ * A Port Mapping Client, which is a {@link Client} to a {@link PortMapServer}.
  * This connection will open a public port in PortMapServer, which maps a private port.
  * @see PortMapServer
  */
-public class PortMapClient extends Connection {
+public class PortMapClient extends Client {
 	HashMap<Integer, PrivateConnection> connMap = new HashMap<>();
 
 	private Connector connector;

@@ -7,12 +7,11 @@ import java.io.IOException;
 import com.xqbase.net.Handler;
 import com.xqbase.net.Listener;
 import com.xqbase.net.ListenerFactory;
-import com.xqbase.net.ServerConnection;
 import com.xqbase.util.ByteArrayQueue;
 import com.xqbase.util.Bytes;
 import com.xqbase.util.Streams;
 
-/** A {@link ServerConnection} which provides cross-domain policy service for Adobe Flash. */
+/** A {@link ListenerFactory} which provides cross-domain policy service for Adobe Flash. */
 public class CrossDomainServer implements ListenerFactory {
 	private long lastAccessed = 0;
 	private File policyFile;

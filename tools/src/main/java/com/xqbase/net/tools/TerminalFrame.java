@@ -18,7 +18,8 @@ import javax.swing.JTextField;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.UIManager;
 
-import com.xqbase.net.Connection;
+import com.xqbase.net.Handler;
+import com.xqbase.net.Listener;
 
 public class TerminalFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -47,15 +48,16 @@ public class TerminalFrame extends ConnectorFrame {
 	JTextArea txtRecv = new JTextArea();
 	JTextArea txtSend = new JTextArea();
 	int status;
-	Connection connection;
+	Listener listener;
+	Handler handler;
 
 	void send() {
 		String msgToSend = txtSend.getText();
 		if (!chkAnonymous.isSelected()) {
-			connection.send(String.format("[%s Sent at %s]\r\n%s\r\n",
+			handler.send(String.format("[%s Sent at %s]\r\n%s\r\n",
 					txtName.getText(), now(), msgToSend).getBytes());
 		} else if (!msgToSend.isEmpty()) {
-			connection.send(msgToSend.getBytes());
+			handler.send(msgToSend.getBytes());
 		}
 		txtSend.setText("");
 	}
@@ -75,9 +77,14 @@ public class TerminalFrame extends ConnectorFrame {
 		btnConnect.setText("Disconnect");
 		btnConnect.setEnabled(false);
 		status = STATUS_CONNECTING;
-		connection = new Connection() {
+		listener = new Listener() {
 			@Override
-			protected void onRecv(byte[] b, int off, int len) {
+			public void setHandler(Handler handler) {
+				TerminalFrame.this.handler = handler;
+			}
+
+			@Override
+			public void onRecv(byte[] b, int off, int len) {
 				txtRecv.append(new String(b, off, len));
 				txtRecv.setCaretPosition(txtRecv.getDocument().getLength());
 				if (!chkQuiet.isSelected()) {
@@ -90,18 +97,18 @@ public class TerminalFrame extends ConnectorFrame {
 			}
 
 			@Override
-			protected void onConnect() {
+			public void onConnect() {
 				status = STATUS_CONNECTED;
 				btnConnect.setEnabled(true);
 				btnSend.setEnabled(true);
 				if (!chkAnonymous.isSelected()) {
-					send(String.format("[%s Connected at %s]\r\n",
+					handler.send(String.format("[%s Connected at %s]\r\n",
 							txtName.getText(), now()).getBytes());
 				}
 			}
 
 			@Override
-			protected void onDisconnect() {
+			public void onDisconnect() {
 				stop();
 				if (status == STATUS_DISCONNECTED) {
 					return;
@@ -118,15 +125,9 @@ public class TerminalFrame extends ConnectorFrame {
 					}
 				});
 			}
-
-			@Override
-			public void disconnect() {
-				super.disconnect();
-				onDisconnect();
-			}
 		};
 		try {
-			connector.connect(connection, txtHost.getText(),
+			connector.connect(listener, txtHost.getText(),
 					Integer.parseInt(txtPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
 			stop();
@@ -168,11 +169,12 @@ public class TerminalFrame extends ConnectorFrame {
 		btnConnect.addActionListener(e -> {
 			if (btnSend.isEnabled()) {
 				if (!chkAnonymous.isSelected()) {
-					connection.send(String.format("[%s Disconnected at %s]\r\n",
+					handler.send(String.format("[%s Disconnected at %s]\r\n",
 							txtName.getText(), now()).getBytes());
 				}
 				status = STATUS_DISCONNECTED;
-				connection.disconnect();
+				handler.disconnect();
+				listener.onDisconnect();
 			} else {
 				start();
 			}

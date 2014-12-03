@@ -5,15 +5,242 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 
+import com.xqbase.util.ByteArrayQueue;
+
+/**
+ * The encapsulation of a {@link SocketChannel} and its {@link SelectionKey},
+ * which corresponds to a TCP Socket.
+ */
+class Client {
+	Client(Listener listener) {
+		this.listener = listener;
+		listener.setHandler(new Handler() {
+			@Override
+			public void send(byte[] b, int off, int len) {
+				write(b, off, len);
+			}
+
+			@Override
+			public void disconnect() {
+				if (status == STATUS_IDLE) {
+					finishClose();
+					connector.activeDisconnectCount ++;
+				} else if (status == STATUS_BUSY) {
+					status = STATUS_DISCONNECTING;
+				}
+			}
+
+			@Override
+			public void blockRecv(boolean blocked_) {
+				blocked = blocked_;
+				if (status != STATUS_CLOSED) {
+					interestOps();
+				}
+			}
+
+			@Override
+			public String getLocalAddr() {
+				return local.getAddress().getHostAddress();
+			}
+
+			@Override
+			public int getLocalPort() {
+				return local.getPort();
+			}
+
+			@Override
+			public String getRemoteAddr() {
+				return remote.getAddress().getHostAddress();
+			}
+
+			@Override
+			public int getRemotePort() {
+				return remote.getPort();
+			}
+
+			@Override
+			public void execute(Runnable runnable) {
+				connector.execute(runnable);
+			}
+		});
+	}
+
+	private static final int STATUS_IDLE = 0;
+	private static final int STATUS_BUSY = 1;
+	private static final int STATUS_DISCONNECTING = 2;
+	private static final int STATUS_CLOSED = 3;
+
+	private ByteArrayQueue queue = new ByteArrayQueue();
+
+	InetSocketAddress local = new InetSocketAddress(0),
+			remote = new InetSocketAddress(0);
+	boolean blocked = false;
+	int status = STATUS_IDLE;
+	Listener listener;
+	SocketChannel socketChannel;
+	SelectionKey selectionKey;
+	Connector connector;
+
+	void interestOps() {
+		selectionKey.interestOps((blocked ? 0 : SelectionKey.OP_READ) |
+				(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
+	}
+
+	void write() throws IOException {
+		boolean queued = false;
+		while (queue.length() > 0) {
+			queued = true;
+			int bytesWritten = socketChannel.write(ByteBuffer.wrap(queue.array(),
+					queue.offset(), queue.length()));
+			if (bytesWritten == 0) {
+				interestOps();
+				return;
+			}
+			bytesSent += bytesWritten;
+			connector.totalBytesSent += bytesWritten;
+			queue.remove(bytesWritten);
+			connector.totalQueueSize -= bytesWritten;
+		}
+		if (queued) {
+			listener.onSend(false);
+		}
+		if (status == STATUS_DISCONNECTING) {
+			finishClose();
+			connector.activeDisconnectCount ++;
+		} else {
+			status = STATUS_IDLE;
+			interestOps();
+		}
+	}
+
+	void write(byte[] b, int off, int len) {
+		if (status != STATUS_IDLE) {
+			if (queue.length() == 0) {
+				listener.onSend(true);
+			}
+			queue.add(b, off, len);
+			connector.totalQueueSize += len;
+			return;
+		}
+		int bytesWritten;
+		try {
+			bytesWritten = socketChannel.write(ByteBuffer.wrap(b, off, len));
+		} catch (IOException e) {
+			startClose();
+			return;
+		}
+		connector.totalBytesSent += bytesWritten;
+		if (bytesWritten < len) {
+			queue.add(b, off + bytesWritten, len - bytesWritten);
+			connector.totalQueueSize += len - bytesWritten;
+			listener.onSend(true);
+			status = STATUS_BUSY;
+			interestOps();
+		}
+	}
+
+	void startConnect() {
+		status = STATUS_BUSY;
+	}
+
+	void finishConnect() {
+		local = ((InetSocketAddress) socketChannel.
+				socket().getLocalSocketAddress());
+		remote = ((InetSocketAddress) socketChannel.
+				socket().getRemoteSocketAddress());
+		listener.onConnect();
+	}
+
+	void startClose() {
+		if (status == STATUS_CLOSED) {
+			return;
+		}
+		finishClose();
+		connector.passiveDisconnectCount ++;
+		// Call "close()" before "onDisconnect()"
+		// to avoid recursive "disconnect()".
+		listener.onDisconnect();
+	}
+
+	void finishClose() {
+		connector.totalQueueSize -= queue.length();
+		status = STATUS_CLOSED;
+		selectionKey.cancel();
+		try {
+			socketChannel.close();
+		} catch (IOException e) {/**/}
+	}
+
+	/** @return <code>true</code> if the connection is not closed. */
+	public boolean isOpen() {
+		return status != STATUS_CLOSED;
+	}
+
+	/** @return <code>true</code> if the connection is not idle. */
+	public boolean isBusy() {
+		return status != STATUS_IDLE;
+	}
+
+	long bytesRecv = 0;
+	private long bytesSent = 0;
+
+	public int getQueueSize() {
+		return queue.length();
+	}
+
+	public long getBytesRecv() {
+		return bytesRecv;
+	}
+
+	public long getBytesSent() {
+		return bytesSent;
+	}
+}
+
+/**
+ * The encapsulation of a {@link ServerSocketChannel} and its {@link SelectionKey},
+ * which corresponds to a TCP Server Socket 
+ */
+class Server {
+	ListenerFactory listenerFactory;
+	ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+	SelectionKey selectionKey;
+	Connector connector;
+
+	/** 
+	 * Opens a listening port and binds to a given address.
+	 * @param addr - The IP address to bind and the port to listen. 
+	 * @throws IOException If an I/O error occurs when opening the port.
+	 */
+	Server(ListenerFactory listenerFactory,
+			InetSocketAddress addr) throws IOException {
+		this.listenerFactory = listenerFactory;
+		serverSocketChannel.configureBlocking(false);
+		try {
+			serverSocketChannel.socket().bind(addr);
+		} catch (IOException e) {
+			serverSocketChannel.close();
+			throw e;
+		}
+	}
+
+	void close() {
+		selectionKey.cancel();
+		try {
+			serverSocketChannel.close();
+		} catch (IOException e) {/**/}
+	}
+}
+
 /**
  * The encapsulation of {@link Selector},
- * which makes {@link Connection} and {@link ServerConnection} working.<p>
+ * which makes {@link Client} and {@link Server} working.<p>
  */
 public class Connector implements Executor, AutoCloseable {
 	private static final int BUFFER_SIZE = 32768;
@@ -21,7 +248,6 @@ public class Connector implements Executor, AutoCloseable {
 	private Selector selector;
 	private boolean interrupted = false;
 	private byte[] buffer = new byte[BUFFER_SIZE];
-	private ArrayList<FilterFactory> filterFactories = new ArrayList<>();
 	private ConcurrentLinkedQueue<Runnable> eventQueue = new ConcurrentLinkedQueue<>();
 
 	{
@@ -32,7 +258,7 @@ public class Connector implements Executor, AutoCloseable {
 		}
 	}
 
-	private void add(Connection connection, int ops) {
+	private void add(Client connection, int ops) {
 		connection.connector = this;
 		try {
 			connection.selectionKey = connection.socketChannel.
@@ -40,18 +266,17 @@ public class Connector implements Executor, AutoCloseable {
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
-		connection.appendFilters(filterFactories);
 	}
 
 	/**
-	 * Registers a {@link Connection} and connects to a remote address
+	 * Registers a {@link Client} and connects to a remote address
 	 *
 	 * @throws IOException If the remote address is invalid.
 	 * @see #connect(Listener, InetSocketAddress)
 	 */
-	public Connection connect(Listener listener,
+	public void connect(Listener listener,
 			String host, int port) throws IOException {
-		return connect(listener, new InetSocketAddress(host, port));
+		connect(listener, new InetSocketAddress(host, port));
 	}
 
 	private static void closeSocketChannel(SocketChannel socketChannel)
@@ -60,12 +285,12 @@ public class Connector implements Executor, AutoCloseable {
 	}
 
 	/**
-	 * registers a {@link Connection} and connects to a remote address
+	 * registers a {@link Client} and connects to a remote address
 	 *
 	 * @throws IOException If the remote address is invalid.
 	 * @see #connect(Listener, String, int)
 	 */
-	public Connection connect(Listener listener,
+	public void connect(Listener listener,
 			InetSocketAddress remote) throws IOException {
 		SocketChannel socketChannel = SocketChannel.open();
 		socketChannel.configureBlocking(false);
@@ -76,20 +301,19 @@ public class Connector implements Executor, AutoCloseable {
 			closeSocketChannel(socketChannel);
 			throw e;
 		}
-		Connection connection = new Connection(listener);
+		Client connection = new Client(listener);
 		connection.socketChannel = socketChannel;
 		connection.startConnect();
 		add(connection, SelectionKey.OP_CONNECT);
-		return connection;
 	}
 
 	/**
 	 * Registers a <b>ServerConnection</b>
 	 * 
 	 * @param listenerFactory
-	 * @see #remove(ServerConnection)
+	 * @see #remove(Server)
 	 */
-	public ServerConnection add(ListenerFactory listenerFactory,
+	public AutoCloseable add(ListenerFactory listenerFactory,
 			String host, int port) throws IOException {
 		return add(listenerFactory, new InetSocketAddress(host, port));
 	}
@@ -98,10 +322,9 @@ public class Connector implements Executor, AutoCloseable {
 	 * Registers a <b>ServerConnection</b>
 	 * 
 	 * @param listenerFactory
-	 * @see #remove(ServerConnection)
+	 * @see #remove(Server)
 	 */
-	public ServerConnection add(ListenerFactory listenerFactory,
-			int port) throws IOException {
+	public AutoCloseable add(ListenerFactory listenerFactory, int port) throws IOException {
 		return add(listenerFactory, new InetSocketAddress(port));
 	}
 
@@ -109,48 +332,24 @@ public class Connector implements Executor, AutoCloseable {
 	 * Registers a <b>ServerConnection</b>
 	 * 
 	 * @param listenerFactory
-	 * @see #remove(ServerConnection)
+	 * @see #remove(Server)
 	 */
-	public ServerConnection add(ListenerFactory listenerFactory,
+	public AutoCloseable add(ListenerFactory listenerFactory,
 			InetSocketAddress addr) throws IOException {
-		ServerConnection serverConnection = new ServerConnection(listenerFactory, addr);
+		Server serverConnection = new Server(listenerFactory, addr);
+		listenerFactory.setExecutor(this);
 		serverConnection.connector = this;
-		serverConnection.listenerFactory.setExecutor(this);
 		try {
 			serverConnection.selectionKey = serverConnection.serverSocketChannel.
 					register(selector, SelectionKey.OP_ACCEPT, serverConnection);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
-		return serverConnection;
-	}
-
-	/**
-	 * Unregisters and closes a <b>ServerConnection</b>
-	 * 
-	 * @param serverConnection - The ServerConnection to unregister and close.
-	 * @see #add(ServerConnection)
-	 */
-	public void remove(ServerConnection serverConnection) {
-		if (serverConnection.selectionKey.isValid()) {
-			if (serverConnection.listenerFactory instanceof AutoCloseable) {
-				try {
-					((AutoCloseable) serverConnection.listenerFactory).close();
-				} catch (Exception e) {/**/}
+		return () -> {
+			if (serverConnection.selectionKey.isValid()) {
+				serverConnection.close();
 			}
-			serverConnection.close();
-		}
-	}
-
-	/**
-	 * @return An {@link ArrayList} of {@link FilterFactory}s, to create a series of
-	 *         {@link Filter}s and append into the end of filter chain when a
-	 *         {@link Connection} connected, or accepted after
-	 *         {@link ServerConnection#getFilterFactories()} takes effect.
-	 * @see ServerConnection#getFilterFactories()
-	 */
-	public ArrayList<FilterFactory> getFilterFactories() {
-		return filterFactories;
+		};
 	}
 
 	/** Consume events until interrupted */
@@ -196,7 +395,7 @@ public class Connector implements Executor, AutoCloseable {
 				continue;
 			}
 			if (key.isAcceptable()) {
-				ServerConnection serverConnection = (ServerConnection) key.attachment();
+				Server serverConnection = (Server) key.attachment();
 				SocketChannel socketChannel;
 				try {
 					socketChannel = serverConnection.serverSocketChannel.accept();
@@ -207,21 +406,20 @@ public class Connector implements Executor, AutoCloseable {
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
-				Connection connection = new Connection(serverConnection.listenerFactory.onAccept());
+				Client connection = new Client(serverConnection.listenerFactory.onAccept());
 				connection.socketChannel = socketChannel;
-				connection.appendFilters(serverConnection.getFilterFactories());
 				add(connection, SelectionKey.OP_READ);
 				connection.finishConnect();
 				acceptCount ++;
 				continue;
 			}
-			Connection connection = (Connection) key.attachment();
+			Client connection = (Client) key.attachment();
 			try {
 				if (key.isReadable()) {
 					int bytesRead = connection.socketChannel.
 							read(ByteBuffer.wrap(buffer, 0, BUFFER_SIZE));
 					if (bytesRead > 0) {
-						connection.netFilter.onRecv(buffer, 0, bytesRead);
+						connection.listener.onRecv(buffer, 0, bytesRead);
 						connection.bytesRecv += bytesRead;
 						totalBytesRecv += bytesRead;
 						// may be closed by "onRecv"
@@ -281,19 +479,12 @@ public class Connector implements Executor, AutoCloseable {
 	 */
 	@Override
 	public void close() {
-		for (FilterFactory filterFactory : filterFactories) {
-			if (filterFactory instanceof AutoCloseable) {
-				try {
-					((AutoCloseable) filterFactory).close();
-				} catch (Exception e) {/**/}
-			}
-		}
 		for (SelectionKey key : selector.keys()) {
 			Object o = key.attachment();
-			if (o instanceof ServerConnection) {
-				((ServerConnection) o).close();
+			if (o instanceof Server) {
+				((Server) o).close();
 			} else {
-				((Connection) o).finishClose();
+				((Client) o).finishClose();
 				activeDisconnectCount ++;
 			}
 		}

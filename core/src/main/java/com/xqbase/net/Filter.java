@@ -1,53 +1,65 @@
 package com.xqbase.net;
 
 /**
- * Provides a filtering task on a {@link Connection}.<p>
+ * Provides a filtering task on a {@link Client}.<p>
  * 
  * A <b>Filter</b> can filter sent data from the application side to the network side,
  * or filter received data and events (including connecting and disconnecting events)
  * from the network side to the application side.
  */
 public class Filter implements Listener, Handler {
-	Handler handler;
-	Filter netFilter, appFilter;
+	private Listener listener;
+	private Handler handler;
+
+	public void setListener(Listener listener) {
+		this.listener = listener;
+	}
+
+	@Override
+	public void setHandler(Handler handler) {
+		this.handler = handler;
+	}
 
 	/** Filters received data, from the network side to the application side */
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		appFilter.onRecv(b, off, len);
+		listener.onRecv(b, off, len);
 	}
 
 	/** Filters queued/completed sending events, from the network side to the application side */
 	@Override
 	public void onSend(boolean queued) {
-		appFilter.onSend(queued);
+		listener.onSend(queued);
 	}
 
 	/** Filters connecting events, from the network side to the application side */
 	@Override
 	public void onConnect() {
-		appFilter.onConnect();
+		listener.onConnect();
 	}
 
 	/** Filters passive disconnecting events, from the network side to the application side */
 	@Override
 	public void onDisconnect() {
-		appFilter.onDisconnect();
+		listener.onDisconnect();
 	}
 
 	/** Filters sent data, from the application side to the network side */
 	@Override
 	public void send(byte[] b, int off, int len) {
-		netFilter.send(b, off, len);
+		handler.send(b, off, len);
 	}
 
 	/** Filters active disconnecting events, from the application side to the network side */
 	@Override
 	public void disconnect() {
-		netFilter.disconnect();
+		handler.disconnect();
 	}
 
-	// Following methods are just wraps of "handler"
+	@Override
+	public void blockRecv(boolean blocked) {
+		handler.blockRecv(blocked);
+	}
 
 	@Override
 	public String getLocalAddr() {
@@ -70,7 +82,7 @@ public class Filter implements Listener, Handler {
 	}
 
 	@Override
-	public void execute(Runnable runnable) {
-		handler.execute(runnable);
+	public void execute(Runnable command) {
+		handler.execute(command);
 	}
 }

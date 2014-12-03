@@ -49,6 +49,7 @@ public class ZLibFilter extends PacketFilter {
 			}
 		} catch (IOException e) {
 			disconnect();
+			onDisconnect();
 			return;
 		}
 		super.onData(baq.array(), baq.offset(), baq.length());
