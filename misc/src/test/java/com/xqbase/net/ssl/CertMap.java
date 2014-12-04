@@ -25,7 +25,7 @@ import sun.security.x509.BasicConstraintsExtension;
 import sun.security.x509.PKIXExtensions;
 import sun.security.x509.X509CertImpl;
 
-import com.xqbase.util.Bytes;
+import com.xqbase.net.util.Bytes;
 
 public class CertMap extends HashMap<X500Principal, X509Certificate> {
 	private static final long serialVersionUID = 1L;

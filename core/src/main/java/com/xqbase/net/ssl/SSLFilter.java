@@ -12,8 +12,8 @@ import javax.net.ssl.SSLEngineResult.Status;
 import javax.net.ssl.SSLSession;
 
 import com.xqbase.net.Filter;
-import com.xqbase.util.ByteArrayQueue;
-import com.xqbase.util.Bytes;
+import com.xqbase.net.util.ByteArrayQueue;
+import com.xqbase.net.util.Bytes;
 
 /** An SSL filter which makes a connection secure */
 public class SSLFilter extends Filter {

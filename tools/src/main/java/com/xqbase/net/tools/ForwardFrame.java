@@ -9,7 +9,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
 
-import com.xqbase.net.misc.DumpFilterFactory;
+import com.xqbase.net.misc.DumpServerFilter;
 import com.xqbase.net.misc.ForwardServer;
 
 public class ForwardFrame extends ConnectorFrame {
@@ -72,7 +72,7 @@ public class ForwardFrame extends ConnectorFrame {
 		txtRemotePort.setEnabled(false);
 		cmbDump.setEnabled(false);
 
-		DumpFilterFactory dff = new DumpFilterFactory();
+		DumpServerFilter dff = new DumpServerFilter();
 		if (cmbDump.getSelectedItem().equals(DUMP_TEXT)) {
 			dff.setDumpText(true);
 		} else if (cmbDump.getSelectedItem().equals(DUMP_FOLDER)) {

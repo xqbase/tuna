@@ -3,12 +3,13 @@ package com.xqbase.net.misc;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.function.Supplier;
 
 import com.xqbase.net.Connector;
-import com.xqbase.net.FilterFactory;
+import com.xqbase.net.Filter;
 import com.xqbase.net.Handler;
 import com.xqbase.net.Listener;
-import com.xqbase.net.ListenerFactory;
+import com.xqbase.net.ServerListener;
 
 class PeerListener implements Listener {
 	PeerListener peer;
@@ -58,8 +59,8 @@ class ForwardListener extends PeerListener {
 	public void onConnect() {
 		peer = new PeerListener(this);
 		Listener listener = peer;
-		for (FilterFactory filterFactory : forward.filterFactories) {
-			listener = listener.appendFilter(filterFactory.createFilter());
+		for (Supplier<? extends Filter> serverFilter : forward.serverFilters) {
+			listener = listener.appendFilter(serverFilter.get());
 		}
 		try {
 			forward.connector.connect(listener, forward.remote);
@@ -71,13 +72,13 @@ class ForwardListener extends PeerListener {
 }
 
 /** A port redirecting server. */
-public class ForwardServer implements ListenerFactory {
+public class ForwardServer implements ServerListener {
 	Connector connector;
 	InetSocketAddress remote;
-	ArrayList<FilterFactory> filterFactories = new ArrayList<>();
+	ArrayList<Supplier<? extends Filter>> serverFilters = new ArrayList<>();
 
 	@Override
-	public Listener onAccept() {
+	public Listener get() {
 		return new ForwardListener(this);
 	}
 
@@ -103,8 +104,8 @@ public class ForwardServer implements ListenerFactory {
 		this.remote = remote;
 	}
 
-	/** @return A list of {@link FilterFactory}s applied to remote connections. */
-	public void appendRemoteFilter(FilterFactory filterFactory) {
-		filterFactories.add(filterFactory);
+	/** @return A list of "ServerFilter"s applied to remote connections. */
+	public void appendRemoteFilter(Supplier<? extends Filter> serverFilter) {
+		serverFilters.add(serverFilter);
 	}
 }

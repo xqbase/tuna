@@ -4,8 +4,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 
-import com.xqbase.util.Streams;
-
 public class TestBlockClient {
 	public static void main(String[] args) {
 		byte[] bb = new byte[1024];
@@ -17,18 +15,14 @@ public class TestBlockClient {
 			System.out.println(socket.getLocalPort());
 			new Thread(() -> {
 				try {
-					Streams.copy(in, new OutputStream() {
-						private int count = 0;
-
-						@Override
-						public void write(int b) throws IOException {
-							count ++;
-							if (count == 65536) {
-								count = 0;
-								System.out.print('-');
-							}
+					int count = 0;
+					while (in.read() >= 0) {
+						count ++;
+						if (count == 65536) {
+							count = 0;
+							System.out.print('-');
 						}
-					});
+					}
 				} catch (IOException e) {
 					System.err.println(e.getMessage());
 				}

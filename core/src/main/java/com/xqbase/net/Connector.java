@@ -11,7 +11,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 
-import com.xqbase.util.ByteArrayQueue;
+import com.xqbase.net.util.ByteArrayQueue;
 
 /**
  * The encapsulation of a {@link SocketChannel} and its {@link SelectionKey},
@@ -102,7 +102,6 @@ class Client {
 				interestOps();
 				return;
 			}
-			bytesSent += bytesWritten;
 			connector.totalBytesSent += bytesWritten;
 			queue.remove(bytesWritten);
 			connector.totalQueueSize -= bytesWritten;
@@ -177,29 +176,12 @@ class Client {
 		} catch (IOException e) {/**/}
 	}
 
-	/** @return <code>true</code> if the connection is not closed. */
-	public boolean isOpen() {
+	boolean isOpen() {
 		return status != STATUS_CLOSED;
 	}
 
-	/** @return <code>true</code> if the connection is not idle. */
-	public boolean isBusy() {
+	boolean isBusy() {
 		return status != STATUS_IDLE;
-	}
-
-	long bytesRecv = 0;
-	private long bytesSent = 0;
-
-	public int getQueueSize() {
-		return queue.length();
-	}
-
-	public long getBytesRecv() {
-		return bytesRecv;
-	}
-
-	public long getBytesSent() {
-		return bytesSent;
 	}
 }
 
@@ -208,7 +190,7 @@ class Client {
  * which corresponds to a TCP Server Socket 
  */
 class Server {
-	ListenerFactory listenerFactory;
+	ServerListener serverListener;
 	ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
 	SelectionKey selectionKey;
 	Connector connector;
@@ -218,9 +200,9 @@ class Server {
 	 * @param addr - The IP address to bind and the port to listen. 
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	Server(ListenerFactory listenerFactory,
+	Server(ServerListener serverListener,
 			InetSocketAddress addr) throws IOException {
-		this.listenerFactory = listenerFactory;
+		this.serverListener = serverListener;
 		serverSocketChannel.configureBlocking(false);
 		try {
 			serverSocketChannel.socket().bind(addr);
@@ -258,11 +240,11 @@ public class Connector implements Executor, AutoCloseable {
 		}
 	}
 
-	private void add(Client connection, int ops) {
-		connection.connector = this;
+	private void add(Client client, int ops) {
+		client.connector = this;
 		try {
-			connection.selectionKey = connection.socketChannel.
-					register(selector, ops, connection);
+			client.selectionKey = client.socketChannel.
+					register(selector, ops, client);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
@@ -301,53 +283,53 @@ public class Connector implements Executor, AutoCloseable {
 			closeSocketChannel(socketChannel);
 			throw e;
 		}
-		Client connection = new Client(listener);
-		connection.socketChannel = socketChannel;
-		connection.startConnect();
-		add(connection, SelectionKey.OP_CONNECT);
+		Client client = new Client(listener);
+		client.socketChannel = socketChannel;
+		client.startConnect();
+		add(client, SelectionKey.OP_CONNECT);
 	}
 
 	/**
-	 * Registers a <b>ServerConnection</b>
+	 * Registers a {@link ServerListener}
 	 * 
-	 * @param listenerFactory
+	 * @param serverListener
 	 * @see #remove(Server)
 	 */
-	public AutoCloseable add(ListenerFactory listenerFactory,
+	public AutoCloseable add(ServerListener serverListener,
 			String host, int port) throws IOException {
-		return add(listenerFactory, new InetSocketAddress(host, port));
+		return add(serverListener, new InetSocketAddress(host, port));
 	}
 
 	/**
-	 * Registers a <b>ServerConnection</b>
+	 * Registers a {@link ServerListener}
 	 * 
-	 * @param listenerFactory
+	 * @param serverListener
 	 * @see #remove(Server)
 	 */
-	public AutoCloseable add(ListenerFactory listenerFactory, int port) throws IOException {
-		return add(listenerFactory, new InetSocketAddress(port));
+	public AutoCloseable add(ServerListener serverListener, int port) throws IOException {
+		return add(serverListener, new InetSocketAddress(port));
 	}
 
 	/**
-	 * Registers a <b>ServerConnection</b>
+	 * Registers a {@link ServerListener}
 	 * 
-	 * @param listenerFactory
+	 * @param serverListener
 	 * @see #remove(Server)
 	 */
-	public AutoCloseable add(ListenerFactory listenerFactory,
+	public AutoCloseable add(ServerListener serverListener,
 			InetSocketAddress addr) throws IOException {
-		Server serverConnection = new Server(listenerFactory, addr);
-		listenerFactory.setExecutor(this);
-		serverConnection.connector = this;
+		Server server = new Server(serverListener, addr);
+		serverListener.setExecutor(this);
+		server.connector = this;
 		try {
-			serverConnection.selectionKey = serverConnection.serverSocketChannel.
-					register(selector, SelectionKey.OP_ACCEPT, serverConnection);
+			server.selectionKey = server.serverSocketChannel.
+					register(selector, SelectionKey.OP_ACCEPT, server);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
 		return () -> {
-			if (serverConnection.selectionKey.isValid()) {
-				serverConnection.close();
+			if (server.selectionKey.isValid()) {
+				server.close();
 			}
 		};
 	}
@@ -367,7 +349,7 @@ public class Connector implements Executor, AutoCloseable {
 	}
 
 	/**
-	 * Consumes all events raised by registered Connections and ServerConnections,
+	 * Consumes all events raised by registered Clients and Servers,
 	 * including network events (accept/connect/read/write) and user-defined events.<p>
 	 *
 	 * @param timeout Block for up to timeout milliseconds, or -1 to block indefinitely,
@@ -395,10 +377,10 @@ public class Connector implements Executor, AutoCloseable {
 				continue;
 			}
 			if (key.isAcceptable()) {
-				Server serverConnection = (Server) key.attachment();
+				Server server = (Server) key.attachment();
 				SocketChannel socketChannel;
 				try {
-					socketChannel = serverConnection.serverSocketChannel.accept();
+					socketChannel = server.serverSocketChannel.accept();
 					if (socketChannel == null) {
 						continue;
 					}
@@ -406,45 +388,44 @@ public class Connector implements Executor, AutoCloseable {
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
-				Client connection = new Client(serverConnection.listenerFactory.onAccept());
-				connection.socketChannel = socketChannel;
-				add(connection, SelectionKey.OP_READ);
-				connection.finishConnect();
+				Client client = new Client(server.serverListener.get());
+				client.socketChannel = socketChannel;
+				add(client, SelectionKey.OP_READ);
+				client.finishConnect();
 				acceptCount ++;
 				continue;
 			}
-			Client connection = (Client) key.attachment();
+			Client client = (Client) key.attachment();
 			try {
 				if (key.isReadable()) {
-					int bytesRead = connection.socketChannel.
+					int bytesRead = client.socketChannel.
 							read(ByteBuffer.wrap(buffer, 0, BUFFER_SIZE));
 					if (bytesRead > 0) {
-						connection.listener.onRecv(buffer, 0, bytesRead);
-						connection.bytesRecv += bytesRead;
+						client.listener.onRecv(buffer, 0, bytesRead);
 						totalBytesRecv += bytesRead;
 						// may be closed by "onRecv"
 						if (!key.isValid()) {
 							continue;
 						}
 					} else if (bytesRead < 0) {
-						connection.startClose();
+						client.startClose();
 						// Disconnected, so skip onSend and onConnect
 						continue;
 					}
 				}
 				// may be both isReadable() and isWritable() ?
 				if (key.isWritable()) {
-					connection.write();
-				} else if (key.isConnectable() && connection.socketChannel.finishConnect()) {
-					connection.finishConnect();
+					client.write();
+				} else if (key.isConnectable() && client.socketChannel.finishConnect()) {
+					client.finishConnect();
 					connectCount ++;
 					// "onConnect()" might call "disconnect()"
-					if (connection.isOpen() && connection.isBusy()) {
-						connection.write();
+					if (client.isOpen() && client.isBusy()) {
+						client.write();
 					}
 				}
 			} catch (IOException e) {
-				connection.startClose();
+				client.startClose();
 			}
 		}
 		selectedKeys.clear();
@@ -452,9 +433,10 @@ public class Connector implements Executor, AutoCloseable {
 		return true;
 	}
 
+	/** Executes a command in main thread. */
 	@Override
-	public void execute(Runnable runnable) {
-		eventQueue.offer(runnable);
+	public void execute(Runnable command) {
+		eventQueue.offer(command);
 		selector.wakeup();
 	}
 
@@ -474,7 +456,7 @@ public class Connector implements Executor, AutoCloseable {
 	}
 
 	/**
-	 * Unregisters, closes all <b>Connection</b>s and <b>ServerConnection</b>s,
+	 * Unregisters, closes all <b>Client</b>s and <b>Server</b>s,
 	 * then closes the Connector itself.
 	 */
 	@Override

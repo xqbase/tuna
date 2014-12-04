@@ -4,7 +4,7 @@ import java.util.LinkedHashSet;
 
 import com.xqbase.net.Handler;
 import com.xqbase.net.Listener;
-import com.xqbase.net.ListenerFactory;
+import com.xqbase.net.ServerListener;
 
 class BroadcastListener implements Listener {
 	private LinkedHashSet<BroadcastListener> listeners = new LinkedHashSet<>();
@@ -43,13 +43,13 @@ class BroadcastListener implements Listener {
 }
 
 /**
- * A {@link ListenerFactory} which sends received data
+ * A {@link ServerListener} which sends received data
  * from one {@link Listener} to all its accepted listeners.<p>
  *
  * Note that all its accepted connections will be closed automatically
  * when it is removed from a connector.
  */
-public class BroadcastServer implements ListenerFactory {
+public class BroadcastServer implements ServerListener {
 	private LinkedHashSet<BroadcastListener> listeners = new LinkedHashSet<>();
 	private boolean noEcho;
 
@@ -68,7 +68,7 @@ public class BroadcastServer implements ListenerFactory {
 	}
 
 	@Override
-	public Listener onAccept() {
+	public Listener get() {
 		return new BroadcastListener(listeners, noEcho);
 	}
 }
