@@ -8,7 +8,7 @@ import javax.net.ssl.SSLContext;
 
 import com.xqbase.net.Connector;
 import com.xqbase.net.Listener;
-import com.xqbase.util.Bytes;
+import com.xqbase.net.util.Bytes;
 
 public class TestSSLClient {
 	static boolean connected = false;

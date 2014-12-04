@@ -11,12 +11,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import com.xqbase.net.Client;
 import com.xqbase.net.Connector;
+import com.xqbase.net.Handler;
 import com.xqbase.net.Listener;
-import com.xqbase.net.ListenerFactory;
-import com.xqbase.net.Server;
+import com.xqbase.net.ServerListener;
 import com.xqbase.net.packet.PacketFilter;
+import com.xqbase.net.util.Bytes;
 
 class IdPool {
 	private int maxId = 0;
@@ -42,67 +42,79 @@ class IdPool {
 	}
 }
 
-class PublicConnection extends Client {
-	private MapConnection mapConn;
+class PublicListener implements Listener {
+	private MapListener mapListener;
 	private int connId;
 
-	PublicConnection(MapConnection mapConn, int connId) {
-		this.mapConn = mapConn;
+	Handler handler;
+
+	PublicListener(MapListener mapListener, int connId) {
+		this.mapListener = mapListener;
 		this.connId = connId;
 	}
 
 	@Override
-	protected void onRecv(byte[] b, int off, int len) {
-		mapConn.send(new PortMapPacket(connId,
-				PortMapPacket.SERVER_DATA, 0, len).getHead());
-		mapConn.send(b, off, len);
+	public void setHandler(Handler handler) {
+		this.handler = handler;
 	}
 
 	@Override
-	protected void onConnect() {
-		mapConn.send(new PortMapPacket(connId,
+	public void onRecv(byte[] b, int off, int len) {
+		byte[] head = new PortMapPacket(connId,
+				PortMapPacket.SERVER_DATA, 0, len).getHead();
+		mapListener.handler.send(Bytes.add(head, 0, head.length, b, off, len));
+	}
+
+	@Override
+	public void onConnect() {
+		mapListener.handler.send(new PortMapPacket(connId,
 				PortMapPacket.SERVER_CONNECT, 0, 0).getHead());
 	}
 
 	@Override
-	protected void onDisconnect() {
-		mapConn.serverConn.connMap.remove(Integer.valueOf(connId));
+	public void onDisconnect() {
+		mapListener.publicServer.connMap.remove(Integer.valueOf(connId));
 		// Do not return connId until CLIENT_CLOSE received
-		// mapConn.serverConn.idPool.returnId(connId);
-		mapConn.send(new PortMapPacket(connId,
+		// mapListener.publicServer.idPool.returnId(connId);
+		mapListener.handler.send(new PortMapPacket(connId,
 				PortMapPacket.SERVER_DISCONNECT, 0, 0).getHead());
 	}
 }
 
-class PublicServerConnection extends Server {
-	private MapConnection mapConn;
+class PublicServer implements ServerListener {
+	private MapListener mapListener;
 
-	PublicServerConnection(int port, MapConnection mapConn) throws IOException {
-		super(port);
-		this.mapConn = mapConn;
+	PublicServer(MapListener mapListener) {
+		this.mapListener = mapListener;
 	}
 
-	HashMap<Integer, PublicConnection> connMap = new HashMap<>();
+	HashMap<Integer, PublicListener> connMap = new HashMap<>();
 	IdPool idPool = new IdPool();
 
 	@Override
-	protected Client onAccept() {
+	public Listener get() {
 		int connId = idPool.borrowId();
-		PublicConnection conn = new PublicConnection(mapConn, connId);
-		connMap.put(Integer.valueOf(connId), conn);
-		return conn;
+		PublicListener publicListener = new PublicListener(mapListener, connId);
+		connMap.put(Integer.valueOf(connId), publicListener);
+		return publicListener;
 	}
 }
 
-class MapConnection implements Listener {
+class MapListener implements Listener {
 	private PortMapServer mapServer;
+	private AutoCloseable publicCloseable;
 
+	Handler handler;
 	long accessed = System.currentTimeMillis();
-	PublicServerConnection serverConn = null;
+	PublicServer publicServer = null;
 
-	MapConnection(PortMapServer mapServer) {
+	MapListener(PortMapServer mapServer) {
 		this.mapServer = mapServer;
-		appendFilter(new PacketFilter(PortMapPacket.getParser()));
+	}
+
+	@Override
+	public void setHandler(Handler handler) {
+		this.handler = handler;
 	}
 
 	@Override
@@ -113,40 +125,34 @@ class MapConnection implements Listener {
 		PortMapPacket packet = new PortMapPacket(b, off, len);
 		int command = packet.command;
 		if (command == PortMapPacket.CLIENT_PING) {
-			send(new PortMapPacket(0, PortMapPacket.SERVER_PONG, 0, 0).getHead());
+			handler.send(new PortMapPacket(0, PortMapPacket.SERVER_PONG, 0, 0).getHead());
 		} else if (command == PortMapPacket.CLIENT_OPEN) {
-			if (serverConn != null) {
+			if (publicServer != null) {
 				// throw new PacketException("Mapping Already Exists");
 				disconnect();
 				return;
 			}
-			int port = packet.port;
-			if (port < mapServer.portFrom || port > mapServer.portTo) {
-				// throw new PacketException("Port Not Allowed");
-				disconnect();
-				return;
-			}
+			publicServer = new PublicServer(this);
 			try {
-				serverConn = new PublicServerConnection(port, this);
+				publicCloseable = mapServer.connector.add(publicServer, packet.port);
 			} catch (IOException e) {
 				// throw new PacketException(e.getMessage());
 				disconnect();
 				return;
 			}
-			mapServer.connector.add(serverConn);
 		} else {
-			if (serverConn == null) {
+			if (publicServer == null) {
 				// throw new PacketException("Mapping Not Exists");
 				disconnect();
 				return;
 			}
 			int connId = packet.connId;
 			if (command == PortMapPacket.CLIENT_CLOSE) {
-				serverConn.idPool.returnId(connId);
+				publicServer.idPool.returnId(connId);
 				return;
 			}
-			PublicConnection conn = serverConn.connMap.get(Integer.valueOf(connId));
-			if (conn == null) {
+			PublicListener publicListener = publicServer.connMap.get(Integer.valueOf(connId));
+			if (publicListener == null) {
 				return;
 			}
 			if (command == PortMapPacket.CLIENT_DATA) {
@@ -155,32 +161,31 @@ class MapConnection implements Listener {
 					disconnect();
 					return;
 				}
-				conn.send(b, off + PortMapPacket.HEAD_SIZE, packet.size);
+				publicListener.handler.send(b, off + PortMapPacket.HEAD_SIZE, packet.size);
 			} else {
-				serverConn.connMap.remove(Integer.valueOf(connId));
-				serverConn.idPool.returnId(connId);
-				conn.disconnect();
+				publicServer.connMap.remove(Integer.valueOf(connId));
+				publicServer.idPool.returnId(connId);
+				publicListener.handler.disconnect();
 			}
 		}
 	}
 
 	@Override
-	protected void onDisconnect() {
+	public void onDisconnect() {
 		mapServer.timeoutSet.remove(this);
-		if (serverConn == null) {
+		if (publicServer == null) {
 			return;
 		}
-		mapServer.connector.remove(serverConn);
-		for (PublicConnection conn : serverConn.connMap.values().
-				toArray(new PublicConnection[0])) {
-			// "conn.onDisconnect()" might change "connMap"
-			conn.disconnect();
+		try {
+			publicCloseable.close();
+		} catch (Exception e) {/**/}
+		for (PublicListener listener : publicServer.connMap.values()) {
+			listener.handler.disconnect();
 		}
 	}
 
-	@Override
-	public void disconnect() {
-		super.disconnect();
+	void disconnect() {
+		handler.disconnect();
 		onDisconnect();
 	}
 }
@@ -190,8 +195,8 @@ class MapConnection implements Listener {
  * This server will open public ports, which map private ports provided by PortMapClients.
  * @see PortMapClient
  */
-public class PortMapServer implements ListenerFactory, AutoCloseable {
-	LinkedHashSet<MapConnection> timeoutSet = new LinkedHashSet<>();
+public class PortMapServer implements ServerListener, AutoCloseable {
+	LinkedHashSet<MapListener> timeoutSet = new LinkedHashSet<>();
 	Connector connector;
 
 	private Executor executor;
@@ -200,13 +205,9 @@ public class PortMapServer implements ListenerFactory, AutoCloseable {
 	/**
 	 * Creates a PortMapServer.
 	 * @param connector - The {@link Connector} which public connections are registered to.
-	 * @param port - The mapping service port which {@link PortMapClient} connects to.
-	 * @param portFrom - The lowest port the client can open.
-	 * @param portTo - The highest port the client can open.
 	 * @param timer - The {@link ScheduledExecutorService} to clear expired connections.
-	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	public PortMapServer(Connector connector, ScheduledExecutorService timer) throws IOException {
+	public PortMapServer(Connector connector, ScheduledExecutorService timer) {
 		this.connector = connector;
 		// in main thread
 		future = timer.scheduleAtFixedRate(() -> {
@@ -214,8 +215,8 @@ public class PortMapServer implements ListenerFactory, AutoCloseable {
 			executor.execute(() -> {
 				// in main thread
 				long now = System.currentTimeMillis();
-				Iterator<MapConnection> i = timeoutSet.iterator();
-				MapConnection mapConn;
+				Iterator<MapListener> i = timeoutSet.iterator();
+				MapListener mapConn;
 				while (i.hasNext() && now > (mapConn = i.next()).accessed + 60000) {
 					i.remove();
 					mapConn.disconnect();
@@ -225,10 +226,10 @@ public class PortMapServer implements ListenerFactory, AutoCloseable {
 	}
 
 	@Override
-	public Listener onAccept() {
-		MapConnection mapConn = new MapConnection(this);
-		timeoutSet.add(mapConn);
-		return mapConn;
+	public Listener get() {
+		MapListener mapListener = new MapListener(this);
+		timeoutSet.add(mapListener);
+		return mapListener.appendFilter(new PacketFilter(PortMapPacket.getParser()));
 	}
 
 	@Override

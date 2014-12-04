@@ -9,7 +9,6 @@ import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 
 import com.xqbase.net.portmap.PortMapClient;
-import com.xqbase.util.Runnables;
 
 public class PortMapClientFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -20,8 +19,8 @@ public class PortMapClientFrame extends ConnectorFrame {
 	private JTextField txtMappingPort = new JTextField("8341");
 	private JTextField txtPublicPort = new JTextField("8080");
 
-	private PortMapClient client = null;
-	private ScheduledThreadPoolExecutor timer;
+	PortMapClient client = null;
+	ScheduledThreadPoolExecutor timer;
 
 	void stop() {
 		trayIcon.setToolTip(getTitle());
@@ -37,7 +36,7 @@ public class PortMapClientFrame extends ConnectorFrame {
 	@Override
 	protected void start() {
 		if (client != null) {
-			Runnables.shutdown(timer);
+			shutdown(timer);
 			client.disconnect();
 			client = null;
 			stop();
@@ -55,14 +54,26 @@ public class PortMapClientFrame extends ConnectorFrame {
 		txtPublicPort.setEnabled(false);
 
 		timer = new ScheduledThreadPoolExecutor(1);
+		client = new PortMapClient(connector,
+				Integer.parseInt(txtPublicPort.getText()), txtPrivateHost.getText(),
+				Integer.parseInt(txtPrivatePort.getText()), timer) {
+			@Override
+			public void onDisconnect() {
+				super.onDisconnect();
+				shutdown(timer);
+				client = null;
+				stop();
+				EventQueue.invokeLater(() ->
+						JOptionPane.showMessageDialog(PortMapClientFrame.this,
+						"Mapping Connection Failed",
+						getTitle(), JOptionPane.WARNING_MESSAGE));
+			}
+		};
 		try {
-			client = new PortMapClient(connector,
-					Integer.parseInt(txtPublicPort.getText()), txtPrivateHost.getText(),
-					Integer.parseInt(txtPrivatePort.getText()), timer);
 			connector.connect(client, txtMappingHost.getText(),
 					Integer.parseInt(txtMappingPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
-			Runnables.shutdown(timer);
+			shutdown(timer);
 			client = null;
 			stop();
 			JOptionPane.showMessageDialog(this, e.getMessage(),
@@ -71,22 +82,9 @@ public class PortMapClientFrame extends ConnectorFrame {
 	}
 
 	@Override
-	protected void onEvent() {
-		if (client == null || client.isOpen()) {
-			return;
-		}
-		Runnables.shutdown(timer);
-		client = null;
-		stop();
-		EventQueue.invokeLater(() ->
-				JOptionPane.showMessageDialog(this, "Mapping Connection Failed",
-				getTitle(), JOptionPane.WARNING_MESSAGE));
-	}
-
-	@Override
 	protected void onClose() {
 		if (client != null) {
-			Runnables.shutdown(timer);
+			shutdown(timer);
 			client = null;
 		}
 	}

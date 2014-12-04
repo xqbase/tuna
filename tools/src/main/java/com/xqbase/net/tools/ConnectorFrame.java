@@ -19,6 +19,8 @@ import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
@@ -153,8 +155,6 @@ public abstract class ConnectorFrame extends JFrame {
 		});
 	}
 
-	protected void onEvent() {/**/}
-
 	protected void onClose() {/**/}
 
 	boolean running = false;
@@ -170,7 +170,6 @@ public abstract class ConnectorFrame extends JFrame {
 		EventQueue.invokeLater(new Runnable() {
 			@Override
 			public void run() {
-				onEvent();
 				connector.doEvents(16);
 				if (running) {
 					EventQueue.invokeLater(this);
@@ -180,6 +179,22 @@ public abstract class ConnectorFrame extends JFrame {
 				}
 			}
 		});
+	}
+
+	protected static void shutdown(ExecutorService service) {
+		service.shutdown();
+		boolean interrupted = Thread.interrupted();
+		boolean terminated = false;
+		while (!terminated) {
+			try {
+				terminated = service.awaitTermination(1, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				interrupted = true;
+			}
+		}
+		if (interrupted) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	protected static void invoke(Class<? extends ConnectorFrame> frameClass) {

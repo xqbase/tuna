@@ -2,7 +2,7 @@ package com.xqbase.net.packet;
 
 /** This interface provides the way to consume packets. */
 @FunctionalInterface
-public interface PacketHandler {
+public interface PacketConsumer {
 	/** Consumes a packet. */
-	public void onData(byte[] b, int off, int len);
+	public void accept(byte[] b, int off, int len) throws PacketException;
 }

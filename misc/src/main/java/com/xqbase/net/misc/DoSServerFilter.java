@@ -2,12 +2,12 @@ package com.xqbase.net.misc;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.function.Supplier;
 
 import com.xqbase.net.Filter;
-import com.xqbase.net.FilterFactory;
 
-/** A {@link FilterFactory} to limit bytes, requests and connections from the same IP. */
-public class DoSFilterFactory implements FilterFactory {
+/** A "ServerFilter" to limit bytes, requests and connections from the same IP. */
+public class DoSServerFilter implements Supplier<Filter> {
 	static int[] getData(String ip, HashMap<String, int[]> map, int length) {
 		int[] data = map.get(ip);
 		if (data == null) {
@@ -47,14 +47,14 @@ public class DoSFilterFactory implements FilterFactory {
 	int period, bytes, requests, connections;
 
 	/**
-	 * Creates an DoSFilterFactory with the given parameters
+	 * Creates an DoSServerFilter with the given parameters
 	 * 
 	 * @param period - The period, in milliseconds.
 	 * @param connections - Maximum concurrent connections the same IP.
 	 * @param requests - Maximum requests (connection events) in the period from the same IP.
 	 * @param bytes - Maximum sent bytes in the period from the same IP.
 	 */
-	public DoSFilterFactory(int period, int connections, int requests, int bytes) {
+	public DoSServerFilter(int period, int connections, int requests, int bytes) {
 		setParameters(period, connections, requests, bytes);
 	}
 
@@ -74,7 +74,7 @@ public class DoSFilterFactory implements FilterFactory {
 	}
 
 	@Override
-	public Filter createFilter() {
+	public Filter get() {
 		return new Filter() {
 			@Override
 			public void onRecv(byte[] b, int off, int len) {

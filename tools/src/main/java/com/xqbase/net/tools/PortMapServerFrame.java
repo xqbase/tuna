@@ -8,9 +8,8 @@ import javax.swing.JOptionPane;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
 
-import com.xqbase.net.misc.DoSFilterFactory;
+import com.xqbase.net.misc.DoSServerFilter;
 import com.xqbase.net.portmap.PortMapServer;
-import com.xqbase.util.Runnables;
 
 public class PortMapServerFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -24,8 +23,9 @@ public class PortMapServerFrame extends ConnectorFrame {
 	private JTextField txtRequests = new JTextField("0");
 	private JTextField txtConnections = new JTextField("0");
 
-	private DoSFilterFactory dosff = new DoSFilterFactory(65536, 0, 0, 0);
+	private DoSServerFilter dosff = new DoSServerFilter(65536, 0, 0, 0);
 	private PortMapServer server = null;
+	private AutoCloseable closeable = null;
 	private ScheduledThreadPoolExecutor timer;
 
 	void stop() {
@@ -42,8 +42,11 @@ public class PortMapServerFrame extends ConnectorFrame {
 	@Override
 	protected void start() {
 		if (server != null) {
-			Runnables.shutdown(timer);
-			connector.remove(server);
+			shutdown(timer);
+			server.close();
+			try {
+				closeable.close();
+			} catch (Exception e) {/**/}
 			server = null;
 			stop();
 			return;
@@ -63,29 +66,23 @@ public class PortMapServerFrame extends ConnectorFrame {
 		try {
 			requests = Integer.parseInt(txtRequests.getText());
 			connections = Integer.parseInt(txtConnections.getText());
-			server = new PortMapServer(connector, Integer.parseInt(txtMapPort.getText()),
-					Integer.parseInt(txtPortFrom.getText()),
-					Integer.parseInt(txtPortTo.getText()), timer);
+			server = new PortMapServer(connector, timer);
+			closeable = connector.add(server, Integer.parseInt(txtMapPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
-			Runnables.shutdown(timer);
+			shutdown(timer);
 			stop();
 			JOptionPane.showMessageDialog(this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);
 			return;
 		}
-		connector.add(server);
 		dosff.setParameters(65536, 0, requests, connections);
-	}
-
-	@Override
-	protected void onEvent() {
-		dosff.onTimer();
 	}
 
 	@Override
 	protected void onClose() {
 		if (server != null) {
-			Runnables.shutdown(timer);
+			shutdown(timer);
+			server.close();
 			server = null;
 		}
 	}
@@ -156,7 +153,7 @@ public class PortMapServerFrame extends ConnectorFrame {
 		startButton.setBounds(198, 84, 78, 30);
 		exitButton.setBounds(198, 120, 78, 30);
 
-		connector.getFilters().add(dosff);
+		// connector.getFilters().add(dosff);
 	}
 
 	public static void main(String[] args) {

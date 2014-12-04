@@ -8,5 +8,5 @@ public interface PacketParser {
 	 *         should be zero if not enough bytes to determine the packet size.
 	 * @throws PacketException if data cannot be parsed into a packet.
 	 */
-	public int getPacketSize(byte[] b, int off, int len) throws PacketException;
+	public int getSize(byte[] b, int off, int len) throws PacketException;
 }

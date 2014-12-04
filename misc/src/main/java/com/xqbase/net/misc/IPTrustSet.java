@@ -3,15 +3,15 @@ package com.xqbase.net.misc;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.function.Supplier;
 
 import com.xqbase.net.Filter;
-import com.xqbase.net.FilterFactory;
 
 /**
  * A set of trusted IPs. This set also implements the interface
- * {@link FilterFactory}, which can prevent connecting with untrusted IPs.
+ * "ServerFilter", which can prevent connecting with untrusted IPs.
  */
-public class IPTrustSet extends HashSet<String> implements FilterFactory {
+public class IPTrustSet extends HashSet<String> implements Supplier<Filter> {
 	private static final long serialVersionUID = 1L;
 
 	/** Creates an IPTrustSet with the given IPs. */
@@ -25,7 +25,7 @@ public class IPTrustSet extends HashSet<String> implements FilterFactory {
 	}
 
 	@Override
-	public Filter createFilter() {
+	public Filter get() {
 		return new Filter() {
 			@Override
 			public void onConnect() {

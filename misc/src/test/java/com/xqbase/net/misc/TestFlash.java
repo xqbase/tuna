@@ -6,7 +6,7 @@ import com.xqbase.net.Connector;
 
 public class TestFlash {
 	public static void main(String[] args) throws Exception {
-		DoSFilterFactory dosff = new DoSFilterFactory(60000, 10, 60, 65536);
+		DoSServerFilter dosff = new DoSServerFilter(60000, 10, 60, 65536);
 		IPTrustSet ipts = new IPTrustSet("127.0.0.1", "0:0:0:0:0:0:0:1");
 		// Evade resource leak warning
 		try (Connector connector = new Connector()) {
@@ -16,9 +16,9 @@ public class TestFlash {
 			// Application Data Dumped onto System.out
 			// Network Data Dumped onto System.err
 			connector.add(new BroadcastServer(false).
-					appendFilter(new DumpFilterFactory().setDumpText(true)).
+					appendFilter(new DumpServerFilter().setDumpText(true)).
 					appendFilter(ZLibFilter::new).
-					appendFilter(new DumpFilterFactory().setDumpStream(System.err)).
+					appendFilter(new DumpServerFilter().setDumpStream(System.err)).
 					appendFilter(dosff).appendFilter(ipts), 23);
 			connector.doEvents();
 		}

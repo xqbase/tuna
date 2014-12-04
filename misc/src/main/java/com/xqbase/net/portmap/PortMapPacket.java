@@ -2,7 +2,7 @@ package com.xqbase.net.portmap;
 
 import com.xqbase.net.packet.PacketException;
 import com.xqbase.net.packet.PacketParser;
-import com.xqbase.util.Bytes;
+import com.xqbase.net.util.Bytes;
 
 class PortMapPacket {
 	// Client Commands

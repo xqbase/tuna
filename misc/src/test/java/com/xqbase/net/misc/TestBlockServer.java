@@ -7,7 +7,7 @@ import com.xqbase.net.Filter;
 public class TestBlockServer {
 	public static void main(String[] args) throws IOException {
 		try (Connector connector = new Connector()) {
-			ForwardServer forward = new ForwardServer(connector, "ns2.xqbase.com", 23);
+			ForwardServer forward = new ForwardServer(connector, "ns2.xqbase.com", 2323);
 			connector.add(forward.appendFilter(() -> new Filter() {
 				@Override
 				public void onSend(boolean queued) {

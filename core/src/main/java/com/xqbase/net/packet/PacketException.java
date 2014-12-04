@@ -1,7 +1,9 @@
 package com.xqbase.net.packet;
 
+import java.io.IOException;
+
 /** Signals that a packet exception of some sort has occurred. */
-public class PacketException extends Exception {
+public class PacketException extends IOException {
 	private static final long serialVersionUID = 1L;
 
 	/** Creates a PacketException with null as its error detail message */
