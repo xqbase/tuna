@@ -2,7 +2,7 @@ package com.xqbase.net;
 
 import java.util.concurrent.Executor;
 
-public interface Handler extends Executor {
+public interface ConnectionHandler extends Executor {
 	/**
 	 * Sends a sequence of bytes in the application end,
 	 * equivalent to <code>send(b, 0, b.length).</code>
@@ -34,4 +34,10 @@ public interface Handler extends Executor {
 	public String getRemoteAddr();
 	/** @return Remote port of the Connection. */
 	public int getRemotePort();
+	/** @return Number of bytes in queue. */
+	public int getQueueSize();
+	/** @return Number of received bytes. */
+	public long getBytesRecv();
+	/** @return Number of sent bytes. */
+	public long getBytesSent();
 }

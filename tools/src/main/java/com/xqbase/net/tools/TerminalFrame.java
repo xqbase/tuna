@@ -18,8 +18,9 @@ import javax.swing.JTextField;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.UIManager;
 
-import com.xqbase.net.Handler;
-import com.xqbase.net.Listener;
+import com.xqbase.net.Connection;
+import com.xqbase.net.ConnectionHandler;
+import com.xqbase.net.Connector;
 
 public class TerminalFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -48,8 +49,8 @@ public class TerminalFrame extends ConnectorFrame {
 	JTextArea txtRecv = new JTextArea();
 	JTextArea txtSend = new JTextArea();
 	int status;
-	Listener listener;
-	Handler handler;
+	Connection connection;
+	ConnectionHandler handler;
 
 	void send() {
 		String msgToSend = txtSend.getText();
@@ -63,6 +64,8 @@ public class TerminalFrame extends ConnectorFrame {
 	}
 
 	void stop() {
+		connector.close();
+		connector = null;
 		txtHost.setEnabled(true);
 		txtPort.setEnabled(true);
 		btnConnect.setText("Connect");
@@ -77,9 +80,9 @@ public class TerminalFrame extends ConnectorFrame {
 		btnConnect.setText("Disconnect");
 		btnConnect.setEnabled(false);
 		status = STATUS_CONNECTING;
-		listener = new Listener() {
+		connection = new Connection() {
 			@Override
-			public void setHandler(Handler handler) {
+			public void setHandler(ConnectionHandler handler) {
 				TerminalFrame.this.handler = handler;
 			}
 
@@ -126,8 +129,9 @@ public class TerminalFrame extends ConnectorFrame {
 				});
 			}
 		};
+		connector = new Connector();
 		try {
-			connector.connect(listener, txtHost.getText(),
+			connector.connect(connection, txtHost.getText(),
 					Integer.parseInt(txtPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
 			stop();
@@ -174,7 +178,7 @@ public class TerminalFrame extends ConnectorFrame {
 				}
 				status = STATUS_DISCONNECTED;
 				handler.disconnect();
-				listener.onDisconnect();
+				connection.onDisconnect();
 			} else {
 				start();
 			}

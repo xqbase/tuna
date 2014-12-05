@@ -6,11 +6,11 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Calendar;
 
-import com.xqbase.net.Filter;
+import com.xqbase.net.ConnectionWrapper;
 import com.xqbase.net.util.Bytes;
 
-/** A {@link Filter} which dumps sent and received data into console or files. */
-public class DumpFilter extends Filter {
+/** A {@link ConnectionWrapper} which dumps sent and received data into console or files. */
+public class DumpFilter extends ConnectionWrapper {
 	private static String now() {
 		Calendar cal = Calendar.getInstance();
 		int hour = cal.get(Calendar.HOUR_OF_DAY);

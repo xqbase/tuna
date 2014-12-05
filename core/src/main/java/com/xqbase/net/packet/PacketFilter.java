@@ -1,12 +1,12 @@
 package com.xqbase.net.packet;
 
-import com.xqbase.net.Filter;
+import com.xqbase.net.ConnectionWrapper;
 
 /** 
  * A filter that makes Connection.onRecv() get complete packets.<p>
  * Note that this filter will close a connection when {@link PacketException} is thrown
  */
-public class PacketFilter extends Filter {
+public class PacketFilter extends ConnectionWrapper {
 	private PacketOutputStream out;
 
 	/** Creates a PacketFilter with a given parser. */

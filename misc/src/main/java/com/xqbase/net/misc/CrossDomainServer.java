@@ -4,14 +4,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 
-import com.xqbase.net.Handler;
-import com.xqbase.net.Listener;
-import com.xqbase.net.ServerListener;
+import com.xqbase.net.ConnectionHandler;
+import com.xqbase.net.Connection;
+import com.xqbase.net.ServerConnection;
 import com.xqbase.net.util.ByteArrayQueue;
 import com.xqbase.net.util.Bytes;
 
-/** A {@link ServerListener} which provides cross-domain policy service for Adobe Flash. */
-public class CrossDomainServer implements ServerListener {
+/** A {@link ServerConnection} which provides cross-domain policy service for Adobe Flash. */
+public class CrossDomainServer implements ServerConnection {
 	private long lastAccessed = 0;
 	private File policyFile;
 
@@ -42,12 +42,12 @@ public class CrossDomainServer implements ServerListener {
 	}
 
 	@Override
-	public Listener get() {
-		return new Listener() {
-			private Handler handler;
+	public Connection get() {
+		return new Connection() {
+			private ConnectionHandler handler;
 
 			@Override
-			public void setHandler(Handler handler) {
+			public void setHandler(ConnectionHandler handler) {
 				this.handler = handler;
 			}
 

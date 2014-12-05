@@ -1,8 +1,8 @@
 package com.xqbase.net;
 
-public interface Listener {
+public interface Connection {
 	/** @param handler */
-	public default void setHandler(Handler handler) {/**/}
+	public default void setHandler(ConnectionHandler handler) {/**/}
 	/** 
 	 * Consumes received data in the APPLICATION end of the connection.
 	 *
@@ -22,18 +22,13 @@ public interface Listener {
 	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
 	public default void onDisconnect() {/**/}
 
-	/**
-	 * Adds a {@link Filter} into the network end of the listener.
-	 *
-	 * @see Connector#getFilters()
-	 * @see Server#getFilters()
-	 */
-	public default Listener appendFilter(Filter filter) {
-		filter.setListener(this);
+	/** Adds a {@link ConnectionWrapper} as a filter into the network end of the connection. */
+	public default Connection appendFilter(ConnectionWrapper filter) {
+		filter.setConnection(this);
 		setHandler(filter);
-		return new Listener() {
+		return new Connection() {
 			@Override
-			public void setHandler(Handler handler) {
+			public void setHandler(ConnectionHandler handler) {
 				filter.setHandler(handler);
 			}
 

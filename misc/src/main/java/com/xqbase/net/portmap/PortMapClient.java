@@ -6,27 +6,26 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import com.sun.security.ntlm.Client;
 import com.xqbase.net.Connector;
-import com.xqbase.net.Filter;
-import com.xqbase.net.Handler;
-import com.xqbase.net.Listener;
+import com.xqbase.net.ConnectionWrapper;
+import com.xqbase.net.ConnectionHandler;
+import com.xqbase.net.Connection;
 import com.xqbase.net.packet.PacketFilter;
 import com.xqbase.net.util.Bytes;
 
-class PrivateListener implements Listener {
+class PrivateConnection implements Connection {
 	private PortMapClient client;
 	private int connId;
 
-	Handler handler;
+	ConnectionHandler handler;
 
-	PrivateListener(PortMapClient client, int connId) {
+	PrivateConnection(PortMapClient client, int connId) {
 		this.client = client;
 		this.connId = connId;
 	}
 
 	@Override
-	public void setHandler(Handler handler) {
+	public void setHandler(ConnectionHandler handler) {
 		this.handler = handler;
 	}
 
@@ -50,8 +49,8 @@ class PrivateListener implements Listener {
  * This connection will open a public port in PortMapServer, which maps a private port.
  * @see PortMapServer
  */
-public class PortMapClient extends Filter {
-	HashMap<Integer, PrivateListener> connMap = new HashMap<>();
+public class PortMapClient extends ConnectionWrapper {
+	HashMap<Integer, PrivateConnection> connMap = new HashMap<>();
 
 	/**
 	 * Creates a PortMapClient.
@@ -64,7 +63,7 @@ public class PortMapClient extends Filter {
 	 */
 	public PortMapClient(Connector connector, int publicPort, String privateHost,
 			int privatePort, ScheduledExecutorService timer) {
-		setListener(new Listener() {
+		setConnection(new Connection() {
 			private ScheduledFuture<?> future = null;
 
 			@Override
@@ -81,20 +80,20 @@ public class PortMapClient extends Filter {
 						disconnect();
 						return;
 					}
-					PrivateListener conn = new PrivateListener(PortMapClient.this, connId);
+					PrivateConnection connection = new PrivateConnection(PortMapClient.this, connId);
 					try {
-						connector.connect(conn, privateHost, privatePort);
+						connector.connect(connection, privateHost, privatePort);
 					} catch (IOException e) {
 						// throw new PacketException(e.getMessage());
 						disconnect();
 						return;
 					}
-					connMap.put(Integer.valueOf(connId), conn);
+					connMap.put(Integer.valueOf(connId), connection);
 					return;
 				}
 				// SERVER_DATA or SERVER_DISCONNECT must have a valid connId
-				PrivateListener conn = connMap.get(Integer.valueOf(connId));
-				if (conn == null) {
+				PrivateConnection connection = connMap.get(Integer.valueOf(connId));
+				if (connection == null) {
 					return;
 				}
 				if (command == PortMapPacket.SERVER_DATA) {
@@ -103,12 +102,12 @@ public class PortMapClient extends Filter {
 						disconnect();
 						return;
 					}
-					conn.handler.send(b, off + PortMapPacket.HEAD_SIZE, packet.size);
+					connection.handler.send(b, off + PortMapPacket.HEAD_SIZE, packet.size);
 				} else {
 					send(new PortMapPacket(connId,
 							PortMapPacket.CLIENT_CLOSE, 0, 0).getHead());
 					connMap.remove(Integer.valueOf(connId));
-					conn.handler.disconnect();
+					connection.handler.disconnect();
 				}
 			}
 
@@ -132,7 +131,7 @@ public class PortMapClient extends Filter {
 					future.cancel(false);
 					future = null;
 				}
-				for (PrivateListener conn : connMap.values()) {
+				for (PrivateConnection conn : connMap.values()) {
 					conn.handler.disconnect();
 				}
 			}

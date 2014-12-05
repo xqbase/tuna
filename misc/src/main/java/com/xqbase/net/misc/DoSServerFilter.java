@@ -4,10 +4,10 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.function.Supplier;
 
-import com.xqbase.net.Filter;
+import com.xqbase.net.ConnectionWrapper;
 
 /** A "ServerFilter" to limit bytes, requests and connections from the same IP. */
-public class DoSServerFilter implements Supplier<Filter> {
+public class DoSServerFilter implements Supplier<ConnectionWrapper> {
 	static int[] getData(String ip, HashMap<String, int[]> map, int length) {
 		int[] data = map.get(ip);
 		if (data == null) {
@@ -38,7 +38,7 @@ public class DoSServerFilter implements Supplier<Filter> {
 	 * @param requests_
 	 * @param bytes_
 	 */
-	protected void onBlock(Filter filter, int connections_, int requests_, int bytes_) {
+	protected void onBlock(ConnectionWrapper filter, int connections_, int requests_, int bytes_) {
 		filter.disconnect();
 		filter.onDisconnect();
 	}
@@ -74,8 +74,8 @@ public class DoSServerFilter implements Supplier<Filter> {
 	}
 
 	@Override
-	public Filter get() {
-		return new Filter() {
+	public ConnectionWrapper get() {
+		return new ConnectionWrapper() {
 			@Override
 			public void onRecv(byte[] b, int off, int len) {
 				checkTimeout();

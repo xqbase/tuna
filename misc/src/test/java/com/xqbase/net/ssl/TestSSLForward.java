@@ -22,7 +22,7 @@ public class TestSSLForward {
 		try (
 			Connector connector = new Connector();
 		) {
-			BroadcastServer broadcastServer = new BroadcastServer();
+			BroadcastServer broadcastServer = new BroadcastServer(false);
 			SSLServerFilter sslffServer = new SSLServerFilter(executor, SSLUtil.
 					getSSLContext(certKey, certMap), SSLFilter.SERVER_WANT_AUTH);
 			SSLServerFilter sslffClient = new SSLServerFilter(executor, SSLUtil.

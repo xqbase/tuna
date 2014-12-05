@@ -11,12 +11,12 @@ import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 import javax.net.ssl.SSLEngineResult.Status;
 import javax.net.ssl.SSLSession;
 
-import com.xqbase.net.Filter;
+import com.xqbase.net.ConnectionWrapper;
 import com.xqbase.net.util.ByteArrayQueue;
 import com.xqbase.net.util.Bytes;
 
 /** An SSL filter which makes a connection secure */
-public class SSLFilter extends Filter {
+public class SSLFilter extends ConnectionWrapper {
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * NO client authentication desired.

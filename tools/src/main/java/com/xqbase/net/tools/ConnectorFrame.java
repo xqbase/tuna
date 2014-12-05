@@ -19,8 +19,7 @@ import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
@@ -37,10 +36,11 @@ public abstract class ConnectorFrame extends JFrame {
 	protected void windowClosed() {/**/}
 
 	protected TrayIcon trayIcon;
-	protected MenuItem startMenuItem = new MenuItem("Start");
-	protected JButton startButton = new JButton("Start");
-	protected JButton exitButton = new JButton("Exit");
-	protected Connector connector = new Connector();
+	protected final MenuItem startMenuItem = new MenuItem("Start");
+	protected final JButton startButton = new JButton("Start");
+	protected final JButton exitButton = new JButton("Exit");
+	protected final ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1);
+	protected Connector connector = null;
 
 	private Insets insets = new Insets(0, 0, 0, 0);
 	private KeyAdapter keyAdapter = new KeyAdapter() {
@@ -170,31 +170,26 @@ public abstract class ConnectorFrame extends JFrame {
 		EventQueue.invokeLater(new Runnable() {
 			@Override
 			public void run() {
-				connector.doEvents(16);
+				if (connector == null) {
+					try {
+						Thread.sleep(16);
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+					}
+				} else {
+					connector.doEvents(16);
+				}
 				if (running) {
 					EventQueue.invokeLater(this);
 				} else {
 					onClose();
-					connector.close();
+					if (connector != null) {
+						connector.close();
+					}
+					timer.shutdown();
 				}
 			}
 		});
-	}
-
-	protected static void shutdown(ExecutorService service) {
-		service.shutdown();
-		boolean interrupted = Thread.interrupted();
-		boolean terminated = false;
-		while (!terminated) {
-			try {
-				terminated = service.awaitTermination(1, TimeUnit.SECONDS);
-			} catch (InterruptedException e) {
-				interrupted = true;
-			}
-		}
-		if (interrupted) {
-			Thread.currentThread().interrupt();
-		}
 	}
 
 	protected static void invoke(Class<? extends ConnectorFrame> frameClass) {

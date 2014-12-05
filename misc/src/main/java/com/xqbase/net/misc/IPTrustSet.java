@@ -5,13 +5,13 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.function.Supplier;
 
-import com.xqbase.net.Filter;
+import com.xqbase.net.ConnectionWrapper;
 
 /**
  * A set of trusted IPs. This set also implements the interface
  * "ServerFilter", which can prevent connecting with untrusted IPs.
  */
-public class IPTrustSet extends HashSet<String> implements Supplier<Filter> {
+public class IPTrustSet extends HashSet<String> implements Supplier<ConnectionWrapper> {
 	private static final long serialVersionUID = 1L;
 
 	/** Creates an IPTrustSet with the given IPs. */
@@ -25,8 +25,8 @@ public class IPTrustSet extends HashSet<String> implements Supplier<Filter> {
 	}
 
 	@Override
-	public Filter get() {
-		return new Filter() {
+	public ConnectionWrapper get() {
+		return new ConnectionWrapper() {
 			@Override
 			public void onConnect() {
 				System.out.println(getRemoteAddr());

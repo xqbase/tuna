@@ -9,6 +9,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
 
+import com.xqbase.net.Connector;
 import com.xqbase.net.misc.DumpServerFilter;
 import com.xqbase.net.misc.ForwardServer;
 
@@ -29,8 +30,6 @@ public class ForwardFrame extends ConnectorFrame {
 	private JComboBox<String> cmbDump = new JComboBox<>(new
 			String[] {DUMP_NONE, DUMP_BINARY, DUMP_TEXT, DUMP_FOLDER});
 	private JFileChooser chooser = new JFileChooser();
-
-	private AutoCloseable server = null;
 
 	void choose() {
 		if (!cmbDump.getSelectedItem().equals(DUMP_FOLDER)) {
@@ -55,11 +54,9 @@ public class ForwardFrame extends ConnectorFrame {
 
 	@Override
 	protected void start() {
-		if (server != null) {
-			try {
-				server.close();
-			} catch (Exception e) {/**/}
-			server = null;
+		if (connector != null) {
+			connector.close();
+			connector = null;
 			stop();
 			return;
 		}
@@ -80,13 +77,15 @@ public class ForwardFrame extends ConnectorFrame {
 			dff.setDumpFolder(chooser.getSelectedFile());
 		}
 
-		ForwardServer forward;
+		connector = new Connector();
 		try {
-			forward = new ForwardServer(connector, txtRemoteHost.getText(),
+			ForwardServer forward = new ForwardServer(connector, txtRemoteHost.getText(),
 					Integer.parseInt(txtRemotePort.getText()));
-			server = connector.add(forward.appendFilter(dff),
+			connector.add(forward.appendFilter(dff),
 					Integer.parseInt(txtPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
+			connector.close();
+			connector = null;
 			stop();
 			JOptionPane.showMessageDialog(this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);
