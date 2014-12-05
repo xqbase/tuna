@@ -17,11 +17,11 @@ public class TestServer {
 		// Evade resource leak warning
 		Connector connector = newConnector();
 		connector.add(() -> {
-			return new Listener() {
-				private Handler handler;
+			return new Connection() {
+				private ConnectionHandler handler;
 
 				@Override
-				public void setHandler(Handler handler) {
+				public void setHandler(ConnectionHandler handler) {
 					this.handler = handler;
 				}
 

@@ -2,12 +2,12 @@ package com.xqbase.net.tools;
 
 import java.awt.EventQueue;
 import java.io.IOException;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 
+import com.xqbase.net.Connector;
 import com.xqbase.net.portmap.PortMapClient;
 
 public class PortMapClientFrame extends ConnectorFrame {
@@ -18,9 +18,6 @@ public class PortMapClientFrame extends ConnectorFrame {
 	private JTextField txtMappingHost = new JTextField("localhost");
 	private JTextField txtMappingPort = new JTextField("8341");
 	private JTextField txtPublicPort = new JTextField("8080");
-
-	PortMapClient client = null;
-	ScheduledThreadPoolExecutor timer;
 
 	void stop() {
 		trayIcon.setToolTip(getTitle());
@@ -35,10 +32,9 @@ public class PortMapClientFrame extends ConnectorFrame {
 
 	@Override
 	protected void start() {
-		if (client != null) {
-			shutdown(timer);
-			client.disconnect();
-			client = null;
+		if (connector != null) {
+			connector.close();
+			connector = null;
 			stop();
 			return;
 		}
@@ -53,39 +49,31 @@ public class PortMapClientFrame extends ConnectorFrame {
 		txtMappingPort.setEnabled(false);
 		txtPublicPort.setEnabled(false);
 
-		timer = new ScheduledThreadPoolExecutor(1);
-		client = new PortMapClient(connector,
-				Integer.parseInt(txtPublicPort.getText()), txtPrivateHost.getText(),
-				Integer.parseInt(txtPrivatePort.getText()), timer) {
-			@Override
-			public void onDisconnect() {
-				super.onDisconnect();
-				shutdown(timer);
-				client = null;
-				stop();
-				EventQueue.invokeLater(() ->
-						JOptionPane.showMessageDialog(PortMapClientFrame.this,
-						"Mapping Connection Failed",
-						getTitle(), JOptionPane.WARNING_MESSAGE));
-			}
-		};
+		connector = new Connector();
 		try {
+			PortMapClient client = new PortMapClient(connector,
+					Integer.parseInt(txtPublicPort.getText()), txtPrivateHost.getText(),
+					Integer.parseInt(txtPrivatePort.getText()), timer) {
+				@Override
+				public void onDisconnect() {
+					super.onDisconnect();
+					connector.close();
+					connector = null;
+					stop();
+					EventQueue.invokeLater(() ->
+							JOptionPane.showMessageDialog(PortMapClientFrame.this,
+							"Mapping Connection Failed",
+							getTitle(), JOptionPane.WARNING_MESSAGE));
+				}
+			};
 			connector.connect(client, txtMappingHost.getText(),
 					Integer.parseInt(txtMappingPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
-			shutdown(timer);
-			client = null;
+			connector.close();
+			connector = null;
 			stop();
 			JOptionPane.showMessageDialog(this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);
-		}
-	}
-
-	@Override
-	protected void onClose() {
-		if (client != null) {
-			shutdown(timer);
-			client = null;
 		}
 	}
 

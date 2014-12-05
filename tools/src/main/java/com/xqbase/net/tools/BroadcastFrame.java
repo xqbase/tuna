@@ -7,6 +7,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 
+import com.xqbase.net.Connector;
 import com.xqbase.net.misc.BroadcastServer;
 
 public class BroadcastFrame extends ConnectorFrame {
@@ -14,8 +15,6 @@ public class BroadcastFrame extends ConnectorFrame {
 
 	private JTextField txtPort = new JTextField("23");
 	private JCheckBox chkNoEcho = new JCheckBox("No Echo");
-
-	private AutoCloseable server = null;
 
 	void stop() {
 		trayIcon.setToolTip(getTitle());
@@ -27,11 +26,9 @@ public class BroadcastFrame extends ConnectorFrame {
 
 	@Override
 	protected void start() {
-		if (server != null) {
-			try {
-				server.close();
-			} catch (Exception e) {/**/}
-			server = null;
+		if (connector != null) {
+			connector.close();
+			connector = null;
 			stop();
 			return;
 		}
@@ -40,10 +37,13 @@ public class BroadcastFrame extends ConnectorFrame {
 		startButton.setText("Stop");
 		txtPort.setEnabled(false);
 		chkNoEcho.setEnabled(false);
+		connector = new Connector();
 		try {
-			server = connector.add(new BroadcastServer(chkNoEcho.isSelected()),
+			connector.add(new BroadcastServer(chkNoEcho.isSelected()),
 					Integer.parseInt(txtPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
+			connector.close();
+			connector = null;
 			stop();
 			JOptionPane.showMessageDialog(BroadcastFrame.this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);

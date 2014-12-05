@@ -15,7 +15,7 @@ public class TestClient {
 	// To test under Windows, you should add a registry item "MaxUserPort = 65534" in
 	// HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
 	public static void main(String[] args) throws Exception {
-		final LinkedHashSet<Handler> handlerSet = new LinkedHashSet<>();
+		final LinkedHashSet<ConnectionHandler> handlerSet = new LinkedHashSet<>();
 		Random random = new Random();
 		// Evade resource leak warning
 		Connector connector = newConnector();
@@ -23,7 +23,7 @@ public class TestClient {
 		long startTime = System.currentTimeMillis();
 		byte[] data = new byte[] {'-'};
 		while (true) {
-			for (Handler handler : handlerSet.toArray(new Handler[0])) {
+			for (ConnectionHandler handler : handlerSet.toArray(new ConnectionHandler[0])) {
 				// "conn.onDisconnect()" might change "connectionSet"
 				if (random.nextDouble() < .01) {
 					handler.send(data);
@@ -40,11 +40,11 @@ public class TestClient {
 				System.out.print("Errors: " + errors + ", ");
 				System.out.println("Responses: " + responses);
 			}
-			connector.connect(new Listener() {
-				private Handler handler;
+			connector.connect(new Connection() {
+				private ConnectionHandler handler;
 
 				@Override
-				public void setHandler(Handler handler) {
+				public void setHandler(ConnectionHandler handler) {
 					this.handler = handler;
 				}
 

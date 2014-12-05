@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
-import com.xqbase.net.Filter;
+import com.xqbase.net.ConnectionWrapper;
 import com.xqbase.net.packet.PacketConsumer;
 import com.xqbase.net.packet.PacketException;
 import com.xqbase.net.packet.PacketFilter;
@@ -13,7 +13,7 @@ import com.xqbase.net.packet.PacketParser;
 import com.xqbase.net.util.ByteArrayQueue;
 import com.xqbase.net.util.Bytes;
 
-/** A {@link Filter} which compresses application data and uncompresses network data. */
+/** A {@link ConnectionWrapper} which compresses application data and uncompresses network data. */
 public class ZLibFilter extends PacketFilter {
 	private static PacketParser parser = (b, off, len) -> {
 		if (len < 4) {

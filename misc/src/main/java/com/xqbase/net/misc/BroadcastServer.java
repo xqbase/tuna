@@ -2,60 +2,56 @@ package com.xqbase.net.misc;
 
 import java.util.LinkedHashSet;
 
-import com.xqbase.net.Handler;
-import com.xqbase.net.Listener;
-import com.xqbase.net.ServerListener;
+import com.xqbase.net.ConnectionHandler;
+import com.xqbase.net.Connection;
+import com.xqbase.net.ServerConnection;
 
-class BroadcastListener implements Listener {
-	private LinkedHashSet<BroadcastListener> listeners = new LinkedHashSet<>();
+class BroadcastConnection implements Connection {
+	private LinkedHashSet<BroadcastConnection> connections;
 	private boolean noEcho;
-	private Handler handler;
+	private ConnectionHandler handler;
 
-	public BroadcastListener(LinkedHashSet<BroadcastListener> listeners, boolean noEcho) {
-		this.listeners = listeners;
+	public BroadcastConnection(LinkedHashSet<BroadcastConnection> connections, boolean noEcho) {
+		this.connections = connections;
 		this.noEcho = noEcho;
 	}
 
 	@Override
-	public void setHandler(Handler handler) {
+	public void setHandler(ConnectionHandler handler) {
 		this.handler = handler;
 	}
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		for (BroadcastListener listener : listeners.toArray(new BroadcastListener[0])) {
-			// "listener.onDisconnect()" might change "listeners"
-			if (!noEcho || listener != this) {
-				listener.handler.send(b, off, len);
+		for (BroadcastConnection connection : connections.toArray(new BroadcastConnection[0])) {
+			// "connection.onDisconnect()" might change connections
+			if (!noEcho || connection != this) {
+				connection.handler.send(b, off, len);
 			}
 		}
 	}
 
 	@Override
 	public void onConnect() {
-		listeners.add(this);
+		connections.add(this);
 	}
 
 	@Override
 	public void onDisconnect() {
-		listeners.remove(this);
+		connections.remove(this);
 	}
 }
 
 /**
- * A {@link ServerListener} which sends received data
- * from one {@link Listener} to all its accepted listeners.<p>
+ * A {@link ServerConnection} which sends received data
+ * from one {@link Connection} to all its accepted connections.<p>
  *
  * Note that all its accepted connections will be closed automatically
  * when it is removed from a connector.
  */
-public class BroadcastServer implements ServerListener {
-	private LinkedHashSet<BroadcastListener> listeners = new LinkedHashSet<>();
+public class BroadcastServer implements ServerConnection {
+	private LinkedHashSet<BroadcastConnection> connections = new LinkedHashSet<>();
 	private boolean noEcho;
-
-	public BroadcastServer() {
-		this(false);
-	}
 
 	/**
 	 * Creates a BroadcastServer
@@ -68,7 +64,7 @@ public class BroadcastServer implements ServerListener {
 	}
 
 	@Override
-	public Listener get() {
-		return new BroadcastListener(listeners, noEcho);
+	public Connection get() {
+		return new BroadcastConnection(connections, noEcho);
 	}
 }

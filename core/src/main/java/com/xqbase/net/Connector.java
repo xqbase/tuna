@@ -18,9 +18,25 @@ import com.xqbase.net.util.ByteArrayQueue;
  * which corresponds to a TCP Socket.
  */
 class Client {
-	Client(Listener listener) {
-		this.listener = listener;
-		listener.setHandler(new Handler() {
+	private static final int STATUS_IDLE = 0;
+	private static final int STATUS_BUSY = 1;
+	private static final int STATUS_DISCONNECTING = 2;
+	private static final int STATUS_CLOSED = 3;
+
+	boolean blocked = false;
+	int status = STATUS_IDLE;
+	long bytesRecv = 0, bytesSent = 0;
+	ByteArrayQueue queue = new ByteArrayQueue();
+	InetSocketAddress local = new InetSocketAddress(0),
+			remote = new InetSocketAddress(0);
+	SocketChannel socketChannel;
+	SelectionKey selectionKey;
+	Connection connection;
+	Connector connector;
+
+	Client(Connection connection) {
+		this.connection = connection;
+		connection.setHandler(new ConnectionHandler() {
 			@Override
 			public void send(byte[] b, int off, int len) {
 				write(b, off, len);
@@ -65,27 +81,26 @@ class Client {
 			}
 
 			@Override
+			public int getQueueSize() {
+				return queue.length();
+			}
+
+			@Override
+			public long getBytesRecv() {
+				return bytesRecv;
+			}
+
+			@Override
+			public long getBytesSent() {
+				return bytesSent;
+			}
+
+			@Override
 			public void execute(Runnable runnable) {
 				connector.execute(runnable);
 			}
 		});
 	}
-
-	private static final int STATUS_IDLE = 0;
-	private static final int STATUS_BUSY = 1;
-	private static final int STATUS_DISCONNECTING = 2;
-	private static final int STATUS_CLOSED = 3;
-
-	private ByteArrayQueue queue = new ByteArrayQueue();
-
-	InetSocketAddress local = new InetSocketAddress(0),
-			remote = new InetSocketAddress(0);
-	boolean blocked = false;
-	int status = STATUS_IDLE;
-	Listener listener;
-	SocketChannel socketChannel;
-	SelectionKey selectionKey;
-	Connector connector;
 
 	void interestOps() {
 		selectionKey.interestOps((blocked ? 0 : SelectionKey.OP_READ) |
@@ -102,12 +117,13 @@ class Client {
 				interestOps();
 				return;
 			}
+			bytesSent += bytesWritten;
 			connector.totalBytesSent += bytesWritten;
 			queue.remove(bytesWritten);
 			connector.totalQueueSize -= bytesWritten;
 		}
 		if (queued) {
-			listener.onSend(false);
+			connection.onSend(false);
 		}
 		if (status == STATUS_DISCONNECTING) {
 			finishClose();
@@ -121,7 +137,7 @@ class Client {
 	void write(byte[] b, int off, int len) {
 		if (status != STATUS_IDLE) {
 			if (queue.length() == 0) {
-				listener.onSend(true);
+				connection.onSend(true);
 			}
 			queue.add(b, off, len);
 			connector.totalQueueSize += len;
@@ -138,7 +154,7 @@ class Client {
 		if (bytesWritten < len) {
 			queue.add(b, off + bytesWritten, len - bytesWritten);
 			connector.totalQueueSize += len - bytesWritten;
-			listener.onSend(true);
+			connection.onSend(true);
 			status = STATUS_BUSY;
 			interestOps();
 		}
@@ -153,7 +169,7 @@ class Client {
 				socket().getLocalSocketAddress());
 		remote = ((InetSocketAddress) socketChannel.
 				socket().getRemoteSocketAddress());
-		listener.onConnect();
+		connection.onConnect();
 	}
 
 	void startClose() {
@@ -164,7 +180,7 @@ class Client {
 		connector.passiveDisconnectCount ++;
 		// Call "close()" before "onDisconnect()"
 		// to avoid recursive "disconnect()".
-		listener.onDisconnect();
+		connection.onDisconnect();
 	}
 
 	void finishClose() {
@@ -190,9 +206,9 @@ class Client {
  * which corresponds to a TCP Server Socket 
  */
 class Server {
-	ServerListener serverListener;
 	ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
 	SelectionKey selectionKey;
+	ServerConnection serverConnection;
 	Connector connector;
 
 	/** 
@@ -200,9 +216,9 @@ class Server {
 	 * @param addr - The IP address to bind and the port to listen. 
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	Server(ServerListener serverListener,
+	Server(ServerConnection serverConnection,
 			InetSocketAddress addr) throws IOException {
-		this.serverListener = serverListener;
+		this.serverConnection = serverConnection;
 		serverSocketChannel.configureBlocking(false);
 		try {
 			serverSocketChannel.socket().bind(addr);
@@ -254,11 +270,11 @@ public class Connector implements Executor, AutoCloseable {
 	 * Registers a {@link Client} and connects to a remote address
 	 *
 	 * @throws IOException If the remote address is invalid.
-	 * @see #connect(Listener, InetSocketAddress)
+	 * @see #connect(Connection, InetSocketAddress)
 	 */
-	public void connect(Listener listener,
+	public void connect(Connection connection,
 			String host, int port) throws IOException {
-		connect(listener, new InetSocketAddress(host, port));
+		connect(connection, new InetSocketAddress(host, port));
 	}
 
 	private static void closeSocketChannel(SocketChannel socketChannel)
@@ -270,9 +286,9 @@ public class Connector implements Executor, AutoCloseable {
 	 * registers a {@link Client} and connects to a remote address
 	 *
 	 * @throws IOException If the remote address is invalid.
-	 * @see #connect(Listener, String, int)
+	 * @see #connect(Connection, String, int)
 	 */
-	public void connect(Listener listener,
+	public void connect(Connection connection,
 			InetSocketAddress remote) throws IOException {
 		SocketChannel socketChannel = SocketChannel.open();
 		socketChannel.configureBlocking(false);
@@ -283,43 +299,44 @@ public class Connector implements Executor, AutoCloseable {
 			closeSocketChannel(socketChannel);
 			throw e;
 		}
-		Client client = new Client(listener);
+		Client client = new Client(connection);
 		client.socketChannel = socketChannel;
 		client.startConnect();
 		add(client, SelectionKey.OP_CONNECT);
 	}
 
 	/**
-	 * Registers a {@link ServerListener}
+	 * Registers a {@link ServerConnection}
 	 * 
-	 * @param serverListener
-	 * @see #remove(Server)
+	 * @param serverConnection
+	 * @see #add(ServerConnection, InetSocketAddress) 
 	 */
-	public AutoCloseable add(ServerListener serverListener,
+	public AutoCloseable add(ServerConnection serverConnection,
 			String host, int port) throws IOException {
-		return add(serverListener, new InetSocketAddress(host, port));
+		return add(serverConnection, new InetSocketAddress(host, port));
 	}
 
 	/**
-	 * Registers a {@link ServerListener}
+	 * Registers a {@link ServerConnection}
 	 * 
-	 * @param serverListener
-	 * @see #remove(Server)
+	 * @param serverConnection
+	 * @see #add(ServerConnection, InetSocketAddress) 
 	 */
-	public AutoCloseable add(ServerListener serverListener, int port) throws IOException {
-		return add(serverListener, new InetSocketAddress(port));
+	public AutoCloseable add(ServerConnection serverConnection, int port) throws IOException {
+		return add(serverConnection, new InetSocketAddress(port));
 	}
 
 	/**
-	 * Registers a {@link ServerListener}
+	 * Registers a {@link ServerConnection}
 	 * 
-	 * @param serverListener
-	 * @see #remove(Server)
+	 * @param serverConnection
+	 * @return an {@link AutoCloseable} that will unregister the <code>serverConnection</code>.
+	 *         The connector will automatically unregister all <code>serverConnection</code>s when closing. 
 	 */
-	public AutoCloseable add(ServerListener serverListener,
+	public AutoCloseable add(ServerConnection serverConnection,
 			InetSocketAddress addr) throws IOException {
-		Server server = new Server(serverListener, addr);
-		serverListener.setExecutor(this);
+		Server server = new Server(serverConnection, addr);
+		serverConnection.setExecutor(this);
 		server.connector = this;
 		try {
 			server.selectionKey = server.serverSocketChannel.
@@ -388,7 +405,7 @@ public class Connector implements Executor, AutoCloseable {
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
-				Client client = new Client(server.serverListener.get());
+				Client client = new Client(server.serverConnection.get());
 				client.socketChannel = socketChannel;
 				add(client, SelectionKey.OP_READ);
 				client.finishConnect();
@@ -401,7 +418,8 @@ public class Connector implements Executor, AutoCloseable {
 					int bytesRead = client.socketChannel.
 							read(ByteBuffer.wrap(buffer, 0, BUFFER_SIZE));
 					if (bytesRead > 0) {
-						client.listener.onRecv(buffer, 0, bytesRead);
+						client.connection.onRecv(buffer, 0, bytesRead);
+						client.bytesRecv += bytesRead;
 						totalBytesRecv += bytesRead;
 						// may be closed by "onRecv"
 						if (!key.isValid()) {
@@ -433,14 +451,24 @@ public class Connector implements Executor, AutoCloseable {
 		return true;
 	}
 
-	/** Executes a command in main thread. */
+	/** 
+	 * Executes a command in main thread.<br>
+	 * <b>Must be called in another thread.</b>
+	 *
+	 * @see #interrupt()
+	 */
 	@Override
 	public void execute(Runnable command) {
 		eventQueue.offer(command);
 		selector.wakeup();
 	}
 
-	/** Interrupts {@link #doEvents()} or {@link #doEvents(long)} */
+	/**
+	 * Interrupts {@link #doEvents()} or {@link #doEvents(long)}.<br>
+	 * <b>Must be called in another thread.</b>
+	 *
+	 * @see #execute(Runnable)
+	 */
 	public void interrupt() {
 		execute(() -> interrupted = true);
 	}

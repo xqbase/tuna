@@ -12,9 +12,9 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import com.xqbase.net.Connector;
-import com.xqbase.net.Handler;
-import com.xqbase.net.Listener;
-import com.xqbase.net.ServerListener;
+import com.xqbase.net.ConnectionHandler;
+import com.xqbase.net.Connection;
+import com.xqbase.net.ServerConnection;
 import com.xqbase.net.packet.PacketFilter;
 import com.xqbase.net.util.Bytes;
 
@@ -42,19 +42,19 @@ class IdPool {
 	}
 }
 
-class PublicListener implements Listener {
-	private MapListener mapListener;
+class PublicConnection implements Connection {
+	private MapConnection mapConnection;
 	private int connId;
 
-	Handler handler;
+	ConnectionHandler handler;
 
-	PublicListener(MapListener mapListener, int connId) {
-		this.mapListener = mapListener;
+	PublicConnection(MapConnection mapConnection, int connId) {
+		this.mapConnection = mapConnection;
 		this.connId = connId;
 	}
 
 	@Override
-	public void setHandler(Handler handler) {
+	public void setHandler(ConnectionHandler handler) {
 		this.handler = handler;
 	}
 
@@ -62,58 +62,58 @@ class PublicListener implements Listener {
 	public void onRecv(byte[] b, int off, int len) {
 		byte[] head = new PortMapPacket(connId,
 				PortMapPacket.SERVER_DATA, 0, len).getHead();
-		mapListener.handler.send(Bytes.add(head, 0, head.length, b, off, len));
+		mapConnection.handler.send(Bytes.add(head, 0, head.length, b, off, len));
 	}
 
 	@Override
 	public void onConnect() {
-		mapListener.handler.send(new PortMapPacket(connId,
+		mapConnection.handler.send(new PortMapPacket(connId,
 				PortMapPacket.SERVER_CONNECT, 0, 0).getHead());
 	}
 
 	@Override
 	public void onDisconnect() {
-		mapListener.publicServer.connMap.remove(Integer.valueOf(connId));
+		mapConnection.publicServer.connMap.remove(Integer.valueOf(connId));
 		// Do not return connId until CLIENT_CLOSE received
-		// mapListener.publicServer.idPool.returnId(connId);
-		mapListener.handler.send(new PortMapPacket(connId,
+		// mapConnection.publicServer.idPool.returnId(connId);
+		mapConnection.handler.send(new PortMapPacket(connId,
 				PortMapPacket.SERVER_DISCONNECT, 0, 0).getHead());
 	}
 }
 
-class PublicServer implements ServerListener {
-	private MapListener mapListener;
+class PublicServer implements ServerConnection {
+	private MapConnection mapConnection;
 
-	PublicServer(MapListener mapListener) {
-		this.mapListener = mapListener;
+	PublicServer(MapConnection mapConnection) {
+		this.mapConnection = mapConnection;
 	}
 
-	HashMap<Integer, PublicListener> connMap = new HashMap<>();
+	HashMap<Integer, PublicConnection> connMap = new HashMap<>();
 	IdPool idPool = new IdPool();
 
 	@Override
-	public Listener get() {
+	public Connection get() {
 		int connId = idPool.borrowId();
-		PublicListener publicListener = new PublicListener(mapListener, connId);
-		connMap.put(Integer.valueOf(connId), publicListener);
-		return publicListener;
+		PublicConnection connection = new PublicConnection(mapConnection, connId);
+		connMap.put(Integer.valueOf(connId), connection);
+		return connection;
 	}
 }
 
-class MapListener implements Listener {
+class MapConnection implements Connection {
 	private PortMapServer mapServer;
 	private AutoCloseable publicCloseable;
 
-	Handler handler;
+	ConnectionHandler handler;
 	long accessed = System.currentTimeMillis();
 	PublicServer publicServer = null;
 
-	MapListener(PortMapServer mapServer) {
+	MapConnection(PortMapServer mapServer) {
 		this.mapServer = mapServer;
 	}
 
 	@Override
-	public void setHandler(Handler handler) {
+	public void setHandler(ConnectionHandler handler) {
 		this.handler = handler;
 	}
 
@@ -151,8 +151,8 @@ class MapListener implements Listener {
 				publicServer.idPool.returnId(connId);
 				return;
 			}
-			PublicListener publicListener = publicServer.connMap.get(Integer.valueOf(connId));
-			if (publicListener == null) {
+			PublicConnection connection = publicServer.connMap.get(Integer.valueOf(connId));
+			if (connection == null) {
 				return;
 			}
 			if (command == PortMapPacket.CLIENT_DATA) {
@@ -161,11 +161,11 @@ class MapListener implements Listener {
 					disconnect();
 					return;
 				}
-				publicListener.handler.send(b, off + PortMapPacket.HEAD_SIZE, packet.size);
+				connection.handler.send(b, off + PortMapPacket.HEAD_SIZE, packet.size);
 			} else {
 				publicServer.connMap.remove(Integer.valueOf(connId));
 				publicServer.idPool.returnId(connId);
-				publicListener.handler.disconnect();
+				connection.handler.disconnect();
 			}
 		}
 	}
@@ -179,8 +179,10 @@ class MapListener implements Listener {
 		try {
 			publicCloseable.close();
 		} catch (Exception e) {/**/}
-		for (PublicListener listener : publicServer.connMap.values()) {
-			listener.handler.disconnect();
+		for (PublicConnection connection : publicServer.connMap.values().
+				toArray(new PublicConnection[0])) {
+			// "disconnect()" might change "connMap"
+			connection.handler.disconnect();
 		}
 	}
 
@@ -195,8 +197,8 @@ class MapListener implements Listener {
  * This server will open public ports, which map private ports provided by PortMapClients.
  * @see PortMapClient
  */
-public class PortMapServer implements ServerListener, AutoCloseable {
-	LinkedHashSet<MapListener> timeoutSet = new LinkedHashSet<>();
+public class PortMapServer implements ServerConnection, AutoCloseable {
+	LinkedHashSet<MapConnection> timeoutSet = new LinkedHashSet<>();
 	Connector connector;
 
 	private Executor executor;
@@ -215,8 +217,8 @@ public class PortMapServer implements ServerListener, AutoCloseable {
 			executor.execute(() -> {
 				// in main thread
 				long now = System.currentTimeMillis();
-				Iterator<MapListener> i = timeoutSet.iterator();
-				MapListener mapConn;
+				Iterator<MapConnection> i = timeoutSet.iterator();
+				MapConnection mapConn;
 				while (i.hasNext() && now > (mapConn = i.next()).accessed + 60000) {
 					i.remove();
 					mapConn.disconnect();
@@ -226,10 +228,10 @@ public class PortMapServer implements ServerListener, AutoCloseable {
 	}
 
 	@Override
-	public Listener get() {
-		MapListener mapListener = new MapListener(this);
-		timeoutSet.add(mapListener);
-		return mapListener.appendFilter(new PacketFilter(PortMapPacket.getParser()));
+	public Connection get() {
+		MapConnection mapConnection = new MapConnection(this);
+		timeoutSet.add(mapConnection);
+		return mapConnection.appendFilter(new PacketFilter(PortMapPacket.getParser()));
 	}
 
 	@Override

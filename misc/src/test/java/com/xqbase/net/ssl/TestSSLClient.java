@@ -7,7 +7,7 @@ import java.util.concurrent.Executors;
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.net.Connector;
-import com.xqbase.net.Listener;
+import com.xqbase.net.Connection;
 import com.xqbase.net.util.Bytes;
 
 public class TestSSLClient {
@@ -21,23 +21,23 @@ public class TestSSLClient {
 					SSLFilter.CLIENT, "localhost", 2323);
 			SSLFilter sslf2 = new SSLFilter(executor, sslc,
 					SSLFilter.CLIENT, "localhost", 2323);
-			Listener listener1 = new Listener() {
+			Connection connection1 = new Connection() {
 				@Override
 				public void onConnect() {
 					System.out.println(Bytes.toHexLower(sslf1.getSession().getId()));
 					connected = true;
 				}
 			};
-			Listener listener2 = new Listener() {
+			Connection connection2 = new Connection() {
 				@Override
 				public void onConnect() {
 					System.out.println(Bytes.toHexLower(sslf2.getSession().getId()));
 					try {
-						connector.connect(listener1.appendFilter(sslf1), "localhost", 2323);
+						connector.connect(connection1.appendFilter(sslf1), "localhost", 2323);
 					} catch (IOException e) {/**/}
 				}
 			};
-			connector.connect(listener2.appendFilter(sslf2), "localhost", 2323);
+			connector.connect(connection2.appendFilter(sslf2), "localhost", 2323);
 			while (!connected) {
 				connector.doEvents(-1);
 			}

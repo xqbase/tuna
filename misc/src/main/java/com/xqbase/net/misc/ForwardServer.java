@@ -6,21 +6,21 @@ import java.util.ArrayList;
 import java.util.function.Supplier;
 
 import com.xqbase.net.Connector;
-import com.xqbase.net.Filter;
-import com.xqbase.net.Handler;
-import com.xqbase.net.Listener;
-import com.xqbase.net.ServerListener;
+import com.xqbase.net.ConnectionWrapper;
+import com.xqbase.net.ConnectionHandler;
+import com.xqbase.net.Connection;
+import com.xqbase.net.ServerConnection;
 
-class PeerListener implements Listener {
-	PeerListener peer;
-	Handler handler;
+class PeerConnection implements Connection {
+	PeerConnection peer;
+	ConnectionHandler handler;
 
-	PeerListener(PeerListener peer) {
+	PeerConnection(PeerConnection peer) {
 		this.peer = peer;
 	}
 
 	@Override
-	public void setHandler(Handler handler) {
+	public void setHandler(ConnectionHandler handler) {
 		this.handler = handler;
 	}
 
@@ -47,23 +47,23 @@ class PeerListener implements Listener {
 	}
 }
 
-class ForwardListener extends PeerListener {
+class ForwardConnection extends PeerConnection {
 	private ForwardServer forward;
 
-	ForwardListener(ForwardServer forward) {
+	ForwardConnection(ForwardServer forward) {
 		super(null);
 		this.forward = forward;
 	}
 
 	@Override
 	public void onConnect() {
-		peer = new PeerListener(this);
-		Listener listener = peer;
-		for (Supplier<? extends Filter> serverFilter : forward.serverFilters) {
-			listener = listener.appendFilter(serverFilter.get());
+		peer = new PeerConnection(this);
+		Connection connection = peer;
+		for (Supplier<? extends ConnectionWrapper> serverFilter : forward.serverFilters) {
+			connection = connection.appendFilter(serverFilter.get());
 		}
 		try {
-			forward.connector.connect(listener, forward.remote);
+			forward.connector.connect(connection, forward.remote);
 		} catch (IOException e) {
 			peer = null;
 			handler.disconnect();
@@ -72,14 +72,14 @@ class ForwardListener extends PeerListener {
 }
 
 /** A port redirecting server. */
-public class ForwardServer implements ServerListener {
+public class ForwardServer implements ServerConnection {
 	Connector connector;
 	InetSocketAddress remote;
-	ArrayList<Supplier<? extends Filter>> serverFilters = new ArrayList<>();
+	ArrayList<Supplier<? extends ConnectionWrapper>> serverFilters = new ArrayList<>();
 
 	@Override
-	public Listener get() {
-		return new ForwardListener(this);
+	public Connection get() {
+		return new ForwardConnection(this);
 	}
 
 	/**
@@ -105,7 +105,7 @@ public class ForwardServer implements ServerListener {
 	}
 
 	/** @return A list of "ServerFilter"s applied to remote connections. */
-	public void appendRemoteFilter(Supplier<? extends Filter> serverFilter) {
+	public void appendRemoteFilter(Supplier<? extends ConnectionWrapper> serverFilter) {
 		serverFilters.add(serverFilter);
 	}
 }
