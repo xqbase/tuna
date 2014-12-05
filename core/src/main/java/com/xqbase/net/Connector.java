@@ -452,10 +452,8 @@ public class Connector implements Executor, AutoCloseable {
 	}
 
 	/** 
-	 * Executes a command in main thread.<br>
-	 * <b>Must be called in another thread.</b>
-	 *
-	 * @see #interrupt()
+	 * Executes a command in main thread.<p>
+	 * <b>Can be called in another thread.</b>
 	 */
 	@Override
 	public void execute(Runnable command) {
@@ -464,10 +462,8 @@ public class Connector implements Executor, AutoCloseable {
 	}
 
 	/**
-	 * Interrupts {@link #doEvents()} or {@link #doEvents(long)}.<br>
-	 * <b>Must be called in another thread.</b>
-	 *
-	 * @see #execute(Runnable)
+	 * Interrupts {@link #doEvents()} or {@link #doEvents(long)}.<p>
+	 * <b>Can be called in another thread.</b>
 	 */
 	public void interrupt() {
 		execute(() -> interrupted = true);

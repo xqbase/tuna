@@ -29,7 +29,7 @@ class PortMapPacket {
 		if (Bytes.toShort(b, off) != HEAD_TAG) {
 			throw new PacketException("Wrong Packet Head");
 		}
-		int packetSize = Bytes.toShort(b, off + 2) & 0xffff;
+		int packetSize = Bytes.toShort(b, off + 2) & 0xFFFF;
 		if (packetSize < HEAD_SIZE) {
 			throw new PacketException("Wrong Packet Size");
 		}
@@ -46,8 +46,8 @@ class PortMapPacket {
 	PortMapPacket(byte[] b, int off, int len) {
 		connId = Bytes.toInt(b, off + 4);
 		command = Bytes.toShort(b, off + 8);
-		port = Bytes.toShort(b, off + 10) & 0xffff;
-		size = Bytes.toShort(b, off + 12) & 0xffff;
+		port = Bytes.toShort(b, off + 10) & 0xFFFF;
+		size = Bytes.toShort(b, off + 12) & 0xFFFF;
 	}
 
 	PortMapPacket(int connId, int command, int port, int size) {
