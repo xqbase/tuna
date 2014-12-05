@@ -22,7 +22,7 @@ public class ZLibFilter extends PacketFilter {
 		if (Bytes.toShort(b, off + 2) % 31 != 0) {
 			throw new PacketException("Wrong Packet Head");
 		}
-		int size = Bytes.toShort(b, off) & 0xffff;
+		int size = Bytes.toShort(b, off) & 0xFFFF;
 		if (size < 4) {
 			throw new PacketException("Wrong Packet Size");
 		}
