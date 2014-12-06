@@ -1,6 +1,8 @@
 package com.xqbase.net.tools;
 
+import java.io.File;
 import java.io.IOException;
+import java.util.function.Supplier;
 
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
@@ -10,7 +12,7 @@ import javax.swing.JSlider;
 import javax.swing.JTextField;
 
 import com.xqbase.net.Connector;
-import com.xqbase.net.misc.DumpServerFilter;
+import com.xqbase.net.misc.DumpFilter;
 import com.xqbase.net.misc.ForwardServer;
 
 public class ForwardFrame extends ConnectorFrame {
@@ -69,19 +71,21 @@ public class ForwardFrame extends ConnectorFrame {
 		txtRemotePort.setEnabled(false);
 		cmbDump.setEnabled(false);
 
-		DumpServerFilter dff = new DumpServerFilter();
+		Supplier<DumpFilter> dump;
 		if (cmbDump.getSelectedItem().equals(DUMP_TEXT)) {
-			dff.setDumpText(true);
+			dump = () -> new DumpFilter().setDumpText(true);
 		} else if (cmbDump.getSelectedItem().equals(DUMP_FOLDER)) {
-			dff.setDumpStream(null);
-			dff.setDumpFolder(chooser.getSelectedFile());
+			File dumpFolder = chooser.getSelectedFile();
+			dump = () -> new DumpFilter().setDumpStream(null).setDumpFolder(dumpFolder);
+		} else {
+			dump = () -> new DumpFilter();
 		}
 
 		connector = new Connector();
 		try {
 			ForwardServer forward = new ForwardServer(connector, txtRemoteHost.getText(),
 					Integer.parseInt(txtRemotePort.getText()));
-			connector.add(forward.appendFilter(dff),
+			connector.add(forward.appendFilter(dump),
 					Integer.parseInt(txtPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
 			connector.close();

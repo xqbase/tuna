@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -201,7 +200,6 @@ public class PortMapServer implements ServerConnection, AutoCloseable {
 	LinkedHashSet<MapConnection> timeoutSet = new LinkedHashSet<>();
 	Connector connector;
 
-	private Executor executor;
 	private ScheduledFuture<?> future;
 
 	/**
@@ -214,7 +212,7 @@ public class PortMapServer implements ServerConnection, AutoCloseable {
 		// in main thread
 		future = timer.scheduleAtFixedRate(() -> {
 			// in timer thread
-			executor.execute(() -> {
+			connector.execute(() -> {
 				// in main thread
 				long now = System.currentTimeMillis();
 				Iterator<MapConnection> i = timeoutSet.iterator();
@@ -224,7 +222,7 @@ public class PortMapServer implements ServerConnection, AutoCloseable {
 					mapConn.disconnect();
 				}
 			});
-		}, 45000, 45000, TimeUnit.MILLISECONDS);
+		}, 1000, 1000, TimeUnit.MILLISECONDS);
 	}
 
 	@Override
@@ -232,11 +230,6 @@ public class PortMapServer implements ServerConnection, AutoCloseable {
 		MapConnection mapConnection = new MapConnection(this);
 		timeoutSet.add(mapConnection);
 		return mapConnection.appendFilter(new PacketFilter(PortMapPacket.getParser()));
-	}
-
-	@Override
-	public void setExecutor(Executor executor) {
-		this.executor = executor;
 	}
 
 	@Override

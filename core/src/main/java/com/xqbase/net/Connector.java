@@ -336,7 +336,6 @@ public class Connector implements Executor, AutoCloseable {
 	public AutoCloseable add(ServerConnection serverConnection,
 			InetSocketAddress addr) throws IOException {
 		Server server = new Server(serverConnection, addr);
-		serverConnection.setExecutor(this);
 		server.connector = this;
 		try {
 			server.selectionKey = server.serverSocketChannel.
@@ -354,6 +353,7 @@ public class Connector implements Executor, AutoCloseable {
 	/** Consume events until interrupted */
 	public void doEvents() {
 		while (!isInterrupted()) {
+			// TODO Timer
 			doEvents(-1);
 		}
 	}

@@ -22,7 +22,7 @@ public class DumpFilter extends ConnectionWrapper {
 
 	private PrintStream dumpStream = System.out;
 	private File dumpFolder = null;
-	private boolean dumpText = false, useClientMode = false;
+	private boolean dumpText = false, clientMode = false;
 
 	private PrintStream out = null;
 	private FileOutputStream outSent, outRecv;
@@ -116,29 +116,29 @@ public class DumpFilter extends ConnectionWrapper {
 	}
 
 	/**
-	 * @param useClientMode - Whether dump local address (true) or remote address (false).
+	 * @param clientMode - Whether dump local address (true) or remote address (false).
 	 * @return The DumpFilter itself.
 	 */
-	public DumpFilter setUseClientMode(boolean useClientMode) {
-		this.useClientMode = useClientMode;
+	public DumpFilter setClientMode(boolean clientMode) {
+		this.clientMode = clientMode;
 		return this;
 	}
 
 	@Override
 	public void send(byte[] b, int off, int len) {
 		super.send(b, off, len);
-		dump(b, off, len, useClientMode);
+		dump(b, off, len, clientMode);
 	}
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		dump(b, off, len, !useClientMode);
+		dump(b, off, len, !clientMode);
 		super.onRecv(b, off, len);
 	}
 
 	@Override
 	public void onConnect() {
-		if (useClientMode) {
+		if (clientMode) {
 			host = getLocalAddr();
 			port = getLocalPort();
 		} else {
@@ -161,13 +161,13 @@ public class DumpFilter extends ConnectionWrapper {
 	@Override
 	public void onDisconnect() {
 		super.onDisconnect();
-		disconnect(!useClientMode);
+		disconnect(!clientMode);
 	}
 
 	@Override
 	public void disconnect() {
 		super.disconnect();
-		disconnect(useClientMode);
+		disconnect(clientMode);
 	}
 
 	private void disconnect(boolean active) {
