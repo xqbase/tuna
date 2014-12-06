@@ -1,1 +1,1 @@
-start javaw -cp lib/net.jar com.xqbase.net.tools.ForwardFrame
+start java -cp lib/net.jar com.xqbase.net.tools.ForwardFrame
