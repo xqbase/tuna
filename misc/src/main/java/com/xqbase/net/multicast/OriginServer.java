@@ -7,11 +7,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.function.Supplier;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionHandler;
-import com.xqbase.net.ConnectionWrapper;
 import com.xqbase.net.ServerConnection;
 import com.xqbase.net.packet.PacketFilter;
 import com.xqbase.net.util.Bytes;
@@ -133,10 +131,7 @@ class EdgeConnection implements Connection {
 				onDisconnect();
 				return;
 			}
-			Connection connection = origin.getVirtual();
-			for (Supplier<? extends ConnectionWrapper> serverFilter : origin.virtualServerFilters) {
-				connection = connection.appendFilter(serverFilter.get());
-			}
+			Connection connection = origin.getVirtual(null);
 			VirtualHandler virtualHandler = new VirtualHandler(this,
 					connId, Bytes.sub(b, off + 16, len - 16));
 			connection.setHandler(virtualHandler);
@@ -288,7 +283,7 @@ class MulticastHandler implements ConnectionHandler {
  */
 public abstract class OriginServer implements ServerConnection {
 	/** @return A virtual {@link Connection} that belongs to the origin server. */
-	protected abstract Connection getVirtual();
+	protected abstract Connection getVirtual(Object multicastKey);
 
 	LinkedHashMap<Connection, VirtualHandler> virtualMap = new LinkedHashMap<>();
 
@@ -302,26 +297,17 @@ public abstract class OriginServer implements ServerConnection {
 		return virtualMap.keySet();
 	}
 
-	ArrayList<Supplier<? extends ConnectionWrapper>> virtualServerFilters = new ArrayList<>();
-
-	/** Adds a {@link ConnectionWrapper} as a filter into the network end of each virtual connection */
-	public void appendVirtualFilter(Supplier<? extends ConnectionWrapper> serverFilter) {
-		virtualServerFilters.add(serverFilter);
-	}
-
 	/**
 	 * The broadcasting to a large number of virtual connections can be done via a multicast
-	 * connection, which can save the network bandwidth by the multicast approach.
+	 * connection, which can save the network bandwidth by the multicast approach.<p>
+	 * TODO For detailed usage, see {@link TestMulticast}
 	 * @param connections - A large number of virtual connections where data is broadcasted.
-	 * @return The multicast handler.
 	 */
-	public ConnectionHandler createMulticast(Iterable<? extends Connection> connections) {
-		ConnectionHandler handler = new MulticastHandler(this, connections);
-		for (int i = virtualServerFilters.size() - 1; i >= 0; i --) {
-			ConnectionWrapper filter = virtualServerFilters.get(i).get();
-			filter.setHandler(handler);
-			handler = filter;
-		}
-		return handler;
+	public Object getMulticast(Iterable<? extends Connection> connections) {
+		Object key = new Object();
+		getVirtual(key).setHandler(new MulticastHandler(this, connections));
+		return key;
 	}
+
+	// TODO Check Edge Timeout
 }

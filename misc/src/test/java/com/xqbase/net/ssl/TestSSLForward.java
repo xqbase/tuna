@@ -4,10 +4,13 @@ import java.security.KeyStore;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.xqbase.net.Connection;
+import com.xqbase.net.ConnectionWrapper;
 import com.xqbase.net.Connector;
 import com.xqbase.net.misc.BroadcastServer;
-import com.xqbase.net.misc.DumpServerFilter;
+import com.xqbase.net.misc.DumpFilter;
 import com.xqbase.net.misc.ForwardServer;
+import com.xqbase.net.util.Bytes;
 
 public class TestSSLForward {
 	public static void main(String[] args) throws Exception {
@@ -22,18 +25,30 @@ public class TestSSLForward {
 		try (
 			Connector connector = new Connector();
 		) {
-			BroadcastServer broadcastServer = new BroadcastServer(false);
-			SSLServerFilter sslffServer = new SSLServerFilter(executor, SSLUtil.
-					getSSLContext(certKey, certMap), SSLFilter.SERVER_WANT_AUTH);
-			SSLServerFilter sslffClient = new SSLServerFilter(executor, SSLUtil.
-					getSSLContext(certKey, certMap), SSLFilter.CLIENT);
-			connector.add(broadcastServer.appendFilter(sslffServer).
-					appendFilter(new DumpServerFilter()), 2323);
+			BroadcastServer broadcastServer = new BroadcastServer(false) {
+				@Override
+				public Connection get() {
+					SSLFilter sslf = new SSLFilter(executor, SSLUtil.
+							getSSLContext(certKey, certMap), SSLFilter.SERVER_WANT_AUTH);
+					Connection connection = super.get().
+							appendFilter(new ConnectionWrapper() {
+						@Override
+						public void onConnect() {
+							super.onConnect();
+							System.out.println("ssl_session_id=" +
+									Bytes.toHexLower(sslf.getSession().getId()));
+						}
+					}).appendFilter(sslf);
+					return connection;
+				}
+			};
+			connector.add(broadcastServer.appendFilter(() -> new DumpFilter()), 2323);
 
 			ForwardServer forwardServer = new ForwardServer(connector, "localhost", 2323);
-			forwardServer.appendRemoteFilter(sslffClient);
-			forwardServer.appendRemoteFilter(new DumpServerFilter().
-					setDumpStream(System.err).setUseClientMode(true));
+			forwardServer.appendRemoteFilter(() -> new SSLFilter(executor,
+					SSLUtil.getSSLContext(certKey, certMap), SSLFilter.CLIENT));
+			forwardServer.appendRemoteFilter(() -> new DumpFilter().
+					setDumpStream(System.err).setClientMode(true));
 			connector.add(forwardServer, 2424);
 
 			connector.doEvents();

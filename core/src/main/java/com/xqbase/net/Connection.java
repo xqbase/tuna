@@ -22,6 +22,7 @@ public interface Connection {
 	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
 	public default void onDisconnect() {/**/}
 
+	// TODO append filter after onConnect ?
 	/** Adds a {@link ConnectionWrapper} as a filter into the network end of the connection. */
 	public default Connection appendFilter(ConnectionWrapper filter) {
 		filter.setConnection(this);
