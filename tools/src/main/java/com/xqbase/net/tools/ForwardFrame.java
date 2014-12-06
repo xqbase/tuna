@@ -72,20 +72,27 @@ public class ForwardFrame extends ConnectorFrame {
 		cmbDump.setEnabled(false);
 
 		Supplier<DumpFilter> dump;
-		if (cmbDump.getSelectedItem().equals(DUMP_TEXT)) {
+		switch ((String) cmbDump.getSelectedItem()) {
+		case DUMP_BINARY:
+			dump = () -> new DumpFilter();
+			break;
+		case DUMP_TEXT:
 			dump = () -> new DumpFilter().setDumpText(true);
-		} else if (cmbDump.getSelectedItem().equals(DUMP_FOLDER)) {
+			break;
+		case DUMP_FOLDER:
 			File dumpFolder = chooser.getSelectedFile();
 			dump = () -> new DumpFilter().setDumpStream(null).setDumpFolder(dumpFolder);
-		} else {
-			dump = () -> new DumpFilter();
+			break;
+		default: // DUMP_NONE
+			dump = null;
 		}
+		cmbDump.getSelectedItem().equals(DUMP_FOLDER);
 
 		connector = new Connector();
 		try {
 			ForwardServer forward = new ForwardServer(connector, txtRemoteHost.getText(),
 					Integer.parseInt(txtRemotePort.getText()));
-			connector.add(forward.appendFilter(dump),
+			connector.add(dump == null ? forward : forward.appendFilter(dump),
 					Integer.parseInt(txtPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
 			connector.close();
@@ -93,9 +100,6 @@ public class ForwardFrame extends ConnectorFrame {
 			stop();
 			JOptionPane.showMessageDialog(this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-		if (cmbDump.getSelectedItem().equals(DUMP_NONE)) {
 			return;
 		}
 	}
