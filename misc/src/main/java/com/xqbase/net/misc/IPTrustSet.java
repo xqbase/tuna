@@ -29,7 +29,6 @@ public class IPTrustSet extends HashSet<String> implements Supplier<ConnectionWr
 		return new ConnectionWrapper() {
 			@Override
 			public void onConnect() {
-				System.out.println(getRemoteAddr());
 				if (contains(getRemoteAddr())) {
 					super.onConnect();
 				} else {

@@ -200,7 +200,7 @@ public class SSLFilter extends ConnectionWrapper {
 		while ((task = ssle.getDelegatedTask()) != null) {
 			task.run();
 		}
-		execute(() -> {
+		invokeLater(() -> {
 			hs = ssle.getHandshakeStatus();
 			try {
 				doHandshake();

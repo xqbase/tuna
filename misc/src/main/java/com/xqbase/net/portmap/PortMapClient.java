@@ -2,14 +2,12 @@ package com.xqbase.net.portmap;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import com.xqbase.net.Connector;
 import com.xqbase.net.ConnectionWrapper;
 import com.xqbase.net.ConnectionHandler;
 import com.xqbase.net.Connection;
+import com.xqbase.net.TimerHandler;
 import com.xqbase.net.packet.PacketFilter;
 import com.xqbase.net.util.Bytes;
 
@@ -58,13 +56,12 @@ public class PortMapClient extends ConnectionWrapper {
 	 * @param publicPort - The port to open in {@link PortMapServer}
 	 * @param privateHost - The host of the mapped private server.
 	 * @param privatePort - The port of the mapped private server.
-	 * @param timer - The {@link ScheduledExecutorService} to send heart beat packet.
 	 * @see PortMapServer
 	 */
-	public PortMapClient(Connector connector, int publicPort, String privateHost,
-			int privatePort, ScheduledExecutorService timer) {
+	public PortMapClient(Connector connector, int publicPort,
+			String privateHost, int privatePort) {
 		setConnection(new Connection() {
-			private ScheduledFuture<?> future = null;
+			private TimerHandler.Closeable closeable = null;
 
 			@Override
 			public void onRecv(byte[] b, int off, int len) {
@@ -115,21 +112,15 @@ public class PortMapClient extends ConnectionWrapper {
 			public void onConnect() {
 				send(new PortMapPacket(0,
 						PortMapPacket.CLIENT_OPEN, publicPort, 0).getHead());
-				// in main thread
-				future = timer.scheduleAtFixedRate(() -> {
-					// in timer thread
-					execute(() -> {
-						// in main thread
-						send(new PortMapPacket(0, PortMapPacket.CLIENT_PING, 0, 0).getHead());
-					});
-				}, 45000, 45000, TimeUnit.MILLISECONDS);
+				closeable = scheduleDelayed(() -> {
+					send(new PortMapPacket(0, PortMapPacket.CLIENT_PING, 0, 0).getHead());
+				}, 45000, 45000);
 			}
 
 			@Override
 			public void onDisconnect() {
-				if (future != null) {
-					future.cancel(false);
-					future = null;
+				if (closeable != null) {
+					closeable.close();
 				}
 				for (PrivateConnection conn : connMap.values()) {
 					conn.handler.disconnect();

@@ -48,7 +48,7 @@ public class DoSServerFilter implements Supplier<ConnectionWrapper> {
 
 	/**
 	 * Creates an DoSServerFilter with the given parameters
-	 * 
+	 *
 	 * @param period - The period, in milliseconds.
 	 * @param connections - Maximum concurrent connections the same IP.
 	 * @param requests - Maximum requests (connection events) in the period from the same IP.

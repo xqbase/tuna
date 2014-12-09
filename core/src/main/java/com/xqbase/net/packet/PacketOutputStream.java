@@ -5,7 +5,7 @@ import java.io.OutputStream;
 
 import com.xqbase.net.util.ByteArrayQueue;
 
-/** An {@link OutputStream} to parse and consume packets. */ 
+/** An {@link OutputStream} to parse and consume packets. */
 public class PacketOutputStream extends OutputStream {
 	private int packetSize = 0;
 	private ByteArrayQueue baq = new ByteArrayQueue();

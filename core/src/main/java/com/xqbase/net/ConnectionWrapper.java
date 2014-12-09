@@ -2,7 +2,7 @@ package com.xqbase.net;
 
 /**
  * Provides a wrapper for a {@link Connection} and a {@link ConnectionHandler}.<p>
- * 
+ *
  * A <b>ConnectionWrapper</b> can filter sent data and disconnecting signals
  * from the application side to the network side,
  * or filter received data, connecting and disconnecting events
@@ -98,8 +98,18 @@ public class ConnectionWrapper implements Connection, ConnectionHandler {
 	}
 
 	@Override
-	public void execute(Runnable command) {
-		handler.execute(command);
+	public Closeable postAtTime(Runnable runnable, long uptime) {
+		return handler.postAtTime(runnable, uptime);
+	}
+
+	@Override
+	public void invokeLater(Runnable runnable) {
+		handler.invokeLater(runnable);
+	}
+
+	@Override
+	public void execute(Runnable runnable) {
+		handler.execute(runnable);
 	}
 
 	/** Only for debug. */

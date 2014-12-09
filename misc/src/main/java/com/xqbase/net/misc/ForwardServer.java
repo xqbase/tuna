@@ -1,7 +1,6 @@
 package com.xqbase.net.misc;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.function.Supplier;
 
@@ -63,7 +62,7 @@ class ForwardConnection extends PeerConnection {
 			connection = connection.appendFilter(serverFilter.get());
 		}
 		try {
-			forward.connector.connect(connection, forward.remote);
+			forward.connector.connect(connection, forward.host, forward.port);
 		} catch (IOException e) {
 			peer = null;
 			handler.disconnect();
@@ -74,7 +73,8 @@ class ForwardConnection extends PeerConnection {
 /** A port redirecting server. */
 public class ForwardServer implements ServerConnection {
 	Connector connector;
-	InetSocketAddress remote;
+	String host;
+	int port;
 	ArrayList<Supplier<? extends ConnectionWrapper>> serverFilters = new ArrayList<>();
 
 	@Override
@@ -85,23 +85,14 @@ public class ForwardServer implements ServerConnection {
 	/**
 	 * Creates a ForwardServer.
 	 * @param connector - A connector which remote connections registered to.
-	 * @param remoteHost - The remote (redirected) host.
-	 * @param remotePort - The remote (redirected) port.
+	 * @param host - The remote (forwarded) host.
+	 * @param port - The remote (forwarded) port.
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	public ForwardServer(Connector connector, String remoteHost, int remotePort) throws IOException {
+	public ForwardServer(Connector connector, String host, int port) {
 		this.connector = connector;
-		remote = new InetSocketAddress(remoteHost, remotePort);
-	}
-
-	/**
-	 * Creates a ForwardServer.
-	 * @param connector - A connector which remote connections registered to.
-	 * @param remote - The remote (redirected) address.
-	 */
-	public ForwardServer(Connector connector, InetSocketAddress remote) {
-		this.connector = connector;
-		this.remote = remote;
+		this.host = host;
+		this.port = port;
 	}
 
 	/** @return A list of "ServerFilter"s applied to remote connections. */

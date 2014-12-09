@@ -19,7 +19,6 @@ import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
@@ -39,7 +38,6 @@ public abstract class ConnectorFrame extends JFrame {
 	protected final MenuItem startMenuItem = new MenuItem("Start");
 	protected final JButton startButton = new JButton("Start");
 	protected final JButton exitButton = new JButton("Exit");
-	protected final ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1);
 	protected Connector connector = null;
 
 	private Insets insets = new Insets(0, 0, 0, 0);
@@ -186,7 +184,6 @@ public abstract class ConnectorFrame extends JFrame {
 					if (connector != null) {
 						connector.close();
 					}
-					timer.shutdown();
 				}
 			}
 		});
