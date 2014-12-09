@@ -2,6 +2,8 @@ package com.xqbase.net.ssl;
 
 import java.security.KeyStore;
 
+import javax.net.ssl.SSLContext;
+
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionWrapper;
 import com.xqbase.net.Connector;
@@ -18,13 +20,13 @@ public class TestSSLForward {
 		CertKey certKey = new CertKey(keyStore, "changeit");
 		CertMap certMap = new CertMap();
 		certMap.add(TestSSLForward.class.getResourceAsStream("/localhost.cer"));
+		SSLContext sslc = SSLUtil.getSSLContext(certKey, certMap);
 
 		try (Connector connector = new Connector()) {
 			BroadcastServer broadcastServer = new BroadcastServer(false) {
 				@Override
 				public Connection get() {
-					SSLFilter sslf = new SSLFilter(connector, SSLUtil.
-							getSSLContext(certKey, certMap), SSLFilter.SERVER_WANT_AUTH);
+					SSLFilter sslf = new SSLFilter(connector, sslc, SSLFilter.SERVER_WANT_AUTH);
 					Connection connection = super.get().
 							appendFilter(new ConnectionWrapper() {
 						@Override
