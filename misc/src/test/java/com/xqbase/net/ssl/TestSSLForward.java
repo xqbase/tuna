@@ -1,8 +1,6 @@
 package com.xqbase.net.ssl;
 
 import java.security.KeyStore;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionWrapper;
@@ -21,14 +19,11 @@ public class TestSSLForward {
 		CertMap certMap = new CertMap();
 		certMap.add(TestSSLForward.class.getResourceAsStream("/localhost.cer"));
 
-		ExecutorService executor = Executors.newCachedThreadPool();
-		try (
-			Connector connector = new Connector();
-		) {
+		try (Connector connector = new Connector()) {
 			BroadcastServer broadcastServer = new BroadcastServer(false) {
 				@Override
 				public Connection get() {
-					SSLFilter sslf = new SSLFilter(executor, SSLUtil.
+					SSLFilter sslf = new SSLFilter(connector, SSLUtil.
 							getSSLContext(certKey, certMap), SSLFilter.SERVER_WANT_AUTH);
 					Connection connection = super.get().
 							appendFilter(new ConnectionWrapper() {
@@ -45,7 +40,7 @@ public class TestSSLForward {
 			connector.add(broadcastServer.appendFilter(() -> new DumpFilter()), 2323);
 
 			ForwardServer forwardServer = new ForwardServer(connector, "localhost", 2323);
-			forwardServer.appendRemoteFilter(() -> new SSLFilter(executor,
+			forwardServer.appendRemoteFilter(() -> new SSLFilter(connector,
 					SSLUtil.getSSLContext(certKey, certMap), SSLFilter.CLIENT));
 			forwardServer.appendRemoteFilter(() -> new DumpFilter().
 					setDumpStream(System.err).setClientMode(true));
@@ -53,6 +48,5 @@ public class TestSSLForward {
 
 			connector.doEvents();
 		}
-		executor.shutdown();
 	}
 }

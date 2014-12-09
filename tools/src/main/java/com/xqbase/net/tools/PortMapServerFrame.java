@@ -38,7 +38,7 @@ public class PortMapServerFrame extends ConnectorFrame {
 		txtMapPort.setEnabled(false);
 
 		connector = new Connector();
-		server = new PortMapServer(connector, timer);
+		server = new PortMapServer(connector);
 		try {
 			connector.add(server, Integer.parseInt(txtMapPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {

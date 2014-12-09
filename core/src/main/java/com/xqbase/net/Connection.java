@@ -1,9 +1,14 @@
 package com.xqbase.net;
 
 public interface Connection {
-	/** @param handler */
+	/**
+	 * A {@link ConnectionHandler} will be set by {@link Connector}
+	 * when connection is ready to establish.
+	 *
+	 * @param handler
+	 */
 	public default void setHandler(ConnectionHandler handler) {/**/}
-	/** 
+	/**
 	 * Consumes received data in the APPLICATION end of the connection.
 	 *
 	 * @param b
@@ -11,7 +16,7 @@ public interface Connection {
 	 * @param len
 	 */
 	public default void onRecv(byte[] b, int off, int len) {/**/}
-	/** 
+	/**
 	 * Consumes queued/completed sending events in the APPLICATION end of the connection.
 	 *
 	 * @param queued
@@ -19,7 +24,10 @@ public interface Connection {
 	public default void onSend(boolean queued) {/**/}
 	/** Consumes connecting events in the APPLICATION end of the connection. */
 	public default void onConnect() {/**/}
-	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
+	/**
+	 * Consumes passive disconnecting events in the APPLICATION end of the connection.<p>
+	 * <b>Check <code>handler</code> before use because {@link #setHandler()} is not surely called.</b>
+	 */
 	public default void onDisconnect() {/**/}
 
 	// TODO append filter after onConnect ?

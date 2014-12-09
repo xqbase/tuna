@@ -6,14 +6,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
-import com.xqbase.net.Connector;
-import com.xqbase.net.ConnectionHandler;
 import com.xqbase.net.Connection;
+import com.xqbase.net.ConnectionHandler;
+import com.xqbase.net.Connector;
 import com.xqbase.net.ServerConnection;
+import com.xqbase.net.TimerHandler;
 import com.xqbase.net.packet.PacketFilter;
 import com.xqbase.net.util.Bytes;
 
@@ -101,7 +99,7 @@ class PublicServer implements ServerConnection {
 
 class MapConnection implements Connection {
 	private PortMapServer mapServer;
-	private AutoCloseable publicCloseable;
+	private Connector.Closeable publicCloseable;
 
 	ConnectionHandler handler;
 	long accessed = System.currentTimeMillis();
@@ -175,9 +173,7 @@ class MapConnection implements Connection {
 		if (publicServer == null) {
 			return;
 		}
-		try {
-			publicCloseable.close();
-		} catch (Exception e) {/**/}
+		publicCloseable.close();
 		for (PublicConnection connection : publicServer.connMap.values().
 				toArray(new PublicConnection[0])) {
 			// "disconnect()" might change "connMap"
@@ -200,29 +196,23 @@ public class PortMapServer implements ServerConnection, AutoCloseable {
 	LinkedHashSet<MapConnection> timeoutSet = new LinkedHashSet<>();
 	Connector connector;
 
-	private ScheduledFuture<?> future;
+	private TimerHandler.Closeable closeable;
 
 	/**
 	 * Creates a PortMapServer.
 	 * @param connector - The {@link Connector} which public connections are registered to.
-	 * @param timer - The {@link ScheduledExecutorService} to clear expired connections.
 	 */
-	public PortMapServer(Connector connector, ScheduledExecutorService timer) {
+	public PortMapServer(Connector connector) {
 		this.connector = connector;
-		// in main thread
-		future = timer.scheduleAtFixedRate(() -> {
-			// in timer thread
-			connector.execute(() -> {
-				// in main thread
-				long now = System.currentTimeMillis();
-				Iterator<MapConnection> i = timeoutSet.iterator();
-				MapConnection mapConn;
-				while (i.hasNext() && now > (mapConn = i.next()).accessed + 60000) {
-					i.remove();
-					mapConn.disconnect();
-				}
-			});
-		}, 1000, 1000, TimeUnit.MILLISECONDS);
+		closeable = connector.scheduleDelayed(() -> {
+			long now = System.currentTimeMillis();
+			Iterator<MapConnection> i = timeoutSet.iterator();
+			MapConnection mapConn;
+			while (i.hasNext() && now > (mapConn = i.next()).accessed + 60000) {
+				i.remove();
+				mapConn.disconnect();
+			}
+		}, 1000, 1000);
 	}
 
 	@Override
@@ -234,6 +224,6 @@ public class PortMapServer implements ServerConnection, AutoCloseable {
 
 	@Override
 	public void close() {
-		future.cancel(false);
+		closeable.close();
 	}
 }

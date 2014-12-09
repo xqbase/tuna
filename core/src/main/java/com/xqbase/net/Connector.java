@@ -1,15 +1,24 @@
 package com.xqbase.net;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 import com.xqbase.net.util.ByteArrayQueue;
 
@@ -93,6 +102,16 @@ class Client {
 			@Override
 			public long getBytesSent() {
 				return bytesSent;
+			}
+
+			@Override
+			public TimerHandler.Closeable postAtTime(Runnable r, long uptime) {
+				return connector.postAtTime(r, uptime);
+			}
+
+			@Override
+			public void invokeLater(Runnable runnable) {
+				connector.invokeLater(runnable);
 			}
 
 			@Override
@@ -203,7 +222,7 @@ class Client {
 
 /**
  * The encapsulation of a {@link ServerSocketChannel} and its {@link SelectionKey},
- * which corresponds to a TCP Server Socket 
+ * which corresponds to a TCP Server Socket
  */
 class Server {
 	ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
@@ -211,9 +230,9 @@ class Server {
 	ServerConnection serverConnection;
 	Connector connector;
 
-	/** 
+	/**
 	 * Opens a listening port and binds to a given address.
-	 * @param addr - The IP address to bind and the port to listen. 
+	 * @param addr - The IP address to bind and the port to listen.
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
 	Server(ServerConnection serverConnection,
@@ -236,17 +255,43 @@ class Server {
 	}
 }
 
+class Timer implements Comparable<Timer> {
+	long uptime;
+	long id;
+
+	@Override
+	public int compareTo(Timer o) {
+		int result = Long.compare(uptime, o.uptime);
+		return result == 0 ? Long.compare(id, o.id) : result;
+	}
+
+	@Override
+	public String toString() {
+		return new Date(uptime) + "/" + id;
+	}
+}
+
 /**
  * The encapsulation of {@link Selector},
  * which makes {@link Client} and {@link Server} working.<p>
  */
-public class Connector implements Executor, AutoCloseable {
+public class Connector implements TimerHandler, EventQueue, Executor, AutoCloseable {
+	public interface Closeable extends AutoCloseable {
+		@Override
+		public void close();
+	}
+
 	private static final int BUFFER_SIZE = 32768;
+
+	private static Pattern hostName = Pattern.compile("[a-zA-Z]");
+	private static long nextId = 0;
 
 	private Selector selector;
 	private boolean interrupted = false;
 	private byte[] buffer = new byte[BUFFER_SIZE];
+	private TreeMap<Timer, Runnable> timerMap = new TreeMap<>();
 	private ConcurrentLinkedQueue<Runnable> eventQueue = new ConcurrentLinkedQueue<>();
+	private ExecutorService executor = Executors.newCachedThreadPool();
 
 	{
 		try {
@@ -272,32 +317,34 @@ public class Connector implements Executor, AutoCloseable {
 	 * @throws IOException If the remote address is invalid.
 	 * @see #connect(Connection, InetSocketAddress)
 	 */
-	public void connect(Connection connection,
-			String host, int port) throws IOException {
-		connect(connection, new InetSocketAddress(host, port));
-	}
-
-	private static void closeSocketChannel(SocketChannel socketChannel)
-			throws IOException {
-		socketChannel.close();
+	public void connect(Connection connection, String host, int port) throws IOException {
+		if (host.indexOf(':') >= 0 || !hostName.matcher(host).find()) {
+			connect(connection, new InetSocketAddress(InetAddress.getByName(host), port));
+			return;
+		}
+		execute(() -> {
+			try {
+				InetAddress addr = InetAddress.getByName(host);
+				invokeLater(() -> connect(connection, new InetSocketAddress(addr, port)));
+			} catch (IOException e) {
+				invokeLater(connection::onDisconnect);
+			}
+		});
 	}
 
 	/**
 	 * registers a {@link Client} and connects to a remote address
 	 *
-	 * @throws IOException If the remote address is invalid.
 	 * @see #connect(Connection, String, int)
 	 */
-	public void connect(Connection connection,
-			InetSocketAddress remote) throws IOException {
-		SocketChannel socketChannel = SocketChannel.open();
-		socketChannel.configureBlocking(false);
+	private void connect(Connection connection, InetSocketAddress remote) {
+		SocketChannel socketChannel;
 		try {
+			socketChannel = SocketChannel.open();
+			socketChannel.configureBlocking(false);
 			socketChannel.connect(remote);
 		} catch (IOException e) {
-			// Evade resource leak warning
-			closeSocketChannel(socketChannel);
-			throw e;
+			throw new RuntimeException(e);
 		}
 		Client client = new Client(connection);
 		client.socketChannel = socketChannel;
@@ -307,33 +354,34 @@ public class Connector implements Executor, AutoCloseable {
 
 	/**
 	 * Registers a {@link ServerConnection}
-	 * 
+	 *
 	 * @param serverConnection
-	 * @see #add(ServerConnection, InetSocketAddress) 
+	 * @param host
+	 * @param port
+	 * @return an {@link Closeable} that will unregister the <code>serverConnection</code>.
+	 *         The connector will automatically unregister all
+	 *         <code>serverConnection</code>s when closing.
 	 */
-	public AutoCloseable add(ServerConnection serverConnection,
+	public Closeable add(ServerConnection serverConnection,
 			String host, int port) throws IOException {
 		return add(serverConnection, new InetSocketAddress(host, port));
 	}
 
 	/**
 	 * Registers a {@link ServerConnection}
-	 * 
+	 *
 	 * @param serverConnection
-	 * @see #add(ServerConnection, InetSocketAddress) 
+	 * @param port
+	 * @return an {@link Closeable} that will unregister the <code>serverConnection</code>.
+	 *         The connector will automatically unregister all
+	 *         <code>serverConnection</code>s when closing.
 	 */
-	public AutoCloseable add(ServerConnection serverConnection, int port) throws IOException {
+	public Closeable add(ServerConnection serverConnection,
+			int port) throws IOException {
 		return add(serverConnection, new InetSocketAddress(port));
 	}
 
-	/**
-	 * Registers a {@link ServerConnection}
-	 * 
-	 * @param serverConnection
-	 * @return an {@link AutoCloseable} that will unregister the <code>serverConnection</code>.
-	 *         The connector will automatically unregister all <code>serverConnection</code>s when closing. 
-	 */
-	public AutoCloseable add(ServerConnection serverConnection,
+	private Closeable add(ServerConnection serverConnection,
 			InetSocketAddress addr) throws IOException {
 		Server server = new Server(serverConnection, addr);
 		server.connector = this;
@@ -353,12 +401,31 @@ public class Connector implements Executor, AutoCloseable {
 	/** Consume events until interrupted */
 	public void doEvents() {
 		while (!isInterrupted()) {
-			// TODO Timer
-			doEvents(-1);
+			Iterator<Map.Entry<Timer, Runnable>> it = timerMap.entrySet().iterator();
+			if (it.hasNext()) {
+				long timeout = it.next().getKey().uptime - System.currentTimeMillis();
+				doEvents(timeout > 0 ? timeout : 0);
+			} else {
+				doEvents(-1);
+			}
 		}
 	}
 
 	private void invokeQueue() {
+		long now = System.currentTimeMillis();
+		ArrayList<Runnable> runnables = new ArrayList<>();
+		Iterator<Map.Entry<Timer, Runnable>> it = timerMap.entrySet().iterator();
+		while (it.hasNext()) {
+			Map.Entry<Timer, Runnable> entry = it.next();
+			if (entry.getKey().uptime <= now) {
+				runnables.add(entry.getValue());
+				it.remove();
+			}
+		}
+		// call run() after iteration since run() may change timerMap
+		for (Runnable runnable : runnables) {
+			runnable.run();
+		}
 		Runnable runnable;
 		while ((runnable = eventQueue.poll()) != null) {
 			runnable.run();
@@ -451,22 +518,33 @@ public class Connector implements Executor, AutoCloseable {
 		return true;
 	}
 
-	/** 
-	 * Executes a command in main thread.<p>
-	 * <b>Can be called in another thread.</b>
-	 */
 	@Override
-	public void execute(Runnable command) {
-		eventQueue.offer(command);
+	public TimerHandler.Closeable postAtTime(Runnable runnable, long uptime) {
+		Timer timer = new Timer();
+		timer.uptime = uptime;
+		timer.id = nextId;
+		nextId ++;
+		timerMap.put(timer, runnable);
+		return () -> timerMap.remove(timer);
+	}
+
+	@Override
+	public void invokeLater(Runnable runnable) {
+		eventQueue.offer(runnable);
 		selector.wakeup();
+	}
+
+	@Override
+	public void execute(Runnable runnable) {
+		executor.execute(runnable);
 	}
 
 	/**
 	 * Interrupts {@link #doEvents()} or {@link #doEvents(long)}.<p>
-	 * <b>Can be called in another thread.</b>
+	 * <b>Can be called outside main thread.</b>
 	 */
 	public void interrupt() {
-		execute(() -> interrupted = true);
+		invokeLater(() -> interrupted = true);
 	}
 
 	/**
@@ -485,6 +563,7 @@ public class Connector implements Executor, AutoCloseable {
 	 */
 	@Override
 	public void close() {
+		executor.shutdown();
 		for (SelectionKey key : selector.keys()) {
 			Object o = key.attachment();
 			if (o instanceof Server) {

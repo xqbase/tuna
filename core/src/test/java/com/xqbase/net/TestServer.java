@@ -1,8 +1,6 @@
 package com.xqbase.net;
 
 import java.io.IOException;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TestServer {
@@ -42,19 +40,19 @@ public class TestServer {
 				}
 			};
 		}, 2626);
-		ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1);
 		long startTime = System.currentTimeMillis();
-		timer.scheduleAtFixedRate(() -> {
+		TimerHandler.Closeable[] closeable = new TimerHandler.Closeable[] {null};
+		closeable[0] = connector.scheduleDelayed(() -> {
 			System.out.print("Time: " +
 					(System.currentTimeMillis() - startTime) + ", ");
 			System.out.print("Accepts: " + accepts + ", ");
 			System.out.print("Errors: " + errors + ", ");
 			System.out.println("Requests: " + requests);
-			if (accepts.get() > 10000) {
-				connector.interrupt();
+			if (accepts.get() > 5000) {
+				closeable[0].close();
+				connector.postDelayed(connector::interrupt, 10000);
 			}
-		}, 0, 1000, TimeUnit.MILLISECONDS);
+		}, 0, 1000);
 		connector.doEvents();
-		timer.shutdown();
 	}
 }

@@ -41,6 +41,7 @@ public class TestClient {
 				System.out.println("Responses: " + responses);
 			}
 			connector.connect(new Connection() {
+				private boolean connected = false;
 				private ConnectionHandler handler;
 
 				@Override
@@ -55,14 +56,17 @@ public class TestClient {
 
 				@Override
 				public void onConnect() {
+					connected = true;
 					handlerSet.add(handler);
 					connections.incrementAndGet();
 				}
 
 				@Override
 				public void onDisconnect() {
-					handlerSet.remove(handler);
-					errors.incrementAndGet();
+					if (connected) {
+						handlerSet.remove(handler);
+						errors.incrementAndGet();
+					}
 				}
 			}, "localhost", 2626);
 		}

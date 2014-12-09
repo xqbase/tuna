@@ -5,13 +5,11 @@ import java.net.UnknownHostException;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionHandler;
 import com.xqbase.net.ServerConnection;
+import com.xqbase.net.TimerHandler;
 import com.xqbase.net.packet.PacketFilter;
 import com.xqbase.net.util.Bytes;
 
@@ -94,11 +92,11 @@ class ClientConnection implements Connection {
 }
 
 class OriginConnection implements Connection {
-	private ScheduledFuture<?> future = null;
+	private TimerHandler.Closeable closeable = null;
 
 	HashMap<Integer, ClientConnection> connMap = new HashMap<>();
 	IdPool idPool = new IdPool();
-	ScheduledExecutorService timer;
+	TimerHandler timer;
 	ConnectionHandler handler;
 
 	@Override
@@ -108,14 +106,10 @@ class OriginConnection implements Connection {
 
 	@Override
 	public void onConnect() {
-		future = timer.scheduleAtFixedRate(() -> {
-			// in timer thread
-			handler.execute(() -> {
-				// in main thread
-				handler.send(new MulticastPacket(0,
-						MulticastPacket.EDGE_PING, 0, 0).getHead());
-			});
-		}, 60000, 60000, TimeUnit.MILLISECONDS);
+		closeable = timer.scheduleDelayed(() -> {
+			handler.send(new MulticastPacket(0,
+					MulticastPacket.EDGE_PING, 0, 0).getHead());
+		}, 45000, 45000);
 	}
 
 	@Override
@@ -174,9 +168,8 @@ class OriginConnection implements Connection {
 			conn.activeClose = true;
 			conn.handler.disconnect();
 		}
-		if (future != null) {
-			future.cancel(false);
-			future = null;
+		if (closeable != null) {
+			closeable.close();
 		}
 	}
 }
@@ -188,19 +181,16 @@ class OriginConnection implements Connection {
  * after the EdgeServer created.
  * Here is the code to make an edge server working:<p><code>
  * try (Connector connector = new Connector()) {<br>
- * &nbsp;&nbsp;EdgeServer edge = new EdgeServer(2424);<br>
- * &nbsp;&nbsp;connector.add(edge);<br>
+ * &nbsp;&nbsp;EdgeServer edge = new EdgeServer(connector);<br>
+ * &nbsp;&nbsp;connector.add(edge, 2424);<br>
  * &nbsp;&nbsp;connector.connect(edge.getOriginConnection(), "localhost", 2323);<br>
- * &nbsp;&nbsp;while (edge.getOriginConnection().isOpen()) {<br>
- * &nbsp;&nbsp;&nbsp;&nbsp;while (connector.doEvents()) {}<br>
- * &nbsp;&nbsp;&nbsp;&nbsp;Thread.sleep(1);<br>
- * &nbsp;&nbsp;}<br>
+ * &nbsp;&nbsp;connector.doEvents();<br>
  * }</code>
  */
 public class EdgeServer implements ServerConnection {
 	private OriginConnection origin = new OriginConnection();
 
-	public EdgeServer(ScheduledExecutorService timer) {
+	public EdgeServer(TimerHandler timer) {
 		origin.timer = timer;
 	}
 
@@ -208,9 +198,6 @@ public class EdgeServer implements ServerConnection {
 	public Connection get() {
 		return new ClientConnection(origin);
 	}
-
-	/** 
-	 * Creates an EdgeServer, which accepts client connections.<p>
 
 	/** @return The connection to the {@link OriginServer}. */
 	public Connection getOriginConnection() {
