@@ -26,7 +26,7 @@ import javax.swing.JFrame;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
 
 public abstract class ConnectorFrame extends JFrame {
 	private static final long serialVersionUID = 1L;
@@ -38,7 +38,7 @@ public abstract class ConnectorFrame extends JFrame {
 	protected final MenuItem startMenuItem = new MenuItem("Start");
 	protected final JButton startButton = new JButton("Start");
 	protected final JButton exitButton = new JButton("Exit");
-	protected Connector connector = null;
+	protected ConnectorImpl connector = null;
 
 	private Insets insets = new Insets(0, 0, 0, 0);
 	private KeyAdapter keyAdapter = new KeyAdapter() {

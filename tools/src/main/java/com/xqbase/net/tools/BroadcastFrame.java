@@ -7,7 +7,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.misc.BroadcastServer;
 
 public class BroadcastFrame extends ConnectorFrame {
@@ -37,7 +37,7 @@ public class BroadcastFrame extends ConnectorFrame {
 		startButton.setText("Stop");
 		txtPort.setEnabled(false);
 		chkNoEcho.setEnabled(false);
-		connector = new Connector();
+		connector = new ConnectorImpl();
 		try {
 			connector.add(new BroadcastServer(chkNoEcho.isSelected()),
 					Integer.parseInt(txtPort.getText()));

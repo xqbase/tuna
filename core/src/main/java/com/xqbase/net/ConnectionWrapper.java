@@ -58,6 +58,11 @@ public class ConnectionWrapper implements Connection, ConnectionHandler {
 	}
 
 	@Override
+	public void setBufferSize(int bufferSize) {
+		handler.setBufferSize(bufferSize);
+	}
+
+	@Override
 	public void blockRecv(boolean blocked) {
 		handler.blockRecv(blocked);
 	}

@@ -1,8 +1,10 @@
 package com.xqbase.net;
 
 public interface Connection {
+	public static final int MAX_BUFFER_SIZE = 32768;
+
 	/**
-	 * A {@link ConnectionHandler} will be set by {@link Connector}
+	 * A {@link ConnectionHandler} will be set by {@link ConnectorImpl}
 	 * when connection is ready to establish.
 	 *
 	 * @param handler
@@ -24,10 +26,7 @@ public interface Connection {
 	public default void onSend(boolean queued) {/**/}
 	/** Consumes connecting events in the APPLICATION end of the connection. */
 	public default void onConnect() {/**/}
-	/**
-	 * Consumes passive disconnecting events in the APPLICATION end of the connection.<p>
-	 * <b>Check <code>handler</code> before use because {@link #setHandler()} is not surely called.</b>
-	 */
+	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
 	public default void onDisconnect() {/**/}
 
 	// TODO append filter after onConnect ?

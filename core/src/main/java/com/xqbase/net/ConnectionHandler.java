@@ -19,11 +19,9 @@ public interface ConnectionHandler extends TimerHandler, EventQueue, Executor {
 	 * the connection will not be closed until all queued data sent out.
 	 */
 	public void disconnect();
-	/**
-	 * Block or unblock receiving
-	 *
-	 * @param blocked
-	 */
+	/** Set buffer size */
+	public void setBufferSize(int bufferSize);
+	/** Block or unblock receiving */
 	public void blockRecv(boolean blocked);
 
 	/** @return Local IP address of the Connection. */
