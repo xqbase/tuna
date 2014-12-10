@@ -5,14 +5,14 @@ import java.io.IOException;
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.net.Connection;
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.util.Bytes;
 
 public class TestSSLClient {
 	static boolean connected = false;
 
 	public static void main(String[] args) throws Exception {
-		try (Connector connector = new Connector()) {
+		try (ConnectorImpl connector = new ConnectorImpl()) {
 			SSLContext sslc = SSLUtil.getSSLContext(null, null);
 			SSLFilter sslf1 = new SSLFilter(connector, sslc,
 					SSLFilter.CLIENT, "localhost", 2323);
@@ -29,7 +29,6 @@ public class TestSSLClient {
 				@Override
 				public void onConnect() {
 					System.out.println(Bytes.toHexLower(sslf2.getSession().getId()));
-					// TODO why not equals to sslf1 ???
 					try {
 						connector.connect(connection1.appendFilter(sslf1), "localhost", 2323);
 					} catch (IOException e) {/**/}

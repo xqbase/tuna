@@ -2,6 +2,7 @@ package com.xqbase.net.tools;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.function.Supplier;
 
 import javax.swing.JComboBox;
@@ -11,7 +12,8 @@ import javax.swing.JOptionPane;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
 
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
+import com.xqbase.net.misc.BandwidthFilter;
 import com.xqbase.net.misc.DumpFilter;
 import com.xqbase.net.misc.ForwardServer;
 
@@ -33,14 +35,42 @@ public class ForwardFrame extends ConnectorFrame {
 			String[] {DUMP_NONE, DUMP_BINARY, DUMP_TEXT, DUMP_FOLDER});
 	private JFileChooser chooser = new JFileChooser();
 
+	private PrintStream dumpStream = null;
+	private File dumpFolder = null;
+	private boolean dumpText = false;
+
+	long limit = 0;
+
+	private Supplier<BandwidthFilter> bandwidth = () -> {
+		BandwidthFilter filter = new BandwidthFilter() {
+			@Override
+			public long getLimit() {
+				return limit;
+			}
+		};
+		filter.setPeriod(1000);
+		return filter;
+	};
+	private Supplier<DumpFilter> dump = () -> new DumpFilter().
+			setDumpStream(dumpStream).setDumpFolder(dumpFolder).setDumpText(dumpText);
+
 	void choose() {
-		if (!cmbDump.getSelectedItem().equals(DUMP_FOLDER)) {
-			return;
-		}
-		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-		int retVal = chooser.showOpenDialog(ForwardFrame.this);
-		if (retVal != JFileChooser.APPROVE_OPTION) {
-			cmbDump.setSelectedItem(DUMP_NONE);
+		String selected = (String) cmbDump.getSelectedItem();
+		if (selected.equals(DUMP_FOLDER)) {
+			chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+			int retVal = chooser.showOpenDialog(ForwardFrame.this);
+			dumpStream = null;
+			if (retVal == JFileChooser.APPROVE_OPTION) {
+				dumpFolder = chooser.getSelectedFile();
+			} else {
+				cmbDump.setSelectedItem(DUMP_NONE);
+				dumpFolder = null;
+			}
+			dumpText = false;
+		} else {
+			dumpStream = selected.equals(DUMP_NONE) ? null : System.out;
+			dumpFolder = null;
+			dumpText = selected.equals(DUMP_TEXT);
 		}
 	}
 
@@ -51,7 +81,6 @@ public class ForwardFrame extends ConnectorFrame {
 		txtPort.setEnabled(true);
 		txtRemoteHost.setEnabled(true);
 		txtRemotePort.setEnabled(true);
-		cmbDump.setEnabled(true);
 	}
 
 	@Override
@@ -69,30 +98,13 @@ public class ForwardFrame extends ConnectorFrame {
 		txtPort.setEnabled(false);
 		txtRemoteHost.setEnabled(false);
 		txtRemotePort.setEnabled(false);
-		cmbDump.setEnabled(false);
 
-		Supplier<DumpFilter> dump;
-		switch ((String) cmbDump.getSelectedItem()) {
-		case DUMP_BINARY:
-			dump = () -> new DumpFilter();
-			break;
-		case DUMP_TEXT:
-			dump = () -> new DumpFilter().setDumpText(true);
-			break;
-		case DUMP_FOLDER:
-			File dumpFolder = chooser.getSelectedFile();
-			dump = () -> new DumpFilter().setDumpStream(null).setDumpFolder(dumpFolder);
-			break;
-		default: // DUMP_NONE
-			dump = null;
-		}
-		cmbDump.getSelectedItem().equals(DUMP_FOLDER);
-
-		connector = new Connector();
+		connector = new ConnectorImpl();
 		try {
 			ForwardServer forward = new ForwardServer(connector, txtRemoteHost.getText(),
 					Integer.parseInt(txtRemotePort.getText()));
-			connector.add(dump == null ? forward : forward.appendFilter(dump),
+			forward.appendRemoteFilter(bandwidth);
+			connector.add(forward.appendFilter(dump).appendFilter(bandwidth),
 					Integer.parseInt(txtPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {
 			connector.close();
@@ -100,7 +112,6 @@ public class ForwardFrame extends ConnectorFrame {
 			stop();
 			JOptionPane.showMessageDialog(this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);
-			return;
 		}
 	}
 
@@ -119,9 +130,14 @@ public class ForwardFrame extends ConnectorFrame {
 		slider.setSnapToTicks(true);
 		slider.addChangeListener(e -> {
 			int sliderValue = ((JSlider) e.getSource()).getValue();
+			limit = (1 << (sliderValue << 1));
 			lblSlider.setText(sliderValue == SLIDER_NO_LIMIT ?
-					"No Limit" : (1 << (sliderValue << 1)) + "KB/s");
-			// TODO Speed Limit
+					"No Limit" : limit + "KB/s");
+			if (sliderValue == SLIDER_NO_LIMIT) {
+				limit = 0;
+			} else {
+				limit <<= 10;
+			}
 		});
 		add(slider);
 

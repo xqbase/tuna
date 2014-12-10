@@ -20,7 +20,7 @@ import javax.swing.UIManager;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionHandler;
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
 
 public class TerminalFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -129,7 +129,7 @@ public class TerminalFrame extends ConnectorFrame {
 				});
 			}
 		};
-		connector = new Connector();
+		connector = new ConnectorImpl();
 		try {
 			connector.connect(connection, txtHost.getText(),
 					Integer.parseInt(txtPort.getText()));

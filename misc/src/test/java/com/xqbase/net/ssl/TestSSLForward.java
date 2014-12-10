@@ -6,7 +6,7 @@ import javax.net.ssl.SSLContext;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionWrapper;
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.misc.BroadcastServer;
 import com.xqbase.net.misc.DumpFilter;
 import com.xqbase.net.misc.ForwardServer;
@@ -22,7 +22,7 @@ public class TestSSLForward {
 		certMap.add(TestSSLForward.class.getResourceAsStream("/localhost.cer"));
 		SSLContext sslc = SSLUtil.getSSLContext(certKey, certMap);
 
-		try (Connector connector = new Connector()) {
+		try (ConnectorImpl connector = new ConnectorImpl()) {
 			BroadcastServer broadcastServer = new BroadcastServer(false) {
 				@Override
 				public Connection get() {

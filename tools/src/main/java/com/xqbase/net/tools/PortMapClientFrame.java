@@ -7,7 +7,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.portmap.PortMapClient;
 
 public class PortMapClientFrame extends ConnectorFrame {
@@ -49,7 +49,7 @@ public class PortMapClientFrame extends ConnectorFrame {
 		txtMappingPort.setEnabled(false);
 		txtPublicPort.setEnabled(false);
 
-		connector = new Connector();
+		connector = new ConnectorImpl();
 		try {
 			PortMapClient client = new PortMapClient(connector,
 					Integer.parseInt(txtPublicPort.getText()),

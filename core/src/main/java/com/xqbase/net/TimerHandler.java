@@ -13,13 +13,13 @@ public interface TimerHandler {
 	}
 
 	public default Closeable scheduleAtTime(Runnable runnable, long uptime, long period) {
-		long[] times = {0};
+		long[] uptime_ = {uptime};
 		Closeable[] closeable = {null};
 		closeable[0] = postAtTime(new Runnable() {
 			@Override
 			public void run() {
-				times[0] ++;
-				closeable[0] = postAtTime(this, uptime + times[0] * period);
+				uptime_[0] += period;
+				closeable[0] = postAtTime(this, uptime_[0]);
 				// "closeable" may be called in "runnable"
 				runnable.run();
 			}

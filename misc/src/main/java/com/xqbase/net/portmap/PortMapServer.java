@@ -40,13 +40,13 @@ class IdPool {
 }
 
 class PublicConnection implements Connection {
-	private MapConnection mapConnection;
+	private MapConnection map;
 	private int connId;
 
 	ConnectionHandler handler;
 
-	PublicConnection(MapConnection mapConnection, int connId) {
-		this.mapConnection = mapConnection;
+	PublicConnection(MapConnection map, int connId) {
+		this.map = map;
 		this.connId = connId;
 	}
 
@@ -59,30 +59,30 @@ class PublicConnection implements Connection {
 	public void onRecv(byte[] b, int off, int len) {
 		byte[] head = new PortMapPacket(connId,
 				PortMapPacket.SERVER_DATA, 0, len).getHead();
-		mapConnection.handler.send(Bytes.add(head, 0, head.length, b, off, len));
+		map.handler.send(Bytes.add(head, 0, head.length, b, off, len));
 	}
 
 	@Override
 	public void onConnect() {
-		mapConnection.handler.send(new PortMapPacket(connId,
+		map.handler.send(new PortMapPacket(connId,
 				PortMapPacket.SERVER_CONNECT, 0, 0).getHead());
 	}
 
 	@Override
 	public void onDisconnect() {
-		mapConnection.publicServer.connMap.remove(Integer.valueOf(connId));
+		map.publicServer.connMap.remove(Integer.valueOf(connId));
 		// Do not return connId until CLIENT_CLOSE received
-		// mapConnection.publicServer.idPool.returnId(connId);
-		mapConnection.handler.send(new PortMapPacket(connId,
+		// map.publicServer.idPool.returnId(connId);
+		map.handler.send(new PortMapPacket(connId,
 				PortMapPacket.SERVER_DISCONNECT, 0, 0).getHead());
 	}
 }
 
 class PublicServer implements ServerConnection {
-	private MapConnection mapConnection;
+	private MapConnection map;
 
-	PublicServer(MapConnection mapConnection) {
-		this.mapConnection = mapConnection;
+	PublicServer(MapConnection map) {
+		this.map = map;
 	}
 
 	HashMap<Integer, PublicConnection> connMap = new HashMap<>();
@@ -91,7 +91,7 @@ class PublicServer implements ServerConnection {
 	@Override
 	public Connection get() {
 		int connId = idPool.borrowId();
-		PublicConnection connection = new PublicConnection(mapConnection, connId);
+		PublicConnection connection = new PublicConnection(map, connId);
 		connMap.put(Integer.valueOf(connId), connection);
 		return connection;
 	}
@@ -102,8 +102,8 @@ class MapConnection implements Connection {
 	private Connector.Closeable publicCloseable;
 
 	ConnectionHandler handler;
-	long accessed = System.currentTimeMillis();
 	PublicServer publicServer = null;
+	long accessed = System.currentTimeMillis();
 
 	MapConnection(PortMapServer mapServer) {
 		this.mapServer = mapServer;
@@ -202,15 +202,15 @@ public class PortMapServer implements ServerConnection, AutoCloseable {
 	 * Creates a PortMapServer.
 	 * @param connector - The {@link Connector} which public connections are registered to.
 	 */
-	public PortMapServer(Connector connector) {
+	public PortMapServer(Connector connector, TimerHandler timer) {
 		this.connector = connector;
-		closeable = connector.scheduleDelayed(() -> {
+		closeable = timer.scheduleDelayed(() -> {
 			long now = System.currentTimeMillis();
 			Iterator<MapConnection> i = timeoutSet.iterator();
-			MapConnection mapConn;
-			while (i.hasNext() && now > (mapConn = i.next()).accessed + 60000) {
+			MapConnection map;
+			while (i.hasNext() && now > (map = i.next()).accessed + 60000) {
 				i.remove();
-				mapConn.disconnect();
+				map.disconnect();
 			}
 		}, 1000, 1000);
 	}

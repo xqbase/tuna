@@ -5,7 +5,9 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -14,6 +16,7 @@ import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionHandler;
 import com.xqbase.net.ConnectionWrapper;
 import com.xqbase.net.ServerConnection;
+import com.xqbase.net.TimerHandler;
 import com.xqbase.net.packet.PacketFilter;
 import com.xqbase.net.util.Bytes;
 
@@ -57,6 +60,11 @@ class VirtualHandler implements ConnectionHandler {
 		}
 		edge.handler.send(new MulticastPacket(connId,
 				MulticastPacket.ORIGIN_DISCONNECT, 0, 0).getHead());
+	}
+
+	@Override
+	public void setBufferSize(int bufferSize) {
+		// Nothing to do
 	}
 
 	@Override
@@ -117,8 +125,9 @@ class VirtualHandler implements ConnectionHandler {
 
 class EdgeConnection implements Connection {
 	HashMap<Integer, Connection> connMap = new HashMap<>();
-	ConnectionHandler handler;
 	OriginServer origin;
+	ConnectionHandler handler;
+	long accessed = System.currentTimeMillis();
 
 	EdgeConnection(OriginServer origin) {
 		this.origin = origin;
@@ -132,6 +141,9 @@ class EdgeConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
+		origin.timeoutSet.remove(this);
+		accessed = System.currentTimeMillis();
+		origin.timeoutSet.add(this);
 		MulticastPacket packet = new MulticastPacket(b, off, len);
 		int connId = packet.connId;
 		int command = packet.command;
@@ -140,8 +152,7 @@ class EdgeConnection implements Connection {
 		} else if (command == MulticastPacket.EDGE_CONNECT) {
 			if (connMap.containsKey(Integer.valueOf(connId))) {
 				// throw new PacketException("#" + connId + " Already Exists");
-				handler.disconnect();
-				onDisconnect();
+				disconnect();
 				return;
 			}
 			Connection connection = origin.getVirtual(null);
@@ -162,8 +173,7 @@ class EdgeConnection implements Connection {
 			if (command == MulticastPacket.EDGE_DATA) {
 				if (16 + packet.size > len) {
 					// throw new PacketException("Wrong Packet Size");
-					handler.disconnect();
-					onDisconnect();
+					disconnect();
 					return;
 				}
 				connection.onRecv(b, off + 16, packet.size);
@@ -179,11 +189,17 @@ class EdgeConnection implements Connection {
 
 	@Override
 	public void onDisconnect() {
+		origin.timeoutSet.remove(this);
 		for (Connection connection : connMap.values().toArray(new Connection[0])) {
 			// "conn.onDisconnect()" might change "connMap"
 			connection.onDisconnect();
 			origin.virtualMap.remove(connection);
 		}
+	}
+
+	void disconnect() {
+		handler.disconnect();
+		onDisconnect();
 	}
 }
 
@@ -247,26 +263,42 @@ class MulticastHandler extends ConnectionWrapper {
  * via several {@link EdgeServer}s.
  * @see EdgeServer
  */
-public abstract class OriginServer implements ServerConnection {
+public abstract class OriginServer implements ServerConnection, AutoCloseable {
 	/**
 	 * @param key non-null for a multicast connection
 	 * @return A virtual {@link Connection} that belongs to the origin server. 
 	 */
 	protected abstract Connection getVirtual(Object key);
 
+	LinkedHashSet<EdgeConnection> timeoutSet = new LinkedHashSet<>();
 	LinkedHashMap<Connection, VirtualHandler> virtualMap = new LinkedHashMap<>();
+	ArrayList<Supplier<? extends ConnectionWrapper>> virtualServerFilters = new ArrayList<>();
+
+	private TimerHandler.Closeable closeable;
+
+	protected OriginServer(TimerHandler timer) {
+		closeable = timer.scheduleDelayed(() -> {
+			long now = System.currentTimeMillis();
+			Iterator<EdgeConnection> i = timeoutSet.iterator();
+			EdgeConnection edge;
+			while (i.hasNext() && now > (edge = i.next()).accessed + 60000) {
+				i.remove();
+				edge.disconnect();
+			}
+		}, 1000, 1000);
+	}
 
 	@Override
 	public Connection get() {
-		return new EdgeConnection(this);
+		EdgeConnection edgeConnection = new EdgeConnection(this);
+		timeoutSet.add(edgeConnection);
+		return edgeConnection;
 	}
 
 	/** @return A set of all virtual connections. */
 	public Set<Connection> getVirtuals() {
 		return virtualMap.keySet();
 	}
-
-	ArrayList<Supplier<? extends ConnectionWrapper>> virtualServerFilters = new ArrayList<>();
 
 	/** Adds a {@link ConnectionWrapper} as a filter into the network end of each virtual connection */
 	public void appendVirtualFilter(Supplier<? extends ConnectionWrapper> serverFilter) {
@@ -276,7 +308,7 @@ public abstract class OriginServer implements ServerConnection {
 	/**
 	 * The broadcasting to a large number of virtual connections can be done via a multicast
 	 * connection, which can save the network bandwidth by the multicast approach.<p>
-	 * TODO For detailed usage, see {@link TestMulticast}
+	 * For detailed usage, see {@link TestMulticast} from github.com
 	 * @param connections - A large number of virtual connections where data is broadcasted.
 	 */
 	public Object getMulticast(Collection<? extends Connection> connections) {
@@ -289,5 +321,8 @@ public abstract class OriginServer implements ServerConnection {
 		return key;
 	}
 
-	// TODO Check Edge Timeout
+	@Override
+	public void close() {
+		closeable.close();
+	}
 }

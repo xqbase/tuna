@@ -32,7 +32,8 @@ public class DumpFilter extends ConnectionWrapper {
 	private FileOutputStream getOutputStream(String suffix) throws IOException {
 		File file = dumpFolder;
 		file.mkdir();
-		file = new File(file.getPath() + File.separator + host);
+		// IPv6 Addresses may contain ':' that cannot be used in Windows filename
+		file = new File(file.getPath() + File.separator + host.replace(':', '_'));
 		file.mkdir();
 		file = new File(file.getPath() + File.separator + port + suffix);
 		return new FileOutputStream(file, true);
@@ -132,12 +133,13 @@ public class DumpFilter extends ConnectionWrapper {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		dump(b, off, len, !clientMode);
 		super.onRecv(b, off, len);
+		dump(b, off, len, !clientMode);
 	}
 
 	@Override
 	public void onConnect() {
+		super.onConnect();
 		if (clientMode) {
 			host = getLocalAddr();
 			port = getLocalPort();
@@ -155,7 +157,6 @@ public class DumpFilter extends ConnectionWrapper {
 			}
 		}
 		printfln("[%s:%s Connected at %s]", host, "" + port, now());
-		super.onConnect();
 	}
 
 	@Override

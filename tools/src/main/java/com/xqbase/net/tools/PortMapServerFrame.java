@@ -6,7 +6,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.portmap.PortMapServer;
 
 public class PortMapServerFrame extends ConnectorFrame {
@@ -37,8 +37,8 @@ public class PortMapServerFrame extends ConnectorFrame {
 		startButton.setText("Stop");
 		txtMapPort.setEnabled(false);
 
-		connector = new Connector();
-		server = new PortMapServer(connector);
+		connector = new ConnectorImpl();
+		server = new PortMapServer(connector, connector);
 		try {
 			connector.add(server, Integer.parseInt(txtMapPort.getText()));
 		} catch (IOException | IllegalArgumentException e) {

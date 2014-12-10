@@ -4,10 +4,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.function.Supplier;
 
-import com.xqbase.net.Connector;
-import com.xqbase.net.ConnectionWrapper;
-import com.xqbase.net.ConnectionHandler;
 import com.xqbase.net.Connection;
+import com.xqbase.net.ConnectionHandler;
+import com.xqbase.net.ConnectionWrapper;
+import com.xqbase.net.Connector;
 import com.xqbase.net.ServerConnection;
 
 class PeerConnection implements Connection {

@@ -5,7 +5,7 @@ import java.util.HashMap;
 
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionHandler;
-import com.xqbase.net.Connector;
+import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.misc.CrossDomainServer;
 import com.xqbase.net.misc.DumpFilter;
 import com.xqbase.net.misc.TestFlash;
@@ -13,12 +13,11 @@ import com.xqbase.net.misc.ZLibFilter;
 
 public class TestMulticast {
 	public static void main(String[] args) throws Exception {
-		try (Connector connector = new Connector()) {
-			connector.add(new CrossDomainServer(new File(TestFlash.class.
-					getResource("/crossdomain.xml").toURI())), 843);
-			HashMap<Object, ConnectionHandler> multicastMap = new HashMap<>();
-			Object[] multicastKey = new Object[1];
-			OriginServer origin = new OriginServer() {
+		HashMap<Object, ConnectionHandler> multicastMap = new HashMap<>();
+		Object[] multicastKey = new Object[1];
+		try (
+			ConnectorImpl connector = new ConnectorImpl();
+			OriginServer origin = new OriginServer(connector) {
 				@Override
 				protected Connection getVirtual(Object key) {
 					return new Connection() {
@@ -36,6 +35,9 @@ public class TestMulticast {
 					};
 				}
 			};
+		) {
+			connector.add(new CrossDomainServer(new File(TestFlash.class.
+					getResource("/crossdomain.xml").toURI())), 843);
 			origin.appendVirtualFilter(() -> new DumpFilter().setDumpText(true));
 			origin.appendVirtualFilter(ZLibFilter::new);
 			// "appendVirtualFilter" must be called before "getMulticast"
