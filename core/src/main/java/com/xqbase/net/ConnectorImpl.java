@@ -32,10 +32,8 @@ class Client {
 	private static final int STATUS_DISCONNECTING = 2;
 	private static final int STATUS_CLOSED = 3;
 
-	byte[] buffer = new byte[Connection.MAX_BUFFER_SIZE];
-	boolean blocked = false;
+	int bufferSize = Connection.MAX_BUFFER_SIZE;
 	int status = STATUS_IDLE;
-	long bytesRecv = 0, bytesSent = 0;
 	ByteArrayQueue queue = new ByteArrayQueue();
 	InetSocketAddress local = new InetSocketAddress(0),
 			remote = new InetSocketAddress(0);
@@ -57,7 +55,6 @@ class Client {
 			public void disconnect() {
 				if (status == STATUS_IDLE) {
 					finishClose();
-					connector.activeDisconnectCount ++;
 				} else if (status == STATUS_BUSY) {
 					status = STATUS_DISCONNECTING;
 				}
@@ -65,13 +62,11 @@ class Client {
 
 			@Override
 			public void setBufferSize(int bufferSize) {
-				buffer = new byte[bufferSize];
-			}
-
-			@Override
-			public void blockRecv(boolean blocked_) {
-				blocked = blocked_;
-				if (status != STATUS_CLOSED) {
+				boolean blocked = Client.this.bufferSize == 0;
+				boolean toBlock = bufferSize <= 0;
+				Client.this.bufferSize = Math.max(0,
+						Math.min(bufferSize, Connection.MAX_BUFFER_SIZE));
+				if (status != STATUS_CLOSED && (blocked ^ toBlock)) {
 					interestOps();
 				}
 			}
@@ -97,21 +92,6 @@ class Client {
 			}
 
 			@Override
-			public int getQueueSize() {
-				return queue.length();
-			}
-
-			@Override
-			public long getBytesRecv() {
-				return bytesRecv;
-			}
-
-			@Override
-			public long getBytesSent() {
-				return bytesSent;
-			}
-
-			@Override
 			public TimerHandler.Closeable postAtTime(Runnable r, long uptime) {
 				return connector.postAtTime(r, uptime);
 			}
@@ -129,31 +109,25 @@ class Client {
 	}
 
 	void interestOps() {
-		selectionKey.interestOps((blocked ? 0 : SelectionKey.OP_READ) |
+		selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
 				(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
 	}
 
 	void write() throws IOException {
-		boolean queued = false;
+		int delta = 0;
 		while (queue.length() > 0) {
-			queued = true;
 			int bytesWritten = socketChannel.write(ByteBuffer.wrap(queue.array(),
 					queue.offset(), queue.length()));
 			if (bytesWritten == 0) {
 				interestOps();
 				return;
 			}
-			bytesSent += bytesWritten;
-			connector.totalBytesSent += bytesWritten;
 			queue.remove(bytesWritten);
-			connector.totalQueueSize -= bytesWritten;
+			delta -= bytesWritten;
 		}
-		if (queued) {
-			connection.onSend(false);
-		}
+		connection.onQueue(delta, queue.length());
 		if (status == STATUS_DISCONNECTING) {
 			finishClose();
-			connector.activeDisconnectCount ++;
 		} else {
 			status = STATUS_IDLE;
 			interestOps();
@@ -162,11 +136,8 @@ class Client {
 
 	void write(byte[] b, int off, int len) {
 		if (status != STATUS_IDLE) {
-			if (queue.length() == 0) {
-				connection.onSend(true);
-			}
 			queue.add(b, off, len);
-			connector.totalQueueSize += len;
+			connection.onQueue(len, queue.length());
 			return;
 		}
 		int bytesWritten;
@@ -176,11 +147,10 @@ class Client {
 			startClose();
 			return;
 		}
-		connector.totalBytesSent += bytesWritten;
-		if (bytesWritten < len) {
-			queue.add(b, off + bytesWritten, len - bytesWritten);
-			connector.totalQueueSize += len - bytesWritten;
-			connection.onSend(true);
+		int delta = len - bytesWritten;
+		if (delta > 0) {
+			queue.add(b, off + bytesWritten, delta);
+			connection.onQueue(delta, queue.length());
 			status = STATUS_BUSY;
 			interestOps();
 		}
@@ -203,14 +173,12 @@ class Client {
 			return;
 		}
 		finishClose();
-		connector.passiveDisconnectCount ++;
 		// Call "close()" before "onDisconnect()"
 		// to avoid recursive "disconnect()".
 		connection.onDisconnect();
 	}
 
 	void finishClose() {
-		connector.totalQueueSize -= queue.length();
 		status = STATUS_CLOSED;
 		selectionKey.cancel();
 		try {
@@ -289,6 +257,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 
 	private Selector selector;
 	private boolean interrupted = false;
+	private byte[] buffer = new byte[Connection.MAX_BUFFER_SIZE];
 	private TreeMap<Timer, Runnable> timerMap = new TreeMap<>();
 	private ConcurrentLinkedQueue<Runnable> eventQueue = new ConcurrentLinkedQueue<>();
 	private ExecutorService executor = Executors.newCachedThreadPool();
@@ -442,18 +411,15 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 				client.socketChannel = socketChannel;
 				add(client, SelectionKey.OP_READ);
 				client.finishConnect();
-				acceptCount ++;
 				continue;
 			}
 			Client client = (Client) key.attachment();
 			try {
 				if (key.isReadable()) {
 					int bytesRead = client.socketChannel.
-							read(ByteBuffer.wrap(client.buffer));
+							read(ByteBuffer.wrap(buffer, 0, client.bufferSize));
 					if (bytesRead > 0) {
-						client.connection.onRecv(client.buffer, 0, bytesRead);
-						client.bytesRecv += bytesRead;
-						totalBytesRecv += bytesRead;
+						client.connection.onRecv(buffer, 0, bytesRead);
 						// may be closed by "onRecv"
 						if (!key.isValid()) {
 							continue;
@@ -469,7 +435,6 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 					client.write();
 				} else if (key.isConnectable() && client.socketChannel.finishConnect()) {
 					client.finishConnect();
-					connectCount ++;
 					// "onConnect()" might call "disconnect()"
 					if (client.isOpen() && client.isBusy()) {
 						client.write();
@@ -536,44 +501,10 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 				((Server) o).close();
 			} else {
 				((Client) o).finishClose();
-				activeDisconnectCount ++;
 			}
 		}
 		try {
 			selector.close();
 		} catch (IOException e) {/**/}
-	}
-
-	private int acceptCount = 0, connectCount = 0;
-	int activeDisconnectCount = 0, passiveDisconnectCount = 0, totalQueueSize = 0;
-	private long totalBytesRecv = 0;
-	long totalBytesSent = 0;
-
-	public int getAcceptCount() {
-		return acceptCount;
-	}
-
-	public int getConnectCount() {
-		return connectCount;
-	}
-
-	public int getActiveDisconnectCount() {
-		return activeDisconnectCount;
-	}
-
-	public int getPassiveDisconnectCount() {
-		return passiveDisconnectCount;
-	}
-
-	public int getTotalQueueSize() {
-		return totalQueueSize;
-	}
-
-	public long getTotalBytesRecv() {
-		return totalBytesRecv;
-	}
-
-	public long getTotalBytesSent() {
-		return totalBytesSent;
 	}
 }

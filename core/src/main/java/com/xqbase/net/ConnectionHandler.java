@@ -19,10 +19,12 @@ public interface ConnectionHandler extends TimerHandler, EventQueue, Executor {
 	 * the connection will not be closed until all queued data sent out.
 	 */
 	public void disconnect();
-	/** Set buffer size */
+	/**
+	 * Set buffer size
+	 *
+	 * @param bufferSize buffer size, <code>0</code> to block receiving
+	 */
 	public void setBufferSize(int bufferSize);
-	/** Block or unblock receiving */
-	public void blockRecv(boolean blocked);
 
 	/** @return Local IP address of the Connection. */
 	public String getLocalAddr();
@@ -32,10 +34,4 @@ public interface ConnectionHandler extends TimerHandler, EventQueue, Executor {
 	public String getRemoteAddr();
 	/** @return Remote port of the Connection. */
 	public int getRemotePort();
-	/** @return Number of bytes in queue. */
-	public int getQueueSize();
-	/** @return Number of received bytes. */
-	public long getBytesRecv();
-	/** @return Number of sent bytes. */
-	public long getBytesSent();
 }

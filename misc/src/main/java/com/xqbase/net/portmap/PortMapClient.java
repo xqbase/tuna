@@ -79,6 +79,7 @@ public class PortMapClient extends ConnectionWrapper {
 						return;
 					}
 					PrivateConnection connection = new PrivateConnection(PortMapClient.this, connId);
+					// TODO bridge to a ServerConnection
 					try {
 						connector.connect(connection, privateHost, privatePort);
 					} catch (IOException e) {

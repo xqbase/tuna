@@ -68,11 +68,6 @@ class VirtualHandler implements ConnectionHandler {
 	}
 
 	@Override
-	public void blockRecv(boolean blocked) {
-		// Nothing to do
-	}
-
-	@Override
 	public String getLocalAddr() {
 		return localAddr;
 	}
@@ -90,21 +85,6 @@ class VirtualHandler implements ConnectionHandler {
 	@Override
 	public int getRemotePort() {
 		return remotePort;
-	}
-
-	@Override
-	public int getQueueSize() {
-		return 0;
-	}
-
-	@Override
-	public long getBytesRecv() {
-		return 0;
-	}
-
-	@Override
-	public long getBytesSent() {
-		return 0;
 	}
 
 	@Override
