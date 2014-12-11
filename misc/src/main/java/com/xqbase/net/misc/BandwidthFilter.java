@@ -40,12 +40,12 @@ public class BandwidthFilter extends ConnectionWrapper {
 		if (bytesRecv < limit) {
 			long now = System.currentTimeMillis();
 			if (now > next) {
-				next = Math.max(next + period, now);
+				next = now + period;
 				bytesRecv = len;
 			}
 			setBufferSize((int) Math.min(limit - bytesRecv, MAX_BUFFER_SIZE));
 		} else {
-			next += period_;
+			next += period;
 			setBufferSize(0);
 			postAtTime(() -> {
 				bytesRecv = 0;
