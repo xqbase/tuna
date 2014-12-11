@@ -27,10 +27,10 @@ public class ConnectionWrapper implements Connection, ConnectionHandler {
 		connection.onRecv(b, off, len);
 	}
 
-	/** Wraps queued/completed sending events, from the network side to the application side */
+	/** Wraps queue events, from the network side to the application side */
 	@Override
-	public void onSend(boolean queued) {
-		connection.onSend(queued);
+	public void onQueue(int delta, int total) {
+		connection.onQueue(delta, total);
 	}
 
 	/** Wraps connecting events, from the network side to the application side */
@@ -63,11 +63,6 @@ public class ConnectionWrapper implements Connection, ConnectionHandler {
 	}
 
 	@Override
-	public void blockRecv(boolean blocked) {
-		handler.blockRecv(blocked);
-	}
-
-	@Override
 	public String getLocalAddr() {
 		return handler.getLocalAddr();
 	}
@@ -88,21 +83,6 @@ public class ConnectionWrapper implements Connection, ConnectionHandler {
 	}
 
 	@Override
-	public int getQueueSize() {
-		return handler.getQueueSize();
-	}
-
-	@Override
-	public long getBytesRecv() {
-		return handler.getBytesRecv();
-	}
-
-	@Override
-	public long getBytesSent() {
-		return handler.getBytesSent();
-	}
-
-	@Override
 	public Closeable postAtTime(Runnable runnable, long uptime) {
 		return handler.postAtTime(runnable, uptime);
 	}
@@ -120,8 +100,7 @@ public class ConnectionWrapper implements Connection, ConnectionHandler {
 	/** Only for debug. */
 	@Override
 	public String toString() {
-		return String.format("%s<->%s|queueSize=%s|bytesRecv=%s|bytesSent=%s",
-				getLocalAddr() + ":" + getLocalPort(), getRemoteAddr() + ":" + getRemotePort(),
-				"" + getQueueSize(), "" + getBytesRecv(), "" + getBytesSent());
+		return getLocalAddr() + ":" + getLocalPort() + "<->" +
+				getRemoteAddr() + ":" + getRemotePort();
 	}
 }

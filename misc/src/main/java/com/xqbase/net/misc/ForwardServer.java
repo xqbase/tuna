@@ -24,9 +24,9 @@ class PeerConnection implements Connection {
 	}
 
 	@Override
-	public void onSend(boolean queued) {
+	public void onQueue(int delta, int total) {
 		if (peer != null) {
-			peer.handler.blockRecv(queued);
+			peer.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 		}
 	}
 

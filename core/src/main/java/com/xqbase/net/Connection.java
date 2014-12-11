@@ -19,11 +19,12 @@ public interface Connection {
 	 */
 	public default void onRecv(byte[] b, int off, int len) {/**/}
 	/**
-	 * Consumes queued/completed sending events in the APPLICATION end of the connection.
+	 * Consumes queue (queued or completed sending) events in the APPLICATION end of the connection.
 	 *
-	 * @param queued
+	 * @param delta change of queue size
+	 * @param total queue size after change, 0 for complete sending
 	 */
-	public default void onSend(boolean queued) {/**/}
+	public default void onQueue(int delta, int total) {/**/}
 	/** Consumes connecting events in the APPLICATION end of the connection. */
 	public default void onConnect() {/**/}
 	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
@@ -46,8 +47,8 @@ public interface Connection {
 			}
 
 			@Override
-			public void onSend(boolean queued) {
-				filter.onSend(queued);
+			public void onQueue(int delta, int total) {
+				filter.onQueue(delta, total);
 			}
 
 			@Override

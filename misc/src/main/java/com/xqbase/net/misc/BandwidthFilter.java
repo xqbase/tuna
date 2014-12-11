@@ -30,13 +30,8 @@ public class BandwidthFilter extends ConnectionWrapper {
 		if (period_ != period || limit_ != limit) {
 			period = period_;
 			limit = limit_;
-			if (period <= 0 || limit <= 0 || limit >= MAX_BUFFER_SIZE * 4) {
-				setBufferSize(MAX_BUFFER_SIZE);
-			} else if (limit > 8192) {
-				setBufferSize((int) ((limit + 3) / 4));
-			} else {
-				setBufferSize((int) limit);
-			}
+			setBufferSize(period <= 0 || limit <= 0 ? MAX_BUFFER_SIZE :
+					(int) Math.min(limit, MAX_BUFFER_SIZE));
 		}
 		if (period <= 0 || limit <= 0) {
 			return;
@@ -48,12 +43,13 @@ public class BandwidthFilter extends ConnectionWrapper {
 				next = now;
 				bytesRecv = len;
 			}
+			setBufferSize((int) Math.min(limit - bytesRecv, MAX_BUFFER_SIZE));
 		} else {
 			next += period_;
-			blockRecv(true);
+			setBufferSize(0);
 			postAtTime(() -> {
 				bytesRecv = 0;
-				blockRecv(false);
+				setBufferSize((int) Math.min(limit, MAX_BUFFER_SIZE));
 			}, next);
 		}
 	}

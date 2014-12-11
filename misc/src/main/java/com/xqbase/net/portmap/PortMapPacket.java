@@ -41,6 +41,7 @@ class PortMapPacket {
 	}
 
 	int connId, command, port, size;
+	// TODO localAddr, localPort, remoteAddr, remotePort
 
 	/** @param len */
 	PortMapPacket(byte[] b, int off, int len) {
