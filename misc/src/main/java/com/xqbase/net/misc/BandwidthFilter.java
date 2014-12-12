@@ -23,6 +23,12 @@ public class BandwidthFilter extends ConnectionWrapper {
 	}
 
 	@Override
+	public void setBufferSize(int bufferSize) {
+		super.setBufferSize(bufferSize <= 0 || period <= 0 || limit <= 0 ?
+				bufferSize : (int) Math.min(bufferSize, limit));
+	}
+
+	@Override
 	public void onRecv(byte[] b, int off, int len) {
 		super.onRecv(b, off, len);
 		long period_ = getPeriod();
@@ -30,10 +36,9 @@ public class BandwidthFilter extends ConnectionWrapper {
 		if (period_ != period || limit_ != limit) {
 			period = period_;
 			limit = limit_;
-			setBufferSize(period <= 0 || limit <= 0 ? MAX_BUFFER_SIZE :
-					(int) Math.min(limit, MAX_BUFFER_SIZE));
 		}
 		if (period <= 0 || limit <= 0) {
+			super.setBufferSize(MAX_BUFFER_SIZE);
 			return;
 		}
 		bytesRecv += len;
@@ -43,13 +48,13 @@ public class BandwidthFilter extends ConnectionWrapper {
 				next = now + period;
 				bytesRecv = len;
 			}
-			setBufferSize((int) Math.min(limit - bytesRecv, MAX_BUFFER_SIZE));
+			super.setBufferSize((int) Math.min(limit - bytesRecv, MAX_BUFFER_SIZE));
 		} else {
-			next += period;
-			setBufferSize(0);
+			super.setBufferSize(0);
 			postAtTime(() -> {
+				next += period;
 				bytesRecv = 0;
-				setBufferSize((int) Math.min(limit, MAX_BUFFER_SIZE));
+				super.setBufferSize((int) Math.min(limit, MAX_BUFFER_SIZE));
 			}, next);
 		}
 	}
