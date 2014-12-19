@@ -6,17 +6,17 @@ import com.xqbase.net.util.Bytes;
 
 class MulticastPacket {
 	// Edge Commands
-	static final int EDGE_PING = 0x100;
-	static final int EDGE_CONNECT = 0x101;
-	static final int EDGE_DATA = 0x102;
-	static final int EDGE_DISCONNECT = 0x103;
+	static final int EDGE_PING			= 0x100;
+	static final int EDGE_CONNECT		= 0x101;
+	static final int EDGE_DATA			= 0x102;
+	static final int EDGE_DISCONNECT	= 0x103;
 
 	// Origin Commands
-	static final int ORIGIN_PONG = 0x200;
-	static final int ORIGIN_MULTICAST = 0x201;
-	static final int ORIGIN_DATA = 0x202;
-	static final int ORIGIN_DISCONNECT = 0x203;
-	static final int ORIGIN_CLOSE = 0x204;
+	static final int ORIGIN_PONG		= 0x200;
+	static final int ORIGIN_MULTICAST	= 0x201;
+	static final int ORIGIN_DATA		= 0x202;
+	static final int ORIGIN_DISCONNECT	= 0x203;
+	static final int ORIGIN_CLOSE		= 0x204;
 
 	static final int HEAD_SIZE = 16;
 
