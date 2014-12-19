@@ -45,7 +45,7 @@ public class TestSSLForward {
 			forwardServer.appendRemoteFilter(() -> new SSLFilter(connector,
 					SSLUtil.getSSLContext(certKey, certMap), SSLFilter.CLIENT));
 			forwardServer.appendRemoteFilter(() -> new DumpFilter().
-					setDumpStream(System.err).setClientMode(true));
+					setDumpStream(System.err).setUseClientMode(true));
 			connector.add(forwardServer, 2424);
 
 			connector.doEvents();
