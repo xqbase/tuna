@@ -6,17 +6,17 @@ import com.xqbase.net.util.Bytes;
 
 class PortMapPacket {
 	// Client Commands
-	static final int CLIENT_PING = 0x100;
-	static final int CLIENT_OPEN = 0x101;
-	static final int CLIENT_DATA = 0x102;
-	static final int CLIENT_DISCONNECT = 0x103;
-	static final int CLIENT_CLOSE = 0x104;
+	static final int CLIENT_PING		= 0x100;
+	static final int CLIENT_OPEN		= 0x101;
+	static final int CLIENT_DATA		= 0x102;
+	static final int CLIENT_DISCONNECT	= 0x103;
+	static final int CLIENT_CLOSE		= 0x104;
 
 	// Server Commands
-	static final int SERVER_PONG = 0x200;
-	static final int SERVER_CONNECT = 0x201;
-	static final int SERVER_DATA = 0x202;
-	static final int SERVER_DISCONNECT = 0x203;
+	static final int SERVER_PONG		= 0x200;
+	static final int SERVER_CONNECT		= 0x201;
+	static final int SERVER_DATA		= 0x202;
+	static final int SERVER_DISCONNECT	= 0x203;
 
 	static final int HEAD_SIZE = 16;
 
