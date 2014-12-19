@@ -3,7 +3,6 @@ package com.xqbase.net.portmap;
 import java.io.IOException;
 import java.util.HashMap;
 
-import com.sun.security.ntlm.Client;
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionHandler;
 import com.xqbase.net.ConnectionWrapper;
