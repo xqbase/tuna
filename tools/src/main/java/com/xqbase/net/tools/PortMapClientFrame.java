@@ -9,6 +9,7 @@ import javax.swing.JTextField;
 
 import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.portmap.PortMapClient;
+import com.xqbase.util.Numbers;
 
 public class PortMapClientFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -52,8 +53,8 @@ public class PortMapClientFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		try {
 			PortMapClient client = new PortMapClient(connector,
-					Integer.parseInt(txtPublicPort.getText()),
-					txtPrivateHost.getText(), Integer.parseInt(txtPrivatePort.getText())) {
+					Numbers.parseInt(txtPublicPort.getText()),
+					txtPrivateHost.getText(), Numbers.parseInt(txtPrivatePort.getText())) {
 				@Override
 				public void onDisconnect() {
 					super.onDisconnect();
@@ -67,8 +68,8 @@ public class PortMapClientFrame extends ConnectorFrame {
 				}
 			};
 			connector.connect(client, txtMappingHost.getText(),
-					Integer.parseInt(txtMappingPort.getText()));
-		} catch (IOException | IllegalArgumentException e) {
+					Numbers.parseInt(txtMappingPort.getText()));
+		} catch (IOException e) {
 			connector.close();
 			connector = null;
 			stop();

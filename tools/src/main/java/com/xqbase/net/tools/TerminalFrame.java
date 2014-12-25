@@ -21,6 +21,7 @@ import javax.swing.UIManager;
 import com.xqbase.net.Connection;
 import com.xqbase.net.ConnectionHandler;
 import com.xqbase.net.ConnectorImpl;
+import com.xqbase.util.Numbers;
 
 public class TerminalFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -132,8 +133,8 @@ public class TerminalFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		try {
 			connector.connect(connection, txtHost.getText(),
-					Integer.parseInt(txtPort.getText()));
-		} catch (IOException | IllegalArgumentException e) {
+					Numbers.parseInt(txtPort.getText()));
+		} catch (IOException e) {
 			stop();
 			JOptionPane.showMessageDialog(TerminalFrame.this, e.getMessage(),
 					getTitle(), JOptionPane.WARNING_MESSAGE);
