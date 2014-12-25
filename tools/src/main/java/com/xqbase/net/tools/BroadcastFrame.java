@@ -9,6 +9,7 @@ import javax.swing.JTextField;
 
 import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.misc.BroadcastServer;
+import com.xqbase.util.Numbers;
 
 public class BroadcastFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -40,8 +41,8 @@ public class BroadcastFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		try {
 			connector.add(new BroadcastServer(chkNoEcho.isSelected()),
-					Integer.parseInt(txtPort.getText()));
-		} catch (IOException | IllegalArgumentException e) {
+					Numbers.parseInt(txtPort.getText()));
+		} catch (IOException e) {
 			connector.close();
 			connector = null;
 			stop();

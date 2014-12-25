@@ -8,6 +8,7 @@ import javax.swing.JTextField;
 
 import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.portmap.PortMapServer;
+import com.xqbase.util.Numbers;
 
 public class PortMapServerFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -40,8 +41,8 @@ public class PortMapServerFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		server = new PortMapServer(connector, connector);
 		try {
-			connector.add(server, Integer.parseInt(txtMapPort.getText()));
-		} catch (IOException | IllegalArgumentException e) {
+			connector.add(server, Numbers.parseInt(txtMapPort.getText()));
+		} catch (IOException e) {
 			server.close();
 			connector.close();
 			connector = null;

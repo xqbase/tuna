@@ -16,6 +16,7 @@ import com.xqbase.net.ConnectorImpl;
 import com.xqbase.net.misc.BandwidthFilter;
 import com.xqbase.net.misc.DumpFilter;
 import com.xqbase.net.misc.ForwardServer;
+import com.xqbase.util.Numbers;
 
 public class ForwardFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
@@ -102,11 +103,11 @@ public class ForwardFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		try {
 			ForwardServer forward = new ForwardServer(connector, txtRemoteHost.getText(),
-					Integer.parseInt(txtRemotePort.getText()));
+					Numbers.parseInt(txtRemotePort.getText()));
 			forward.appendRemoteFilter(bandwidth);
 			connector.add(forward.appendFilter(dump).appendFilter(bandwidth),
-					Integer.parseInt(txtPort.getText()));
-		} catch (IOException | IllegalArgumentException e) {
+					Numbers.parseInt(txtPort.getText()));
+		} catch (IOException e) {
 			connector.close();
 			connector = null;
 			stop();
