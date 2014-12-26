@@ -3,12 +3,12 @@
 		xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.xqbase</groupId>
-	<artifactId>xqbase-net-tools</artifactId>
+	<artifactId>tuna-tools</artifactId>
 	<version>0.1.0</version>
 	<packaging>jar</packaging>
-	<name>XQBase Net Tools</name>
+	<name>XQBase Tuna Tools</name>
 	<description>a Lightweight and High Performance Java Network Framework - Tools Part</description>
-	<url>https://github.com/xqbase/net</url>
+	<url>https://github.com/xqbase/tuna</url>
 
 	<licenses>
 		<license>
@@ -27,9 +27,9 @@
 	</developers>
 
 	<scm>
-		<connection>scm:git:git@github.com:xqbase/net.git</connection>
-		<developerConnection>scm:git:git@github.com:xqbase/net.git</developerConnection>
-		<url>https://github.com/xqbase/net.git</url>
+		<connection>scm:git:git@github.com:xqbase/tuna.git</connection>
+		<developerConnection>scm:git:git@github.com:xqbase/tuna.git</developerConnection>
+		<url>https://github.com/xqbase/tuna.git</url>
 	</scm>
 
 	<properties>
@@ -43,7 +43,7 @@
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
 				<configuration>
-					<finalName>net</finalName>
+					<finalName>tuna</finalName>
 					<appendAssemblyId>false</appendAssemblyId>
 					<descriptorRefs>
 						<descriptorRef>jar-with-dependencies</descriptorRef>
@@ -64,7 +64,7 @@
 	<dependencies>
 		<dependency>
 			<groupId>com.xqbase</groupId>
-			<artifactId>xqbase-net-misc</artifactId>
+			<artifactId>tuna-misc</artifactId>
 			<version>0.1.0</version>
 		</dependency>
 		<dependency>
