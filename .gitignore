@@ -14,3 +14,4 @@ hs_err_pid*
 /core/target
 /misc/target
 /tools/target
+/proxy/target
