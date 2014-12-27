@@ -1,1 +1,1 @@
-start javaw -cp lib/net.jar com.xqbase.net.tools.TerminalFrame
+start javaw -cp lib/tuna.jar com.xqbase.tuna.tools.TerminalFrame

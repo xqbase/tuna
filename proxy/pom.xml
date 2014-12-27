@@ -3,11 +3,11 @@
 		xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.xqbase</groupId>
-	<artifactId>tuna</artifactId>
+	<artifactId>tuna-proxy</artifactId>
 	<version>0.1.0</version>
-	<packaging>pom</packaging>
-	<name>XQBase Tuna</name>
-	<description>a Lightweight and High Performance Java Network Framework</description>
+	<packaging>jar</packaging>
+	<name>XQBase Tuna Proxy</name>
+	<description>a Lightweight and High Performance Java Network Framework - Proxy Part</description>
 	<url>https://github.com/xqbase/tuna</url>
 
 	<licenses>
@@ -34,12 +34,20 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<maven.compiler.source>1.8</maven.compiler.source>
+		<maven.compiler.target>1.8</maven.compiler.target>
 	</properties>
 
-	<modules>
-		<module>core</module>
-		<module>misc</module>
-		<module>tools</module>
-		<module>proxy</module>
-	</modules>
+	<dependencies>
+		<dependency>
+			<groupId>com.xqbase</groupId>
+			<artifactId>tuna-core</artifactId>
+			<version>0.1.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.xqbase</groupId>
+			<artifactId>xqbase-util</artifactId>
+			<version>0.2.2</version>
+		</dependency>
+	</dependencies>
 </project>
