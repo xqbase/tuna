@@ -6,7 +6,7 @@
 	<artifactId>tuna</artifactId>
 	<version>0.1.0</version>
 	<packaging>pom</packaging>
-	<name>XQBase Tuna</name>
+	<name>Tuna</name>
 	<description>a Lightweight and High Performance Java Network Framework</description>
 	<url>https://github.com/xqbase/tuna</url>
 
@@ -40,6 +40,7 @@
 		<module>core</module>
 		<module>misc</module>
 		<module>tools</module>
+		<module>http</module>
 		<module>proxy</module>
 	</modules>
 </project>

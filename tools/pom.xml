@@ -6,7 +6,7 @@
 	<artifactId>tuna-tools</artifactId>
 	<version>0.1.0</version>
 	<packaging>jar</packaging>
-	<name>XQBase Tuna Tools</name>
+	<name>Tuna Tools</name>
 	<description>a Lightweight and High Performance Java Network Framework - Tools Part</description>
 	<url>https://github.com/xqbase/tuna</url>
 
