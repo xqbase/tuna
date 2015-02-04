@@ -3,11 +3,11 @@
 		xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.xqbase</groupId>
-	<artifactId>tuna-core</artifactId>
+	<artifactId>tuna-http</artifactId>
 	<version>0.1.0</version>
 	<packaging>jar</packaging>
-	<name>Tuna Core</name>
-	<description>a Lightweight and High Performance Java Network Framework - Core Part</description>
+	<name>Tuna HTTP</name>
+	<description>a Lightweight and High Performance Java Network Framework - HTTP Part</description>
 	<url>https://github.com/xqbase/tuna</url>
 
 	<licenses>
@@ -37,4 +37,12 @@
 		<maven.compiler.source>1.8</maven.compiler.source>
 		<maven.compiler.target>1.8</maven.compiler.target>
 	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.xqbase</groupId>
+			<artifactId>tuna-core</artifactId>
+			<version>0.1.0</version>
+		</dependency>
+	</dependencies>
 </project>

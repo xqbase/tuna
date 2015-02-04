@@ -23,7 +23,7 @@ public class SSLForward {
 		}
 		if (args.length < 3) {
 			System.out.println("SSLForward Usage: java -cp tuna.jar " +
-					"com.xqbase.tuna.tools.ssl.SSLDump " +
+					"com.xqbase.tuna.tools.ssl.SSLForward " +
 					"[<local-host>] <local-port> <remote-host> <remote-port>");
 			service.shutdown();
 			return;

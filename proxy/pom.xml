@@ -6,7 +6,7 @@
 	<artifactId>tuna-proxy</artifactId>
 	<version>0.1.0</version>
 	<packaging>jar</packaging>
-	<name>XQBase Tuna Proxy</name>
+	<name>Tuna Proxy</name>
 	<description>a Lightweight and High Performance Java Network Framework - Proxy Part</description>
 	<url>https://github.com/xqbase/tuna</url>
 
@@ -42,6 +42,11 @@
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-core</artifactId>
+			<version>0.1.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.xqbase</groupId>
+			<artifactId>tuna-http</artifactId>
 			<version>0.1.0</version>
 		</dependency>
 		<dependency>
