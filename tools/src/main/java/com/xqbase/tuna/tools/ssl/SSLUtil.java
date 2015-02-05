@@ -25,7 +25,7 @@ import sun.security.x509.X509CertInfo;
 
 import com.xqbase.util.Time;
 
-public class SSLUtil {
+class SSLUtil {
 	static SSLContext getSSLContext(String dn)
 			throws IOException, GeneralSecurityException {
 		KeyManager[] kms;
