@@ -17,7 +17,8 @@ public class HttpPacket {
 	private static final int PHASE_CHUNK_DATA = 4;
 	private static final int PHASE_CHUNK_CRLF = 5;
 	private static final int PHASE_TRAILER = 6;
-	private static final int PHASE_END = 7;
+	private static final int PHASE_END_CHUNK = 7;
+	private static final int PHASE_END = 8;
 
 	private Type type;
 	private int phase = PHASE_BEGIN, status = 0, bytesToRead = 0;
@@ -50,9 +51,19 @@ public class HttpPacket {
 		return bytesToRead >= 0;
 	}
 
+	/** @return <code>true</code> for a complete header for request or response */ 
+	public boolean isCompleteHeader() {
+		return phase >= PHASE_BODY;
+	}
+
 	/** @return <code>true</code> for a complete request or response */ 
 	public boolean isComplete() {
-		return phase == PHASE_END;
+		return phase >= PHASE_END_CHUNK;
+	}
+
+	/** @return <code>true</code> for a chunked request or response */ 
+	public boolean isChunked() {
+		return phase >= PHASE_CHUNK_SIZE && phase <= PHASE_END_CHUNK;
 	}
 
 	/** @return Request Method, only available for reading request */
@@ -119,11 +130,10 @@ public class HttpPacket {
 	public int read(byte[] b, int off, int len) {
 		int bytesRead = 0;
 		if (phase == PHASE_BEGIN) {
-			int n = readLine(b, off, len);
-			if (n == 0) {
+			bytesRead = readLine(b, off, len);
+			if (bytesRead == 0) {
 				return len;
 			}
-			bytesRead = n;
 			String[] ss = line.toString().split(" ", 3);
 			if (ss.length < 3) {
 				return -1;
@@ -220,6 +230,7 @@ public class HttpPacket {
 				}
 				bytesRead += n;
 				if (phase == PHASE_CHUNK_CRLF) {
+					line.setLength(0);
 					phase = PHASE_CHUNK_SIZE;
 					continue;
 				}
@@ -233,6 +244,7 @@ public class HttpPacket {
 				if (bytesToRead < 0) {
 					return -1;
 				}
+				line.setLength(0);
 				if (bytesToRead == 0) {
 					phase = PHASE_TRAILER;
 					break;
@@ -253,7 +265,7 @@ public class HttpPacket {
 				}
 				readHeader();
 			}
-			phase = PHASE_END;
+			phase = PHASE_END_CHUNK;
 		}
 
 		return bytesRead;
