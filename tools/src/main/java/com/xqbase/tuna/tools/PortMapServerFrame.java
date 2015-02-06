@@ -41,7 +41,7 @@ public class PortMapServerFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		server = new PortMapServer(connector, connector);
 		try {
-			connector.add(server, Numbers.parseInt(txtMapPort.getText()));
+			connector.add(server, Numbers.parseInt(txtMapPort.getText(), 1, 65535));
 		} catch (IOException e) {
 			server.close();
 			connector.close();

@@ -31,14 +31,14 @@ public class SSLDump {
 
 		String hostName = args[0];
 		String hostAddr = args[1];
-		int port = args.length < 3 ? 443 : Numbers.parseInt(args[2], 443);
+		int port = args.length < 3 ? 443 : Numbers.parseInt(args[2], 443, 1, 65535);
 		Logger logger = Log.getAndSet(Conf.openLogger("SSLDump.", 16777216, 10));
 		Log.i(String.format("SSLDump Started (%s:%s->%s:%s)",
 				hostName, "" + port, hostAddr, "" + port));
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
-			SSLContext sslcServer = SSLUtil.getSSLContext("CN=" + hostName);
-			SSLContext sslcClient = SSLUtil.getSSLContext(null);
+			SSLContext sslcServer = SSLContexts.get("CN=" + hostName);
+			SSLContext sslcClient = SSLContexts.get(null);
 			ForwardServer server = new ForwardServer(connector, hostAddr, port);
 			server.appendRemoteFilter(() -> new SSLFilter(connector,
 					sslcClient, SSLFilter.CLIENT));

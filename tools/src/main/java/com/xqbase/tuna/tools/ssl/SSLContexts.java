@@ -11,7 +11,6 @@ import java.util.Date;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.X509TrustManager;
 
 import sun.security.x509.AlgorithmId;
 import sun.security.x509.CertificateAlgorithmId;
@@ -23,14 +22,15 @@ import sun.security.x509.X500Name;
 import sun.security.x509.X509CertImpl;
 import sun.security.x509.X509CertInfo;
 
+import com.xqbase.tuna.util.SSLManagers;
 import com.xqbase.util.Time;
 
-class SSLUtil {
-	static SSLContext getSSLContext(String dn)
+class SSLContexts {
+	static SSLContext get(String dn)
 			throws IOException, GeneralSecurityException {
 		KeyManager[] kms;
 		if (dn == null) {
-			kms = new KeyManager[0];
+			kms = SSLManagers.DEFAULT_KEY_MANAGERS;
 		} else {
 			KeyStore ks = KeyStore.getInstance("JKS");
 			ks.load(null, null);
@@ -58,20 +58,7 @@ class SSLUtil {
 			kms = kmf.getKeyManagers();
 		}
 		SSLContext sslc = SSLContext.getInstance("TLS");
-		sslc.init(kms, new X509TrustManager[] {
-			new X509TrustManager() {
-				@Override
-				public void checkClientTrusted(X509Certificate[] certs, String s) {/**/}
-
-				@Override
-				public void checkServerTrusted(X509Certificate[] certs, String s) {/**/}
-
-				@Override
-				public X509Certificate[] getAcceptedIssuers() {
-					return new X509Certificate[0];
-				}
-			}
-		}, null);
+		sslc.init(kms, SSLManagers.DEFAULT_TRUST_MANAGERS, null);
 		return sslc;
 	}
 }

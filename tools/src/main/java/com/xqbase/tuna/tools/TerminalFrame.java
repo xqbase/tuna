@@ -133,7 +133,7 @@ public class TerminalFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		try {
 			connector.connect(connection, txtHost.getText(),
-					Numbers.parseInt(txtPort.getText()));
+					Numbers.parseInt(txtPort.getText(), 1, 65535));
 		} catch (IOException e) {
 			stop();
 			JOptionPane.showMessageDialog(TerminalFrame.this, e.getMessage(),

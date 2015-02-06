@@ -53,8 +53,9 @@ public class PortMapClientFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		try {
 			PortMapClient client = new PortMapClient(connector,
-					Numbers.parseInt(txtPublicPort.getText()),
-					txtPrivateHost.getText(), Numbers.parseInt(txtPrivatePort.getText())) {
+					Numbers.parseInt(txtPublicPort.getText(), 1, 65535),
+					txtPrivateHost.getText(),
+					Numbers.parseInt(txtPrivatePort.getText(), 1, 65535)) {
 				@Override
 				public void onDisconnect() {
 					super.onDisconnect();
@@ -68,7 +69,7 @@ public class PortMapClientFrame extends ConnectorFrame {
 				}
 			};
 			connector.connect(client, txtMappingHost.getText(),
-					Numbers.parseInt(txtMappingPort.getText()));
+					Numbers.parseInt(txtMappingPort.getText(), 1, 65535));
 		} catch (IOException e) {
 			connector.close();
 			connector = null;
