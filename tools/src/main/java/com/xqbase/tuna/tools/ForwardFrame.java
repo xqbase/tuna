@@ -103,10 +103,10 @@ public class ForwardFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		try {
 			ForwardServer forward = new ForwardServer(connector, txtRemoteHost.getText(),
-					Numbers.parseInt(txtRemotePort.getText()));
+					Numbers.parseInt(txtRemotePort.getText(), 1, 65535));
 			forward.appendRemoteFilter(bandwidth);
 			connector.add(forward.appendFilter(dump).appendFilter(bandwidth),
-					Numbers.parseInt(txtPort.getText()));
+					Numbers.parseInt(txtPort.getText(), 1, 65535));
 		} catch (IOException e) {
 			connector.close();
 			connector = null;

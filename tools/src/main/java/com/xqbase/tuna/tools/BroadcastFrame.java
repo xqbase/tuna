@@ -41,7 +41,7 @@ public class BroadcastFrame extends ConnectorFrame {
 		connector = new ConnectorImpl();
 		try {
 			connector.add(new BroadcastServer(chkNoEcho.isSelected()),
-					Numbers.parseInt(txtPort.getText()));
+					Numbers.parseInt(txtPort.getText(), 1, 65535));
 		} catch (IOException e) {
 			connector.close();
 			connector = null;

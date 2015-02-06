@@ -21,14 +21,24 @@ public class HttpPacket {
 	private static final int PHASE_END = 8;
 
 	private Type type;
-	private int phase = PHASE_BEGIN, status = 0, bytesToRead = 0;
+	private int phase, status, bytesToRead;
 	private String method = null, path = null;
-	private LinkedHashMap<String, ArrayList<String[]>> headers = new LinkedHashMap<>();
-	private ByteArrayQueue body = new ByteArrayQueue();
-	private StringBuilder line = new StringBuilder();
+	private LinkedHashMap<String, ArrayList<String[]>> headers;
+	private ByteArrayQueue body;
+	private StringBuilder line;
 
 	public HttpPacket(Type type) {
 		this.type = type;
+		reset();
+	}
+
+	public void reset() {
+		phase = PHASE_BEGIN;
+		status = bytesToRead = 0;
+		method = path = null;
+		headers.clear();
+		body.clear();
+		line.setLength(0);
 	}
 
 	/** @return <code>true</code> for reading request */
@@ -91,21 +101,40 @@ public class HttpPacket {
 		return body;
 	}
 
-	/**
-	 * @return <b>0</b> for complete line (read <b>len</b> bytes),
-	 * <b>&gt; 0</b> for incomplete line (number of bytes read).
-	 */
-	private int readLine(byte[] b, int off, int len) {
-		for (int i = 0; i < len; i ++) {
-			char c = (char) b[off + i];
+	/** @return <code>true</code> for a complete line */
+	private boolean readLine(ByteArrayQueue queue) {
+		byte[] b = queue.array();
+		int begin = queue.offset();
+		int end = begin + queue.length();
+		for (int i = begin; i < end; i ++) {
+			char c = (char) b[i];
 			if (c == '\n') {
-				return i + 1;
+				queue.remove(i - begin + 1);
+				return true;
 			}
 			if (c != '\r') {
 				line.append(c);
 			}
 		}
-		return 0;
+		queue.remove(end - begin);
+		return false;
+	}
+
+	/** @return <code>true</code> for a complete body or chunk */
+	private boolean readData(ByteArrayQueue queue) {
+		int n;
+		if (bytesToRead < 0) {
+			n = bytesToRead;
+		} else if (bytesToRead > queue.length()) {
+			n = queue.length();
+			bytesToRead -= n;
+		} else {
+			n = bytesToRead;
+			bytesToRead = 0;
+		}
+		body.add(queue.array(), queue.offset(), n);
+		queue.remove(n);
+		return bytesToRead == 0;
 	}
 
 	/** @return number of bytes read */
@@ -126,23 +155,21 @@ public class HttpPacket {
 		line.setLength(0);
 	}
 
-	/** @return number of bytes read, -1 for a bad request */
-	public int read(byte[] b, int off, int len) {
-		int bytesRead = 0;
+	/** @throws HttpPacketException a bad request or response */
+	public void read(ByteArrayQueue queue) throws HttpPacketException {
 		if (phase == PHASE_BEGIN) {
-			bytesRead = readLine(b, off, len);
-			if (bytesRead == 0) {
-				return len;
+			if (!readLine(queue)) {
+				return;
 			}
 			String[] ss = line.toString().split(" ", 3);
 			if (ss.length < 3) {
-				return -1;
+				throw new HttpPacketException(HttpPacketException.Type.BEGIN_LINE, line.toString());
 			}
 			String proto = (type == Type.REQUEST ? ss[2] : ss[0]).toUpperCase();
 			if (proto.equals("HTTP/1.0")) {
 				bytesToRead = -1;
 			} else if (!proto.equals("HTTP/1.1")) {
-				return -1;
+				throw new HttpPacketException(HttpPacketException.Type.PROTOCOL, proto);
 			}
 			if (type == Type.REQUEST) {
 				method = ss[0];
@@ -154,7 +181,7 @@ public class HttpPacket {
 				try {
 					status = Integer.parseInt(ss[1]);
 				} catch (NumberFormatException e) {
-					return -1;
+					throw new HttpPacketException(HttpPacketException.Type.STATUS, ss[1]);
 				}
 				if (type == Type.RESPONSE_FOR_CONNECT && status == 200) {
 					bytesToRead = -1;
@@ -166,11 +193,9 @@ public class HttpPacket {
 
 		if (phase == PHASE_HEADER) {
 			while (true) {
-				int n = readLine(b, off + bytesRead, len - bytesRead);
-				if (n == 0) {
-					return len;
+				if (!readLine(queue)) {
+					return;
 				}
-				bytesRead += n;
 				if (line.length() == 0) {
 					break;
 				}
@@ -190,13 +215,14 @@ public class HttpPacket {
 				if (phase == PHASE_BODY) {
 					values = headers.get("CONTENT-LENGTH");
 					if (values != null && values.size() == 1) {
+						String value = values.get(0)[1];
 						try {
-							bytesToRead = Integer.parseInt(values.get(0)[1]);
+							bytesToRead = Integer.parseInt(value);
 						} catch (NumberFormatException e) {
-							return -1;
+							bytesToRead = -1;
 						}
 						if (bytesToRead < 0) {
-							return -1;
+							throw new HttpPacketException(HttpPacketException.Type.CONTENT_LENGTH, value);
 						}
 					}
 				}
@@ -204,45 +230,42 @@ public class HttpPacket {
 		}
 
 		if (phase == PHASE_BODY) {
-			if (bytesToRead < 0 || bytesRead + bytesToRead > len) {
-				body.add(b, off + bytesRead, len - bytesRead);
-				return len; 
+			if (readData(queue)) {
+				phase = PHASE_END;
 			}
-			body.add(b, off + bytesRead, bytesToRead);
-			phase = PHASE_END;
-			return bytesRead + bytesToRead;
+			return;
 		}
 
 		// phase == PHASE_CHUNK_SIZE/DATA/CRLF 
 		if (phase < PHASE_TRAILER) {
 			while (true) {
 				if (phase == PHASE_CHUNK_DATA) {
-					if (bytesToRead < 0 || bytesRead + bytesToRead > len) {
-						body.add(b, off + bytesRead, len - bytesRead);
-						return len; 
+					readData(queue);
+					if (phase == PHASE_CHUNK_DATA) {
+						return;
 					}
-					body.add(b, off + bytesRead, bytesToRead);
+					if (!readData(queue)) {
+						return;
+					}
 					phase = PHASE_CHUNK_CRLF;
 				}
-				int n = readLine(b, off + bytesRead, len - bytesRead);
-				if (n == 0) {
-					return len;
+				if (!readLine(queue)) {
+					return;
 				}
-				bytesRead += n;
 				if (phase == PHASE_CHUNK_CRLF) {
 					line.setLength(0);
 					phase = PHASE_CHUNK_SIZE;
 					continue;
 				}
 				int space = line.indexOf(" ");
+				String value = space < 0 ? line.toString() : line.substring(0, space);
 				try {
-					bytesToRead = Integer.parseInt(space < 0 ?
-							line.toString() : line.substring(0, space), 16);
+					bytesToRead = Integer.parseInt(value, 16);
 				} catch (NumberFormatException e) {
-					return -1;
+					bytesToRead = -1;
 				}
 				if (bytesToRead < 0) {
-					return -1;
+					throw new HttpPacketException(HttpPacketException.Type.CHUNK_SIZE, value);
 				}
 				line.setLength(0);
 				if (bytesToRead == 0) {
@@ -255,11 +278,9 @@ public class HttpPacket {
 
 		if (phase == PHASE_TRAILER) {
 			while (true) {
-				int n = readLine(b, off + bytesRead, len - bytesRead);
-				if (n == 0) {
-					return len;
+				if (!readLine(queue)) {
+					return;
 				}
-				bytesRead += n;
 				if (line.length() == 0) {
 					break;
 				}
@@ -267,7 +288,5 @@ public class HttpPacket {
 			}
 			phase = PHASE_END_CHUNK;
 		}
-
-		return bytesRead;
 	}
 }

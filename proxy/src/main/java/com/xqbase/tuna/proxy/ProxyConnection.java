@@ -17,6 +17,7 @@ import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.http.HttpPacket;
+import com.xqbase.tuna.http.HttpPacketException;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.ByteArrayQueue;
 
@@ -59,11 +60,10 @@ class PeerConnection implements Connection {
 
 	@Override
 	public void onDisconnect() {
-		if (queue == null) {
-			peer.handler.disconnect();
-		} else {
-			peer.sendError(503);
+		if (queue != null) {
+			peer.handler.send(ProxyConnection.BAD_GATEWAY);
 		}
+		peer.disconnect();
 	}
 }
 
@@ -76,14 +76,18 @@ class ClientConnection implements Connection {
 	private static final byte[] HTTP11 = " HTTP/1.1\r\n".getBytes();
 
 	private HttpPacket request, response = null;
+	private ByteArrayQueue queue = new ByteArrayQueue();
+	private boolean secure;
 	private String host, path;
 
 	ProxyConnection peer;
 	ConnectionHandler handler;
 
-	ClientConnection(ProxyConnection peer, HttpPacket request, String host, String path) {
+	ClientConnection(ProxyConnection peer, HttpPacket request,
+			boolean secure, String host, String path) {
 		this.peer = peer;
 		this.request = request;
+		this.secure = secure;
 		this.host = host;
 		this.path = path;
 	}
@@ -95,17 +99,18 @@ class ClientConnection implements Connection {
 
 	@Override
 	public void onConnect() {
-		send(true);
-	}
-
-	@Override
-	public void onQueue(int delta, int total) {
-		peer.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+		response = new HttpPacket(request.getMethod().toUpperCase().equals("HEAD") ?
+				HttpPacket.Type.RESPONSE_FOR_HEAD : HttpPacket.Type.RESPONSE);
 	}
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		peer.handler.send(b, off, len);
+		queue.add(b, off, len);
+		try {
+			response.read(queue);
+		} catch (HttpPacketException e) {
+			// TODO Disconnect
+		}
 	}
 
 	@Override
@@ -168,8 +173,6 @@ class ClientConnection implements Connection {
 				data.add(body.array(), body.offset(), body.length());
 			}
 		}
-
-
 		handler.send(data.array(), data.offset(), data.length());
 	}
 }
@@ -185,47 +188,186 @@ public class ProxyConnection implements Connection {
 			"Proxy-Authenticate: Basic\r\n" +
 			"Content-Length: 0\r\n" +
 			"Connection: close\r\n\r\n").getBytes();
-	private static final int SC_BAD_REQUEST = 400;
-	private static final int SC_INTERNAL_SERVER_ERROR = 500;
-	private static final int SC_SERVICE_UNAVAILABLE = 503;
-	private static final int[] ERROR_STATUS = {
-		SC_BAD_REQUEST, SC_INTERNAL_SERVER_ERROR, SC_SERVICE_UNAVAILABLE,
-	};
-	private static final String[] ERROR_MESSAGE = {
-		"Bad Request", "Internal Server Error", "Service Unavailable",
-	};
+	private static final byte[] BAD_REQUEST =
+			("HTTP/1.1 400 Bad Request\r\n" +
+			"Content-Length: 0\r\n" +
+			"Connection: close\r\n\r\n").getBytes();
 
-	private static HashMap<Integer, String> errorMap = new HashMap<>();
-
-	static {
-		for (int i = 0; i < ERROR_STATUS.length; i ++) {
-			errorMap.put(Integer.valueOf(ERROR_STATUS[i]), ERROR_MESSAGE[i]);
-		}
-	}
+	static final byte[] BAD_GATEWAY =
+			("HTTP/1.1 502 Bad Gateway\r\n" +
+			"Content-Length: 0\r\n" +
+			"Connection: close\r\n\r\n").getBytes();
+	static final byte[] GATEWAY_TIMEOUT =
+			("HTTP/1.1 504 Gateway Timeout\r\n" +
+			"Content-Length: 0\r\n" +
+			"Connection: close\r\n\r\n").getBytes();
 
 	ConnectionHandler handler = null;
+	HashMap<String, ClientConnection> clientMap = new HashMap<>();
+	HashMap<String, ClientConnection> secureClientMap = new HashMap<>();
 
-	void sendError(int status) {
-		handler.send(("HTTP/1.1 " + status + " " +
-				errorMap.get(Integer.valueOf(status)) + "\r\n" +
-				"Content-Length: 0\r\n" +
-				"Connection: close\r\n\r\n").getBytes());
+	void read() throws HttpPacketException {
+		packet.read(queue);
+		if (client != null) {
+			client.send(false);
+			return;
+		}
+		if (!packet.isCompleteHeader()) {
+			return;
+		}
+		if (auth != null) {
+			boolean authenticated = false;
+			LinkedHashMap<String, ArrayList<String[]>> headers = packet.getHeaders();
+			ArrayList<String[]> values = headers.get("PROXY-AUTHORIZATION");
+			if (values.size() == 1) {
+				String value = values.get(0)[1];
+				if (value.toUpperCase().startsWith("BASIC ")) {
+					String basic = new String(Base64.getDecoder().
+							decode(value.substring(6)));
+					int colon = basic.indexOf(':');
+					if (colon >= 0) {
+						authenticated = auth.test(basic.substring(0, colon),
+								basic.substring(colon + 1));
+					}
+				}
+			}
+			if (!authenticated) {
+				if (packet.isComplete()) {
+					handler.send(AUTH_REQUIRED_KEEP_ALIVE);
+					packet.reset();
+					// No request from peer, so continue reading
+					if (queue.length() > 0) {
+						read();
+					}
+				} else {
+					// Skip reading body
+					handler.send(AUTH_REQUIRED_CLOSE);
+					handler.disconnect();
+				}
+				return;
+			}
+		}
+
+		String method = packet.getMethod().toUpperCase();
+		if (method.equals("CONNECT")) {
+			String path = packet.getPath();
+			int colon = path.lastIndexOf(':');
+			if (colon < 0) {
+				throw new HttpPacketException(HttpPacketException.Type.DESTINATION, path);
+			}
+			String host = path.substring(0, colon);
+			String value = path.substring(colon + 1);
+			int port;
+			try {
+				port = Integer.parseInt(value);
+			} catch (NumberFormatException e) {
+				port = -1;
+			}
+			if (port < 0 || port > 0xFFFF) {
+				throw new HttpPacketException(HttpPacketException.Type.PORT, value);
+			}
+			peer = new PeerConnection(this, packet.getBody());
+			try {
+				connector.connect(peer, host, port);
+			} catch (IOException e) {
+				throw new HttpPacketException(HttpPacketException.Type.HOST, host);
+			}
+			return;
+		}
+
+		String path = packet.getPath();
+		boolean secure = false;
+		String host, connectHost;
+		int port;
+		try {
+			// Use "host:port" in path
+			URL url = new URL(path);
+			String proto = url.getProtocol().toLowerCase();
+			if (proto.equals("https")) {
+				secure = true;
+			} else if (!proto.equals("http")) {
+				throw new HttpPacketException(HttpPacketException.Type.PROTOCOL, proto);
+			}
+			connectHost = url.getHost();
+			port = url.getPort();
+			if (port < 0) {
+				host = connectHost;
+				port = url.getDefaultPort();
+			} else {
+				host = connectHost + ":" + port;
+			}
+			port = port < 0 ? url.getDefaultPort() : port;
+			String query = url.getQuery();
+			path = url.getPath();
+			path = (path == null || path.isEmpty() ? "/" : path) +
+					(query == null || query.isEmpty() ? "" : "?" + query);
+		} catch (IOException e) {
+			// Use "Host" in headers if "host:port" not in path
+			ArrayList<String[]> values = packet.getHeaders().get("HOST");
+			if (values == null || values.size() != 1) {
+				throw new HttpPacketException(HttpPacketException.Type.HOST, "");
+			}
+			host = values.get(0)[1];
+			int colon = host.lastIndexOf(':');
+			if (colon < 0) {
+				connectHost = host;
+				port = 80;
+			} else {
+				connectHost = host.substring(0, colon);
+				String value = host.substring(colon + 1);
+				try {
+					port = Integer.parseInt(value);
+				} catch (NumberFormatException e_) {
+					port = -1;
+				}
+				if (port < 0 || port > 0xFFFF) {
+					throw new HttpPacketException(HttpPacketException.Type.PORT, value);
+				}
+			}
+		}
+		client = (secure ? secureClientMap : clientMap).get(host);
+		if (client == null) {
+			client = new ClientConnection(this, packet, secure, host, path);
+			Connection connection;
+			if (secure) {
+				connection = client.appendFilter(new SSLFilter(executor,
+						sslc, SSLFilter.CLIENT, connectHost, port));
+			} else {
+				connection = client;
+			}
+			try {
+				connector.connect(connection, connectHost, port);
+			} catch (IOException e) {
+				throw new HttpPacketException(HttpPacketException.Type.HOST, connectHost);
+			}
+		}
+		client.send(true);
+	}
+
+	void disconnect() {
+		for (ClientConnection client_ : clientMap.values()) {
+			client_.handler.disconnect();
+		}
+		for (ClientConnection client_ : secureClientMap.values()) {
+			client_.handler.disconnect();
+		}
 		handler.disconnect();
 	}
 
 	private Connector connector;
 	private Executor executor;
+	private SSLContext sslc;
 	private BiPredicate<String, String> auth;
+	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket packet = new HttpPacket(HttpPacket.Type.REQUEST);
-	private HashMap<String, ClientConnection> clientMap = new HashMap<>();
-	private HashMap<String, SSLContext> sslMap = new HashMap<>();
 	private ClientConnection client = null;
 	private PeerConnection peer = null;
 
 	public ProxyConnection(Connector connector, Executor executor,
-			BiPredicate<String, String> auth) {
+			SSLContext sslc, BiPredicate<String, String> auth) {
 		this.connector = connector;
 		this.executor = executor;
+		this.sslc = sslc;
 		this.auth = auth;
 	}
 
@@ -241,155 +383,12 @@ public class ProxyConnection implements Connection {
 			return;
 		}
 
-		int bytesRead = 0;
-		while (bytesRead < len) {
-			int n = packet.read(b, off + bytesRead, len - bytesRead);
-			if (n < 0) {
-				sendError(SC_BAD_REQUEST);
-				return;
-			}
-			bytesRead += n;
-
-			if (client != null) {
-				client.send(false);
-				if (packet.isComplete()) {
-					continue;
-				}
-				if (bytesRead < len) {
-					sendError(SC_INTERNAL_SERVER_ERROR);
-				}
-				return;
-			}
-
-			if (!packet.isCompleteHeader()) {
-				if (bytesRead < len) {
-					sendError(SC_INTERNAL_SERVER_ERROR);
-				}
-				return;
-			}
-
-			if (auth != null) {
-				boolean authenticated = false;
-				LinkedHashMap<String, ArrayList<String[]>> headers = packet.getHeaders();
-				ArrayList<String[]> values = headers.get("PROXY-AUTHORIZATION");
-				if (values.size() == 1) {
-					String value = values.get(0)[1];
-					if (value.toUpperCase().startsWith("BASIC ")) {
-						String basic = new String(Base64.getDecoder().
-								decode(value.substring(6)));
-						int colon = basic.indexOf(':');
-						if (colon >= 0) {
-							authenticated = auth.test(basic.substring(0, colon),
-									basic.substring(colon + 1));
-						}
-					}
-				}
-				if (!authenticated) {
-					if (packet.isComplete()) {
-						handler.send(AUTH_REQUIRED_KEEP_ALIVE);
-						packet = new HttpPacket(HttpPacket.Type.REQUEST);
-						continue;
-					}
-					handler.send(AUTH_REQUIRED_CLOSE);
-					handler.disconnect();
-					return;
-				}
-			}
-
-			String method = packet.getMethod().toUpperCase();
-			if (method.equals("CONNECT")) {
-				if (bytesRead < len) {
-					sendError(SC_INTERNAL_SERVER_ERROR);
-					return;
-				}
-				String path = packet.getPath();
-				int colon = path.lastIndexOf(':');
-				if (colon < 0) {
-					sendError(SC_BAD_REQUEST);
-					return;
-				}
-				String host = path.substring(0, colon);
-				int port;
-				try {
-					port = Integer.parseInt(path.substring(colon + 1));
-				} catch (NumberFormatException e) {
-					sendError(SC_BAD_REQUEST);
-					return;
-				}
-				peer = new PeerConnection(this, packet.getBody());
-				try {
-					connector.connect(peer, host, port);
-				} catch (IOException e) {
-					sendError(SC_BAD_REQUEST);
-				}
-				return;
-			}
-
-			String path = packet.getPath();
-			boolean secure = false;
-			String host, connectHost;
-			int port;
-			try {
-				// Use "host:port" in path
-				URL url = new URL(path);
-				String proto = url.getProtocol().toLowerCase();
-				if (proto.equals("https")) {
-					secure = true;
-				} else if (!proto.equals("http")) {
-					sendError(SC_BAD_REQUEST);
-					return;
-				}
-				connectHost = url.getHost();
-				port = url.getPort();
-				if (port < 0) {
-					host = connectHost;
-					port = url.getDefaultPort();
-				} else {
-					host = connectHost + ":" + port;
-				}
-				port = port < 0 ? url.getDefaultPort() : port;
-				String query = url.getQuery();
-				path = url.getPath();
-				path = (path == null || path.isEmpty() ? "/" : path) +
-						(query == null || query.isEmpty() ? "" : "?" + query);
-			} catch (IOException e) {
-				// "host:port" not in path, use "Host" in headers
-				ArrayList<String[]> values = packet.getHeaders().get("HOST");
-				if (values == null || values.size() != 1) {
-					sendError(SC_BAD_REQUEST);
-					return;
-				}
-				host = values.get(0)[1];
-				int colon = host.lastIndexOf(':');
-				if (colon < 0) {
-					connectHost = host;
-					port = 80;
-				} else {
-					connectHost = host.substring(0, colon);
-					try {
-						port = Integer.parseInt(host.substring(colon + 1));
-					} catch (NumberFormatException e_) {
-						sendError(SC_BAD_REQUEST);
-						return;
-					}
-				}
-			}
-			// TODO reuse client, by host/port/secure
-			client = new ClientConnection(this, packet, host, path);
-			Connection connection;
-			if (secure) {
-				// TODO Build and reuse SSLContext
-				SSLContext sslc = sslMap.get(host);
-				connection = client.appendFilter(new SSLFilter(executor, sslc, SSLFilter.CLIENT)); 
-			} else {
-				connection = client;
-			}
-			// TODO reuse client
-			try {
-				connector.connect(connection, connectHost, port);
-			} catch (IOException e) {
-				sendError(SC_BAD_REQUEST);
-			}
+		queue.add(b, off, len);
+		try {
+			read();
+		} catch (HttpPacketException e) {
+			handler.send(BAD_REQUEST);
+			disconnect();
 		}
 	}
 
@@ -405,5 +404,6 @@ public class ProxyConnection implements Connection {
 		if (peer != null) {
 			peer.handler.disconnect();
 		}
+		disconnect();
 	}
 }
