@@ -26,15 +26,15 @@ class PeerConnection implements Connection {
 	private static final byte[] CONNECTION_ESTABLISHED =
 			"HTTP/1.0 200 Connection Established\r\n\r\n".getBytes();
 
-	/** <code>null</code> for an established connection */
-	private ByteArrayQueue queue;
+	private ProxyConnection peer;
+	private ConnectionHandler peerHandler;
+	private boolean established = false;
 
-	ProxyConnection peer;
 	ConnectionHandler handler;
 
-	PeerConnection(ProxyConnection peer, ByteArrayQueue body) {
+	PeerConnection(ProxyConnection peer, ConnectionHandler peerHandler) {
 		this.peer = peer;
-		handler.send(body.array(), body.offset(), body.length());
+		this.peerHandler = peerHandler;
 	}
 
 	@Override
@@ -43,25 +43,25 @@ class PeerConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect() {
-		peer.handler.send(CONNECTION_ESTABLISHED);
-		queue = null;
+	public void onQueue(int delta, int total) {
+		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 	}
 
 	@Override
-	public void onQueue(int delta, int total) {
-		peer.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+	public void onConnect() {
+		peerHandler.send(CONNECTION_ESTABLISHED);
+		established = true;
 	}
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		peer.handler.send(b, off, len);
+		peerHandler.send(b, off, len);
 	}
 
 	@Override
 	public void onDisconnect() {
-		if (queue != null) {
-			peer.handler.send(ProxyConnection.BAD_GATEWAY);
+		if (!established) {
+			peer.gatewayTimeout();
 		}
 		peer.disconnect();
 	}
@@ -73,54 +73,12 @@ class ClientConnection implements Connection {
 	private static final byte[] COLON = {':', ' '};
 	private static final byte[] SPACE = {' '};
 	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
-	private static final byte[] HTTP11 = " HTTP/1.1\r\n".getBytes();
+	private static final byte[] HTTP10 = "HTTP/1.0".getBytes();
+	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
 
-	private HttpPacket request, response = null;
-	private ByteArrayQueue queue = new ByteArrayQueue();
-	private boolean secure;
-	private String host, path;
-
-	ProxyConnection peer;
-	ConnectionHandler handler;
-
-	ClientConnection(ProxyConnection peer, HttpPacket request,
-			boolean secure, String host, String path) {
-		this.peer = peer;
-		this.request = request;
-		this.secure = secure;
-		this.host = host;
-		this.path = path;
-	}
-
-	@Override
-	public void setHandler(ConnectionHandler handler) {
-		this.handler = handler;
-	}
-
-	@Override
-	public void onConnect() {
-		response = new HttpPacket(request.getMethod().toUpperCase().equals("HEAD") ?
-				HttpPacket.Type.RESPONSE_FOR_HEAD : HttpPacket.Type.RESPONSE);
-	}
-
-	@Override
-	public void onRecv(byte[] b, int off, int len) {
-		queue.add(b, off, len);
-		try {
-			response.read(queue);
-		} catch (HttpPacketException e) {
-			// TODO Disconnect
-		}
-	}
-
-	@Override
-	public void onDisconnect() {
-		peer.handler.disconnect();
-	}
-
-	private void writeHeaders(ByteArrayQueue data) {
+	private static void writeHeaders(ByteArrayQueue data, HttpPacket packet) {
 		Iterator<Map.Entry<String, ArrayList<String[]>>> it =
-				request.getHeaders().entrySet().iterator();
+				packet.getHeaders().entrySet().iterator();
 		while (it.hasNext()) {
 			Map.Entry<String, ArrayList<String[]>> entry = it.next();
 			it.remove();
@@ -140,12 +98,92 @@ class ClientConnection implements Connection {
 		}
 	}
 
-	void send(boolean begin) {
+	private ProxyConnection peer;
+	private ConnectionHandler peerHandler;
+	private HttpPacket request, response = null;
+	private boolean secure, connectionClose = false;
+	private String host, path = null;
+	private ByteArrayQueue queue = new ByteArrayQueue();
+
+	ConnectionHandler handler;
+
+	ClientConnection(ProxyConnection peer, ConnectionHandler peerHandler,
+			HttpPacket request, boolean secure, String host) {
+		this.peer = peer;
+		this.peerHandler = peerHandler;
+		this.request = request;
+		this.secure = secure;
+		this.host = host;
+	}
+
+	void init(String path_, boolean connectionClose_) {
+		path = path_;
+		connectionClose = connectionClose_;
+	}
+
+	@Override
+	public void setHandler(ConnectionHandler handler) {
+		this.handler = handler;
+	}
+
+	@Override
+	public void onQueue(int delta, int total) {
+		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+	}
+
+	@Override
+	public void onConnect() {
+		response = new HttpPacket(request.getMethod().toUpperCase().equals("HEAD") ?
+				HttpPacket.Type.RESPONSE_FOR_HEAD : HttpPacket.Type.RESPONSE);
+	}
+
+	@Override
+	public void onRecv(byte[] b, int off, int len) {
+		if (peer.isCurrentClient(this)) {
+			// Should not receive data here
+			handler.disconnect();
+			onDisconnect();
+			return;
+		}
+		queue.add(b, off, len);
+		try {
+			response.read(queue);
+		} catch (HttpPacketException e) {
+			// Disconnect Peer for a Bad Response
+			handler.disconnect();
+			onDisconnect();
+			return;
+		}
+		if (path == null) {
+			sendResponse(false);
+		} else {
+			if (response.isCompleteHeader()) {
+				path = null;
+				sendResponse(true);
+			}
+		}
+	}
+
+	@Override
+	public void onDisconnect() {
+		peer.getClientMap(secure).remove(host);
+		if (response.isComplete()) {
+			response.reset();
+			return;
+		}
+		if (path != null && !response.isCompleteHeader()) {
+			peer.badGateway();
+		}
+		peerHandler.disconnect();
+	}
+
+	void sendRequest(boolean begin) {
 		ByteArrayQueue data = new ByteArrayQueue();
 		if (begin) {
-			data.add(request.getMethod().getBytes()).
-					add(SPACE).add(path.getBytes()).add(HTTP11);
-			writeHeaders(data);
+			data.add(request.getMethod().getBytes()).add(SPACE).
+					add(path.getBytes()).add(SPACE).
+					add(HTTP11).add(CRLF);
+			writeHeaders(data, request);
 		}
 		ByteArrayQueue body = request.getBody();
 		if (request.isChunked()) {
@@ -157,23 +195,62 @@ class ClientConnection implements Connection {
 			}
 			if (request.isComplete()) {
 				data.add(FINAL_CRLF);
-				writeHeaders(data);
+				writeHeaders(data, request);
 				data.add(CRLF);
 			}
-		} else {
+		} else if (body.length() > 0) {
 			data.add(body.array(), body.offset(), body.length());
 		}
-		if (body.length() > 0) {
-			if (request.isChunked()) {
+		if (request.isComplete()) {
+			request.reset();
+			path = null;
+		}
+		handler.send(data.array(), data.offset(), data.length());
+	}
+
+	private void sendResponse(boolean begin) {
+		ByteArrayQueue data = new ByteArrayQueue();
+		if (begin) {
+			data.add(request.isHttp10() ? HTTP10 : HTTP11).add(SPACE).
+					add(("" + response.getStatus()).getBytes()).add(SPACE).
+					add(response.getMessage().getBytes()).add(CRLF);
+			writeHeaders(data, response);
+		}
+		ByteArrayQueue body = request.getBody();
+		if (request.isHttp10()) {
+			if (body.length() > 0) {
+				data.add(body.array(), body.offset(), body.length());
+			}
+			handler.send(data.array(), data.offset(), data.length());
+			if (request.isComplete()) {
+				handler.disconnect();
+				onDisconnect();
+			}
+			return;
+		}
+		if (response.isChunked()) {
+			if (body.length() > 0) {
 				data.add(Integer.toHexString(body.length()).getBytes());
 				data.add(CRLF);
 				data.add(body.array(), body.offset(), body.length());
 				data.add(CRLF);
-			} else {
-				data.add(body.array(), body.offset(), body.length());
 			}
+			if (request.isComplete()) {
+				data.add(FINAL_CRLF);
+				writeHeaders(data, response);
+				data.add(CRLF);
+			}
+		} else if (body.length() > 0) {
+			data.add(body.array(), body.offset(), body.length());
 		}
 		handler.send(data.array(), data.offset(), data.length());
+		if (response.isComplete()) {
+			response.reset();
+			if (connectionClose) {
+				handler.disconnect();
+				onDisconnect();
+			}
+		}
 	}
 }
 
@@ -192,32 +269,73 @@ public class ProxyConnection implements Connection {
 			("HTTP/1.1 400 Bad Request\r\n" +
 			"Content-Length: 0\r\n" +
 			"Connection: close\r\n\r\n").getBytes();
-
-	static final byte[] BAD_GATEWAY =
+	private static final byte[] BAD_GATEWAY =
 			("HTTP/1.1 502 Bad Gateway\r\n" +
 			"Content-Length: 0\r\n" +
 			"Connection: close\r\n\r\n").getBytes();
-	static final byte[] GATEWAY_TIMEOUT =
+	private static final byte[] GATEWAY_TIMEOUT =
 			("HTTP/1.1 504 Gateway Timeout\r\n" +
 			"Content-Length: 0\r\n" +
 			"Connection: close\r\n\r\n").getBytes();
 
-	ConnectionHandler handler = null;
-	HashMap<String, ClientConnection> clientMap = new HashMap<>();
-	HashMap<String, ClientConnection> secureClientMap = new HashMap<>();
+	private Connector connector;
+	private Executor executor;
+	private SSLContext sslc;
+	private BiPredicate<String, String> auth;
+	private ByteArrayQueue queue = new ByteArrayQueue();
+	private HttpPacket packet = new HttpPacket(HttpPacket.Type.REQUEST);
+	private PeerConnection peer = null;
+	private ConnectionHandler handler = null;
+	private ClientConnection client = null;
+	private HashMap<String, ClientConnection> clientMap = new HashMap<>();
+	private HashMap<String, ClientConnection> secureClientMap = new HashMap<>();
+
+	private boolean testHeader(String key, String value) {
+		ArrayList<String[]> values = packet.getHeaders().get(key);
+		if (values == null) {
+			return true;
+		}
+		for (String[] s : values) {
+			if (s[1].toLowerCase().equals(value)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void badGateway() {
+		handler.send(BAD_GATEWAY);
+	}
+
+	void gatewayTimeout() {
+		handler.send(GATEWAY_TIMEOUT);
+	}
+
+	boolean isCurrentClient(ClientConnection thisClient) {
+		return thisClient == this.client;
+	}
+
+	HashMap<String, ClientConnection> getClientMap(boolean secure) {
+		return secure ? secureClientMap : clientMap;
+	}
 
 	void read() throws HttpPacketException {
 		packet.read(queue);
 		if (client != null) {
-			client.send(false);
+			client.sendRequest(false);
 			return;
 		}
 		if (!packet.isCompleteHeader()) {
 			return;
 		}
+		
+		boolean connectionClose = packet.isHttp10() ||
+				testHeader("CONNECTION", "close") ||
+				testHeader("PROXY-CONNECTION", "close");
+
+		LinkedHashMap<String, ArrayList<String[]>> headers = packet.getHeaders();
 		if (auth != null) {
 			boolean authenticated = false;
-			LinkedHashMap<String, ArrayList<String[]>> headers = packet.getHeaders();
 			ArrayList<String[]> values = headers.get("PROXY-AUTHORIZATION");
 			if (values.size() == 1) {
 				String value = values.get(0)[1];
@@ -232,17 +350,17 @@ public class ProxyConnection implements Connection {
 				}
 			}
 			if (!authenticated) {
-				if (packet.isComplete()) {
+				if (connectionClose || !packet.isComplete()) {
+					// Skip reading body
+					handler.send(AUTH_REQUIRED_CLOSE);
+					handler.disconnect();
+				} else { 
 					handler.send(AUTH_REQUIRED_KEEP_ALIVE);
 					packet.reset();
 					// No request from peer, so continue reading
 					if (queue.length() > 0) {
 						read();
 					}
-				} else {
-					// Skip reading body
-					handler.send(AUTH_REQUIRED_CLOSE);
-					handler.disconnect();
 				}
 				return;
 			}
@@ -266,11 +384,15 @@ public class ProxyConnection implements Connection {
 			if (port < 0 || port > 0xFFFF) {
 				throw new HttpPacketException(HttpPacketException.Type.PORT, value);
 			}
-			peer = new PeerConnection(this, packet.getBody());
+			peer = new PeerConnection(this, handler);
 			try {
 				connector.connect(peer, host, port);
 			} catch (IOException e) {
 				throw new HttpPacketException(HttpPacketException.Type.HOST, host);
+			}
+			ByteArrayQueue body = packet.getBody();
+			if (body.length() > 0) {
+				peer.handler.send(body.array(), body.offset(), body.length());
 			}
 			return;
 		}
@@ -325,9 +447,11 @@ public class ProxyConnection implements Connection {
 				}
 			}
 		}
-		client = (secure ? secureClientMap : clientMap).get(host);
+
+		client = getClientMap(secure).get(host);
 		if (client == null) {
-			client = new ClientConnection(this, packet, secure, host, path);
+			client = new ClientConnection(this, handler, packet, secure, host);
+			getClientMap(secure).put(host, client);
 			Connection connection;
 			if (secure) {
 				connection = client.appendFilter(new SSLFilter(executor,
@@ -341,7 +465,8 @@ public class ProxyConnection implements Connection {
 				throw new HttpPacketException(HttpPacketException.Type.HOST, connectHost);
 			}
 		}
-		client.send(true);
+		client.init(path, connectionClose);
+		client.sendRequest(true);
 	}
 
 	void disconnect() {
@@ -353,15 +478,6 @@ public class ProxyConnection implements Connection {
 		}
 		handler.disconnect();
 	}
-
-	private Connector connector;
-	private Executor executor;
-	private SSLContext sslc;
-	private BiPredicate<String, String> auth;
-	private ByteArrayQueue queue = new ByteArrayQueue();
-	private HttpPacket packet = new HttpPacket(HttpPacket.Type.REQUEST);
-	private ClientConnection client = null;
-	private PeerConnection peer = null;
 
 	public ProxyConnection(Connector connector, Executor executor,
 			SSLContext sslc, BiPredicate<String, String> auth) {
@@ -396,6 +512,8 @@ public class ProxyConnection implements Connection {
 	public void onQueue(int delta, int total) {
 		if (peer != null) {
 			peer.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+		} else if (client != null) {
+			client.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 		}
 	}
 
