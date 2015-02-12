@@ -24,16 +24,16 @@ class PeerConnection implements Connection {
 	}
 
 	@Override
-	public void onQueue(int delta, int total) {
+	public void onRecv(byte[] b, int off, int len) {
 		if (peer != null) {
-			peer.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+			peer.handler.send(b, off, len);
 		}
 	}
 
 	@Override
-	public void onRecv(byte[] b, int off, int len) {
+	public void onQueue(int delta, int total) {
 		if (peer != null) {
-			peer.handler.send(b, off, len);
+			peer.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 		}
 	}
 

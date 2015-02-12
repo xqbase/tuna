@@ -24,15 +24,15 @@ public class TestMulticast {
 				protected Connection getVirtual(Object key) {
 					return new Connection() {
 						@Override
-						public void onRecv(byte[] b, int off, int len) {
-							multicastMap.get(multicastKey[0]).send(b, off, len);
-						}
-
-						@Override
 						public void setHandler(ConnectionHandler handler) {
 							if (key != null) {
 								multicastMap.put(key, handler);
 							}
+						}
+
+						@Override
+						public void onRecv(byte[] b, int off, int len) {
+							multicastMap.get(multicastKey[0]).send(b, off, len);
 						}
 					};
 				}

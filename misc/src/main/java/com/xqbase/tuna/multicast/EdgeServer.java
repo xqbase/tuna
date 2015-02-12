@@ -105,14 +105,6 @@ class OriginConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect() {
-		closeable = timer.scheduleDelayed(() -> {
-			handler.send(new MulticastPacket(0,
-					MulticastPacket.EDGE_PING, 0, 0).getHead());
-		}, 45000, 45000);
-	}
-
-	@Override
 	public void onRecv(byte[] b, int off, int len) {
 		MulticastPacket packet = new MulticastPacket(b, off, len);
 		int command = packet.command;
@@ -158,6 +150,14 @@ class OriginConnection implements Connection {
 				connection.handler.disconnect();
 			}
 		}
+	}
+
+	@Override
+	public void onConnect() {
+		closeable = timer.scheduleDelayed(() -> {
+			handler.send(new MulticastPacket(0,
+					MulticastPacket.EDGE_PING, 0, 0).getHead());
+		}, 45000, 45000);
 	}
 
 	@Override

@@ -22,7 +22,7 @@ public class HttpPacket {
 
 	private Type type;
 	private int phase, status, bytesToRead;
-	private String method = null, path = null;
+	private String method = null, path = null, message = null;
 	private LinkedHashMap<String, ArrayList<String[]>> headers;
 	private ByteArrayQueue body;
 	private StringBuilder line;
@@ -89,6 +89,11 @@ public class HttpPacket {
 	/** @return Response Status, only available for reading response */
 	public int getStatus() {
 		return status;
+	}
+
+	/** @return Response Message, only available for reading response */
+	public String getMessage() {
+		return message;
 	}
 
 	/** @return HTTP Headers for request or response */
@@ -183,6 +188,7 @@ public class HttpPacket {
 				} catch (NumberFormatException e) {
 					throw new HttpPacketException(HttpPacketException.Type.STATUS, ss[1]);
 				}
+				message = ss[2];
 				if (type == Type.RESPONSE_FOR_CONNECT && status == 200) {
 					bytesToRead = -1;
 				}
