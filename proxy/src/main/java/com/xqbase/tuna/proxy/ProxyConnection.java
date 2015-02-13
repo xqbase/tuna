@@ -43,6 +43,11 @@ class PeerConnection implements Connection {
 	}
 
 	@Override
+	public void onRecv(byte[] b, int off, int len) {
+		peerHandler.send(b, off, len);
+	}
+
+	@Override
 	public void onQueue(int delta, int total) {
 		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 	}
@@ -51,11 +56,6 @@ class PeerConnection implements Connection {
 	public void onConnect() {
 		peerHandler.send(CONNECTION_ESTABLISHED);
 		established = true;
-	}
-
-	@Override
-	public void onRecv(byte[] b, int off, int len) {
-		peerHandler.send(b, off, len);
 	}
 
 	@Override
@@ -127,17 +127,6 @@ class ClientConnection implements Connection {
 	}
 
 	@Override
-	public void onQueue(int delta, int total) {
-		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
-	}
-
-	@Override
-	public void onConnect() {
-		response = new HttpPacket(request.getMethod().toUpperCase().equals("HEAD") ?
-				HttpPacket.Type.RESPONSE_FOR_HEAD : HttpPacket.Type.RESPONSE);
-	}
-
-	@Override
 	public void onRecv(byte[] b, int off, int len) {
 		if (peer.isCurrentClient(this)) {
 			// Should not receive data here
@@ -156,12 +145,21 @@ class ClientConnection implements Connection {
 		}
 		if (path == null) {
 			sendResponse(false);
-		} else {
-			if (response.isCompleteHeader()) {
-				path = null;
-				sendResponse(true);
-			}
+		} else if (response.isCompleteHeader()) {
+			path = null;
+			sendResponse(true);
 		}
+	}
+
+	@Override
+	public void onQueue(int delta, int total) {
+		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+	}
+
+	@Override
+	public void onConnect() {
+		response = new HttpPacket(request.getMethod().toUpperCase().equals("HEAD") ?
+				HttpPacket.Type.RESPONSE_FOR_HEAD : HttpPacket.Type.RESPONSE);
 	}
 
 	@Override
@@ -201,11 +199,12 @@ class ClientConnection implements Connection {
 		} else if (body.length() > 0) {
 			data.add(body.array(), body.offset(), body.length());
 		}
-		if (request.isComplete()) {
-			request.reset();
-			path = null;
-		}
 		handler.send(data.array(), data.offset(), data.length());
+		if (!request.isComplete()) {
+			return;
+		}
+		request.reset();
+		path = null;
 	}
 
 	private void sendResponse(boolean begin) {
@@ -244,12 +243,16 @@ class ClientConnection implements Connection {
 			data.add(body.array(), body.offset(), body.length());
 		}
 		handler.send(data.array(), data.offset(), data.length());
-		if (response.isComplete()) {
+		if (!response.isComplete()) {
+			return;
+		}
+		if (connectionClose) {
+			handler.disconnect();
+			onDisconnect();
+		} else {
 			response.reset();
-			if (connectionClose) {
-				handler.disconnect();
-				onDisconnect();
-			}
+			peerHandler.setBufferSize(MAX_BUFFER_SIZE);
+			peer.read();
 		}
 	}
 }
@@ -319,7 +322,7 @@ public class ProxyConnection implements Connection {
 		return secure ? secureClientMap : clientMap;
 	}
 
-	void read() throws HttpPacketException {
+	private void readEx() throws HttpPacketException {
 		packet.read(queue);
 		if (client != null) {
 			client.sendRequest(false);
@@ -328,11 +331,10 @@ public class ProxyConnection implements Connection {
 		if (!packet.isCompleteHeader()) {
 			return;
 		}
-		
+
 		boolean connectionClose = packet.isHttp10() ||
 				testHeader("CONNECTION", "close") ||
 				testHeader("PROXY-CONNECTION", "close");
-
 		LinkedHashMap<String, ArrayList<String[]>> headers = packet.getHeaders();
 		if (auth != null) {
 			boolean authenticated = false;
@@ -359,7 +361,7 @@ public class ProxyConnection implements Connection {
 					packet.reset();
 					// No request from peer, so continue reading
 					if (queue.length() > 0) {
-						read();
+						readEx();
 					}
 				}
 				return;
@@ -469,6 +471,22 @@ public class ProxyConnection implements Connection {
 		client.sendRequest(true);
 	}
 
+	void read() {
+		if (queue.length() == 0) {
+			return;
+		}
+		try {
+			readEx();
+		} catch (HttpPacketException e) {
+			handler.send(BAD_REQUEST);
+			disconnect();
+		}
+		// TODO When to block request?
+		if (packet.isComplete() && queue.length() > 0) {
+			handler.setBufferSize(0);
+		}
+	}
+
 	void disconnect() {
 		for (ClientConnection client_ : clientMap.values()) {
 			client_.handler.disconnect();
@@ -500,12 +518,7 @@ public class ProxyConnection implements Connection {
 		}
 
 		queue.add(b, off, len);
-		try {
-			read();
-		} catch (HttpPacketException e) {
-			handler.send(BAD_REQUEST);
-			disconnect();
-		}
+		read();
 	}
 
 	@Override
