@@ -23,7 +23,7 @@ public class HttpPacket {
 	private Type type;
 	private int phase, status, bytesToRead;
 	private String method = null, path = null, message = null;
-	private LinkedHashMap<String, ArrayList<String[]>> headers;
+	private LinkedHashMap<String, ArrayList<String>> headers;
 	private ByteArrayQueue body;
 	private StringBuilder line;
 
@@ -97,7 +97,7 @@ public class HttpPacket {
 	}
 
 	/** @return HTTP Headers for request or response */
-	public LinkedHashMap<String, ArrayList<String[]>> getHeaders() {
+	public LinkedHashMap<String, ArrayList<String>> getHeaders() {
 		return headers;
 	}
 
@@ -151,12 +151,13 @@ public class HttpPacket {
 		}
 		String originalKey = line.substring(0, colon);
 		String key = originalKey.toUpperCase();
-		ArrayList<String[]> values = headers.get(key);
+		ArrayList<String> values = headers.get(key);
 		if (values == null) {
 			values = new ArrayList<>();
+			values.add(originalKey);
 			headers.put(key, values);
 		}
-		values.add(new String[] {originalKey, line.substring(colon + 2)});
+		values.add(line.substring(colon + 2));
 		line.setLength(0);
 	}
 
@@ -209,10 +210,10 @@ public class HttpPacket {
 			}
 			phase = PHASE_BODY;
 			if (bytesToRead == 0 && type != Type.RESPONSE_FOR_HEAD) {
-				ArrayList<String[]> values = headers.get("TRANSFER-ENCODING");
+				ArrayList<String> values = headers.get("TRANSFER-ENCODING");
 				if (values != null) {
-					for (String[] pair : values) {
-						if (pair[1].toLowerCase().equals("chunked")) {
+					for (int i = values.size() - 1; i > 0; i --) {
+						if (values.get(i).toLowerCase().equals("chunked")) {
 							phase = PHASE_CHUNK_SIZE;
 							break;
 						}
@@ -220,8 +221,8 @@ public class HttpPacket {
 				}
 				if (phase == PHASE_BODY) {
 					values = headers.get("CONTENT-LENGTH");
-					if (values != null && values.size() == 1) {
-						String value = values.get(0)[1];
+					if (values != null && values.size() == 2) {
+						String value = values.get(1);
 						try {
 							bytesToRead = Integer.parseInt(value);
 						} catch (NumberFormatException e) {
