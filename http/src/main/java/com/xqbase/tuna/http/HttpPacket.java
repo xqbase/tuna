@@ -20,14 +20,14 @@ public class HttpPacket {
 	private static final int PHASE_END_CHUNK = 7;
 	private static final int PHASE_END = 8;
 
-	private Type type;
+	private Type type = Type.REQUEST;
 	private int phase, status, bytesToRead;
-	private String method = null, path = null, message = null;
-	private LinkedHashMap<String, ArrayList<String>> headers;
-	private ByteArrayQueue body;
-	private StringBuilder line;
+	private String method, path, message;
+	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
+	private ByteArrayQueue body = new ByteArrayQueue();
+	private StringBuilder line = new StringBuilder();
 
-	public HttpPacket(Type type) {
+	public void setType(Type type) {
 		this.type = type;
 		reset();
 	}
@@ -35,7 +35,7 @@ public class HttpPacket {
 	public void reset() {
 		phase = PHASE_BEGIN;
 		status = bytesToRead = 0;
-		method = path = null;
+		method = path = message = null;
 		headers.clear();
 		body.clear();
 		line.setLength(0);
@@ -129,7 +129,7 @@ public class HttpPacket {
 	private boolean readData(ByteArrayQueue queue) {
 		int n;
 		if (bytesToRead < 0) {
-			n = bytesToRead;
+			n = queue.length();
 		} else if (bytesToRead > queue.length()) {
 			n = queue.length();
 			bytesToRead -= n;
@@ -210,26 +210,19 @@ public class HttpPacket {
 			}
 			phase = PHASE_BODY;
 			if (bytesToRead == 0 && type != Type.RESPONSE_FOR_HEAD) {
-				ArrayList<String> values = headers.get("TRANSFER-ENCODING");
-				if (values != null) {
-					for (int i = values.size() - 1; i > 0; i --) {
-						if (values.get(i).toLowerCase().equals("chunked")) {
-							phase = PHASE_CHUNK_SIZE;
-							break;
-						}
-					}
-				}
-				if (phase == PHASE_BODY) {
-					values = headers.get("CONTENT-LENGTH");
-					if (values != null && values.size() == 2) {
-						String value = values.get(1);
+				if (testHeader("TRANSFER-ENCODING", "chunked", true)) {
+					phase = PHASE_CHUNK_SIZE;
+				} else {
+					String contentLength = getHeader("CONTENT-LENGTH");
+					if (contentLength != null) {
 						try {
-							bytesToRead = Integer.parseInt(value);
+							bytesToRead = Integer.parseInt(contentLength);
 						} catch (NumberFormatException e) {
 							bytesToRead = -1;
 						}
 						if (bytesToRead < 0) {
-							throw new HttpPacketException(HttpPacketException.Type.CONTENT_LENGTH, value);
+							throw new HttpPacketException(HttpPacketException.
+									Type.CONTENT_LENGTH, contentLength);
 						}
 					}
 				}
@@ -295,5 +288,58 @@ public class HttpPacket {
 			}
 			phase = PHASE_END_CHUNK;
 		}
+	}
+
+	/** @param key Field Name in Upper Case */
+	public boolean testHeader(String key, String value, boolean ignoreCase) {
+		ArrayList<String> values = headers.get(key);
+		if (values == null) {
+			return false;
+		}
+		int size = values.size();
+		if (ignoreCase) {
+			String value_ = value.toLowerCase();
+			for (int i = 1; i < size; i ++) {
+				if (values.get(i).toLowerCase().equals(value_)) {
+					return true;
+				}
+			}
+		} else {
+			for (int i = 1; i < size; i ++) {
+				if (values.get(i).equals(value)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** @param key Field Name in Upper Case */
+	public String getHeader(String key) {
+		ArrayList<String> values = headers.get(key);
+		return values == null || values.size() != 2 ? null : values.get(1);
+	}
+
+	/** @param key Field Name in Upper Case */
+	public void removeHeader(String key) {
+		headers.remove(key);
+	}
+
+	/** @param key Field Name */
+	public void setHeader(String key, String value) {
+		String key_ = key.toUpperCase();
+		ArrayList<String> values = headers.get(key_);
+		if (values == null) {
+			values = new ArrayList<>();
+			headers.put(key_, values);
+			values.add(key);
+		} else if (values.isEmpty()) {
+			// Should NOT Happen
+			values.add(key);
+		} else {
+			values.clear();
+			values.add(values.get(0));
+		}
+		values.add(value);
 	}
 }

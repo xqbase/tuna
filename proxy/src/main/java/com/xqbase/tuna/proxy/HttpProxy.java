@@ -2,6 +2,8 @@ package com.xqbase.tuna.proxy;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.function.BiPredicate;
 import java.util.logging.Logger;
@@ -27,17 +29,30 @@ public class HttpProxy {
 		String host = p.getProperty("host");
 		host = host == null || host.isEmpty() ? "0.0.0.0" : host;
 		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
-		String username = p.getProperty("username");
+
+		HashMap<String, String> authMap = new HashMap<>();
+		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
 		BiPredicate<String, String> auth;
-		if (username == null) {
-			auth = null;
+		if (authEnabled) {
+			auth = (t, u) -> {
+				String password = authMap.get(t);
+				return password != null && password.equals(u);
+			};
 		} else {
-			String password = p.getProperty("password");
-			auth = (t, u) -> username.equals(t) && (password == null || password.equals(u));
+			auth = null;
 		}
 
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
+			if (authEnabled) {
+				connector.scheduleDelayed(() -> {
+					authMap.clear();
+					Properties p_ = Conf.load("Auth");
+					for (Map.Entry<?, ?> entry : p_.entrySet()) {
+						authMap.put((String) entry.getKey(), (String) entry.getValue());
+					}
+				}, 0, 10000);
+			}
 			SSLContext sslc = SSLContext.getInstance("TLS");
 			sslc.init(SSLManagers.DEFAULT_KEY_MANAGERS, SSLManagers.DEFAULT_TRUST_MANAGERS, null);
 			connector.add(() -> new ProxyConnection(connector, connector, sslc, auth), host, port);
