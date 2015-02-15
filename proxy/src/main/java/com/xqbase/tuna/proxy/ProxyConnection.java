@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.BiPredicate;
@@ -77,31 +76,29 @@ class ClientConnection implements Connection {
 	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
 
 	private static void writeHeaders(ByteArrayQueue data, HttpPacket packet) {
-		Iterator<Map.Entry<String, ArrayList<String[]>>> it =
+		Iterator<Map.Entry<String, ArrayList<String>>> it =
 				packet.getHeaders().entrySet().iterator();
 		while (it.hasNext()) {
-			Map.Entry<String, ArrayList<String[]>> entry = it.next();
+			Map.Entry<String, ArrayList<String>> entry = it.next();
 			it.remove();
-			String key = entry.getKey();
-			boolean reserved = false;
-			switch (key) {
-			case "CONNECTION":
-			case "PROXY-CONNECTION":
-			}
-			if (reserved) {
+			ArrayList<String> values = entry.getValue();
+			int size = values.size();
+			if (size < 1) {
 				continue;
 			}
-			for (String[] header : entry.getValue()) {
-				data.add(header[0].getBytes()).add(COLON).
-						add(header[1].getBytes()).add(CRLF);
+			byte[] keyBytes = values.get(0).getBytes();
+			for (int i = 1; i < size; i ++) {
+				data.add(keyBytes).add(COLON).
+						add(values.get(i).getBytes()).add(CRLF);
 			}
 		}
+		data.add(CRLF);
 	}
 
 	private ProxyConnection peer;
 	private ConnectionHandler peerHandler;
-	private HttpPacket request, response = null;
-	private boolean secure, connectionClose = false;
+	private HttpPacket request, response = new HttpPacket();
+	private boolean secure, head = false, connectionClose = false;
 	private String host, path = null;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 
@@ -116,9 +113,14 @@ class ClientConnection implements Connection {
 		this.host = host;
 	}
 
-	void init(String path_, boolean connectionClose_) {
+	void init(String path_, boolean head_, boolean connectionClose_) {
 		path = path_;
+		head = head_;
 		connectionClose = connectionClose_;
+	}
+
+	boolean isComplete() {
+		return response != null && response.isComplete();
 	}
 
 	@Override
@@ -128,7 +130,7 @@ class ClientConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		if (peer.isCurrentClient(this)) {
+		if (this != peer.getClient()) {
 			// Should not receive data here
 			handler.disconnect();
 			onDisconnect();
@@ -158,8 +160,7 @@ class ClientConnection implements Connection {
 
 	@Override
 	public void onConnect() {
-		response = new HttpPacket(request.getMethod().toUpperCase().equals("HEAD") ?
-				HttpPacket.Type.RESPONSE_FOR_HEAD : HttpPacket.Type.RESPONSE);
+		response.setType(head ? HttpPacket.Type.RESPONSE_FOR_HEAD : HttpPacket.Type.RESPONSE);
 	}
 
 	@Override
@@ -181,6 +182,9 @@ class ClientConnection implements Connection {
 			data.add(request.getMethod().getBytes()).add(SPACE).
 					add(path.getBytes()).add(SPACE).
 					add(HTTP11).add(CRLF);
+			request.removeHeader("PROXY-AUTHORIZATION");
+			request.removeHeader("PROXY-CONNECTION");
+			request.setHeader("Connection", "keep-alive");
 			writeHeaders(data, request);
 		}
 		ByteArrayQueue body = request.getBody();
@@ -194,7 +198,6 @@ class ClientConnection implements Connection {
 			if (request.isComplete()) {
 				data.add(FINAL_CRLF);
 				writeHeaders(data, request);
-				data.add(CRLF);
 			}
 		} else if (body.length() > 0) {
 			data.add(body.array(), body.offset(), body.length());
@@ -204,7 +207,6 @@ class ClientConnection implements Connection {
 			return;
 		}
 		request.reset();
-		path = null;
 	}
 
 	private void sendResponse(boolean begin) {
@@ -215,13 +217,13 @@ class ClientConnection implements Connection {
 					add(response.getMessage().getBytes()).add(CRLF);
 			writeHeaders(data, response);
 		}
-		ByteArrayQueue body = request.getBody();
+		ByteArrayQueue body = response.getBody();
 		if (request.isHttp10()) {
 			if (body.length() > 0) {
 				data.add(body.array(), body.offset(), body.length());
 			}
-			handler.send(data.array(), data.offset(), data.length());
-			if (request.isComplete()) {
+			peerHandler.send(data.array(), data.offset(), data.length());
+			if (response.isComplete()) {
 				handler.disconnect();
 				onDisconnect();
 			}
@@ -234,15 +236,14 @@ class ClientConnection implements Connection {
 				data.add(body.array(), body.offset(), body.length());
 				data.add(CRLF);
 			}
-			if (request.isComplete()) {
+			if (response.isComplete()) {
 				data.add(FINAL_CRLF);
 				writeHeaders(data, response);
-				data.add(CRLF);
 			}
 		} else if (body.length() > 0) {
 			data.add(body.array(), body.offset(), body.length());
 		}
-		handler.send(data.array(), data.offset(), data.length());
+		peerHandler.send(data.array(), data.offset(), data.length());
 		if (!response.isComplete()) {
 			return;
 		}
@@ -251,6 +252,8 @@ class ClientConnection implements Connection {
 			onDisconnect();
 		} else {
 			response.reset();
+			peer.setClient(null);
+			// Unblock Next Request if Response Completed
 			peerHandler.setBufferSize(MAX_BUFFER_SIZE);
 			peer.read();
 		}
@@ -286,25 +289,12 @@ public class ProxyConnection implements Connection {
 	private SSLContext sslc;
 	private BiPredicate<String, String> auth;
 	private ByteArrayQueue queue = new ByteArrayQueue();
-	private HttpPacket packet = new HttpPacket(HttpPacket.Type.REQUEST);
+	private HttpPacket packet = new HttpPacket();
 	private PeerConnection peer = null;
 	private ConnectionHandler handler = null;
 	private ClientConnection client = null;
 	private HashMap<String, ClientConnection> clientMap = new HashMap<>();
 	private HashMap<String, ClientConnection> secureClientMap = new HashMap<>();
-
-	private boolean testHeader(String key, String value) {
-		ArrayList<String[]> values = packet.getHeaders().get(key);
-		if (values == null) {
-			return true;
-		}
-		for (String[] s : values) {
-			if (s[1].toLowerCase().equals(value)) {
-				return true;
-			}
-		}
-		return false;
-	}
 
 	void badGateway() {
 		handler.send(BAD_GATEWAY);
@@ -314,8 +304,12 @@ public class ProxyConnection implements Connection {
 		handler.send(GATEWAY_TIMEOUT);
 	}
 
-	boolean isCurrentClient(ClientConnection thisClient) {
-		return thisClient == this.client;
+	ClientConnection getClient() {
+		return client;
+	}
+
+	void setClient(ClientConnection client) {
+		this.client = client;
 	}
 
 	HashMap<String, ClientConnection> getClientMap(boolean secure) {
@@ -333,22 +327,17 @@ public class ProxyConnection implements Connection {
 		}
 
 		boolean connectionClose = packet.isHttp10() ||
-				testHeader("CONNECTION", "close") ||
-				testHeader("PROXY-CONNECTION", "close");
-		LinkedHashMap<String, ArrayList<String[]>> headers = packet.getHeaders();
+				packet.testHeader("CONNECTION", "close", true) ||
+				packet.testHeader("PROXY-CONNECTION", "close", true);
 		if (auth != null) {
 			boolean authenticated = false;
-			ArrayList<String[]> values = headers.get("PROXY-AUTHORIZATION");
-			if (values.size() == 1) {
-				String value = values.get(0)[1];
-				if (value.toUpperCase().startsWith("BASIC ")) {
-					String basic = new String(Base64.getDecoder().
-							decode(value.substring(6)));
-					int colon = basic.indexOf(':');
-					if (colon >= 0) {
-						authenticated = auth.test(basic.substring(0, colon),
-								basic.substring(colon + 1));
-					}
+			String proxyAuth = packet.getHeader("PROXY-AUTHORIZATION");
+			if (proxyAuth != null && proxyAuth.toUpperCase().startsWith("BASIC ")) {
+				String basic = new String(Base64.getDecoder().decode(proxyAuth.substring(6)));
+				int colon = basic.indexOf(':');
+				if (colon >= 0) {
+					authenticated = auth.test(basic.substring(0, colon),
+							basic.substring(colon + 1));
 				}
 			}
 			if (!authenticated) {
@@ -427,11 +416,10 @@ public class ProxyConnection implements Connection {
 					(query == null || query.isEmpty() ? "" : "?" + query);
 		} catch (IOException e) {
 			// Use "Host" in headers if "host:port" not in path
-			ArrayList<String[]> values = packet.getHeaders().get("HOST");
-			if (values == null || values.size() != 1) {
+			host = packet.getHeader("HOST");
+			if (host == null) {
 				throw new HttpPacketException(HttpPacketException.Type.HOST, "");
 			}
-			host = values.get(0)[1];
 			int colon = host.lastIndexOf(':');
 			if (colon < 0) {
 				connectHost = host;
@@ -467,7 +455,7 @@ public class ProxyConnection implements Connection {
 				throw new HttpPacketException(HttpPacketException.Type.HOST, connectHost);
 			}
 		}
-		client.init(path, connectionClose);
+		client.init(path, method.equals("HEAD"), connectionClose);
 		client.sendRequest(true);
 	}
 
@@ -481,8 +469,8 @@ public class ProxyConnection implements Connection {
 			handler.send(BAD_REQUEST);
 			disconnect();
 		}
-		// TODO When to block request?
-		if (packet.isComplete() && queue.length() > 0) {
+		// Block Next Request if Request Completed but Response not yet
+		if (packet.isComplete() && client != null && !client.isComplete()) {
 			handler.setBufferSize(0);
 		}
 	}
