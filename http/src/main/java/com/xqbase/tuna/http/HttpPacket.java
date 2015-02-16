@@ -1,14 +1,17 @@
 package com.xqbase.tuna.http;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 import com.xqbase.tuna.util.ByteArrayQueue;
 
 public class HttpPacket {
-	public static enum Type {
-		REQUEST, RESPONSE, RESPONSE_FOR_HEAD, RESPONSE_FOR_CONNECT
-	}
+	public static final int TYPE_REQUEST = 0;
+	public static final int TYPE_RESPONSE = 1;
+	public static final int TYPE_RESPONSE_FOR_HEAD = 2;
+	public static final int TYPE_RESPONSE_FOR_CONNECT = 3;
 
 	private static final int PHASE_BEGIN = 0;
 	private static final int PHASE_HEADER = 1;
@@ -20,17 +23,18 @@ public class HttpPacket {
 	private static final int PHASE_END_CHUNK = 7;
 	private static final int PHASE_END = 8;
 
-	private Type type = Type.REQUEST;
-	private int phase, status, bytesToRead;
-	private String method, path, message;
+	private static final byte[] SPACE = {' '};
+	private static final byte[] COLON = {':', ' '};
+	private static final byte[] CRLF = {'\r', '\n'};
+	private static final byte[] HTTP10 = "HTTP/1.0".getBytes();
+	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
+	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
+
+	private int type = TYPE_REQUEST, phase = PHASE_BEGIN, status = 0, bytesToRead = 0;
+	private String method = null, path = null, message = null;
 	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
 	private ByteArrayQueue body = new ByteArrayQueue();
 	private StringBuilder line = new StringBuilder();
-
-	public void setType(Type type) {
-		this.type = type;
-		reset();
-	}
 
 	public void reset() {
 		phase = PHASE_BEGIN;
@@ -43,12 +47,20 @@ public class HttpPacket {
 
 	/** @return <code>true</code> for reading request */
 	public boolean isRequest() {
-		return type == Type.REQUEST;
+		return type == TYPE_REQUEST;
 	}
 
 	/** @return <code>true</code> for reading response */
 	public boolean isResponse() {
-		return type != Type.REQUEST;
+		return type != TYPE_REQUEST;
+	}
+
+	/**
+	 * @param type {@link #TYPE_REQUEST}, {@link #TYPE_RESPONSE},
+	 *        {@link #TYPE_RESPONSE_FOR_HEAD} or {@link #TYPE_RESPONSE_FOR_CONNECT}
+	 */
+	public void setType(int type) {
+		this.type = type;
 	}
 
 	/** @return <code>true</code> for an HTTP/1.0 request or response */
@@ -81,9 +93,19 @@ public class HttpPacket {
 		return method;
 	}
 
+	/** @param method Request Method, only available for writing request */
+	public void setMethod(String method) {
+		this.method = method;
+	}
+
 	/** @return Request Path, only available for reading request */
 	public String getPath() {
 		return path;
+	}
+
+	/** @param path Request Path, only available for writing request */
+	public void setPath(String path) {
+		this.path = path;
 	}
 
 	/** @return Response Status, only available for reading response */
@@ -91,9 +113,19 @@ public class HttpPacket {
 		return status;
 	}
 
+	/** @param status Response Status, only available for writing response */
+	public void setStatus(int status) {
+		this.status = status;
+	}
+
 	/** @return Response Message, only available for reading response */
 	public String getMessage() {
 		return message;
+	}
+
+	/** @param message Response Message, only available for writing response */
+	public void setMessage(String message) {
+		this.message = message;
 	}
 
 	/** @return HTTP Headers for request or response */
@@ -171,13 +203,13 @@ public class HttpPacket {
 			if (ss.length < 3) {
 				throw new HttpPacketException(HttpPacketException.Type.BEGIN_LINE, line.toString());
 			}
-			String proto = (type == Type.REQUEST ? ss[2] : ss[0]).toUpperCase();
+			String proto = (type == TYPE_REQUEST ? ss[2] : ss[0]).toUpperCase();
 			if (proto.equals("HTTP/1.0")) {
 				bytesToRead = -1;
 			} else if (!proto.equals("HTTP/1.1")) {
 				throw new HttpPacketException(HttpPacketException.Type.PROTOCOL, proto);
 			}
-			if (type == Type.REQUEST) {
+			if (type == TYPE_REQUEST) {
 				method = ss[0];
 				path = ss[1];
 				if (method.toUpperCase().equals("CONNECT")) {
@@ -190,7 +222,7 @@ public class HttpPacket {
 					throw new HttpPacketException(HttpPacketException.Type.STATUS, ss[1]);
 				}
 				message = ss[2];
-				if (type == Type.RESPONSE_FOR_CONNECT && status == 200) {
+				if (type == TYPE_RESPONSE_FOR_CONNECT && status == 200) {
 					bytesToRead = -1;
 				}
 			}
@@ -209,7 +241,7 @@ public class HttpPacket {
 				readHeader();
 			}
 			phase = PHASE_BODY;
-			if (bytesToRead == 0 && type != Type.RESPONSE_FOR_HEAD) {
+			if (bytesToRead == 0 && type != TYPE_RESPONSE_FOR_HEAD) {
 				if (testHeader("TRANSFER-ENCODING", "chunked", true)) {
 					phase = PHASE_CHUNK_SIZE;
 				} else {
@@ -240,10 +272,6 @@ public class HttpPacket {
 		if (phase < PHASE_TRAILER) {
 			while (true) {
 				if (phase == PHASE_CHUNK_DATA) {
-					readData(queue);
-					if (phase == PHASE_CHUNK_DATA) {
-						return;
-					}
 					if (!readData(queue)) {
 						return;
 					}
@@ -290,7 +318,11 @@ public class HttpPacket {
 		}
 	}
 
-	/** @param key Field Name in Upper Case */
+	/**
+	 * @param key Field Name in Upper Case
+	 * @param value Field Value
+	 * @param ignoreCase <code>true</code> to ignore case
+	 */
 	public boolean testHeader(String key, String value, boolean ignoreCase) {
 		ArrayList<String> values = headers.get(key);
 		if (values == null) {
@@ -325,7 +357,10 @@ public class HttpPacket {
 		headers.remove(key);
 	}
 
-	/** @param key Field Name */
+	/**
+	 * @param key Field Name
+	 * @param value Field Value
+	 */
 	public void setHeader(String key, String value) {
 		String key_ = key.toUpperCase();
 		ArrayList<String> values = headers.get(key_);
@@ -337,9 +372,70 @@ public class HttpPacket {
 			// Should NOT Happen
 			values.add(key);
 		} else {
+			String value_ = values.get(0);
 			values.clear();
-			values.add(values.get(0));
+			values.add(value_);
 		}
 		values.add(value);
+	}
+
+	public void writeHeaders(ByteArrayQueue data) {
+		Iterator<Map.Entry<String, ArrayList<String>>> it =
+				headers.entrySet().iterator();
+		while (it.hasNext()) {
+			Map.Entry<String, ArrayList<String>> entry = it.next();
+			it.remove();
+			ArrayList<String> values = entry.getValue();
+			int size = values.size();
+			if (size < 1) {
+				continue;
+			}
+			byte[] keyBytes = values.get(0).getBytes();
+			for (int i = 1; i < size; i ++) {
+				data.add(keyBytes).add(COLON).
+						add(values.get(i).getBytes()).add(CRLF);
+			}
+		}
+		data.add(CRLF);
+	}
+
+	/**
+	 * @param data {@link ByteArrayQueue} to write into
+	 * @param http10 <code>true</code> to write body in HTTP/1.0 mode,
+	 *        regardless "Transfer-Encoding"
+	 * @param begin <code>true</code> to write entire Request or Response,
+	 *        including Begin Line and Headers,
+	 *        and <code>false</code> to write Body and Trailers (if available) only
+	 */
+	public void write(ByteArrayQueue data, boolean http10, boolean begin) {
+		if (begin) {
+			if (type == TYPE_REQUEST) {
+				data.add(method.getBytes()).add(SPACE).
+						add(path.getBytes()).add(SPACE).
+						add(http10 ? HTTP10 : HTTP11).add(CRLF);
+			} else {
+				data.add(http10 ? HTTP10 : HTTP11).add(SPACE).
+						add(("" + status).getBytes()).add(SPACE).
+						add(message.getBytes()).add(CRLF);
+			}
+			writeHeaders(data);
+		}
+		int length = body.length();
+		if (!http10 && phase >= PHASE_CHUNK_SIZE && phase <= PHASE_END_CHUNK) {
+			if (length > 0) {
+				data.add(Integer.toHexString(length).getBytes());
+				data.add(CRLF);
+				data.add(body.array(), body.offset(), length);
+				body.remove(length);
+				data.add(CRLF);
+			}
+			if (phase == PHASE_END_CHUNK) {
+				data.add(FINAL_CRLF);
+				writeHeaders(data);
+			}
+		} else if (length > 0) {
+			data.add(body.array(), body.offset(), length);
+			body.remove(length);
+		}
 	}
 }

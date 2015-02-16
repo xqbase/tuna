@@ -14,6 +14,7 @@ import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
 import com.xqbase.util.Service;
+import com.xqbase.util.Time;
 
 public class SSLDump {
 	private static Service service = new Service();
@@ -37,8 +38,8 @@ public class SSLDump {
 				hostName, "" + port, hostAddr, "" + port));
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
-			SSLContext sslcServer = SSLContexts.get("CN=" + hostName);
-			SSLContext sslcClient = SSLContexts.get(null);
+			SSLContext sslcServer = SSLContexts.get("CN=" + hostName, Time.WEEK * 520);
+			SSLContext sslcClient = SSLContexts.get(null, 0);
 			ForwardServer server = new ForwardServer(connector, hostAddr, port);
 			server.appendRemoteFilter(() -> new SSLFilter(connector,
 					sslcClient, SSLFilter.CLIENT));

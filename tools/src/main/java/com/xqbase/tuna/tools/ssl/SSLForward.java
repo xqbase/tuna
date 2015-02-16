@@ -13,6 +13,7 @@ import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
 import com.xqbase.util.Service;
+import com.xqbase.util.Time;
 
 public class SSLForward {
 	private static Service service = new Service();
@@ -51,12 +52,12 @@ public class SSLForward {
 			service.addShutdownHook(connector::interrupt);
 			ForwardServer server = new ForwardServer(connector, remoteHost, remotePort);
 			if (localHost == null) {
-				SSLContext sslc = SSLContexts.get(null);
+				SSLContext sslc = SSLContexts.get(null, 0);
 				server.appendRemoteFilter(() ->
 						new SSLFilter(connector, sslc, SSLFilter.CLIENT));
 				connector.add(server, localPort);
 			} else {
-				SSLContext sslc = SSLContexts.get("CN=" + localHost);
+				SSLContext sslc = SSLContexts.get("CN=" + localHost, Time.WEEK * 520);
 				connector.add(server.appendFilter(() ->
 						new SSLFilter(connector, sslc, SSLFilter.SERVER_NO_AUTH)), localPort);
 			}

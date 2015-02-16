@@ -2,11 +2,8 @@ package com.xqbase.tuna.proxy;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.BiPredicate;
 
@@ -19,6 +16,7 @@ import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.http.HttpPacketException;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.ByteArrayQueue;
+import com.xqbase.util.Log;
 
 /** Connection for <b>CONNECT</b> */
 class PeerConnection implements Connection {
@@ -28,12 +26,29 @@ class PeerConnection implements Connection {
 	private ProxyConnection peer;
 	private ConnectionHandler peerHandler;
 	private boolean established = false;
+	// For DEBUG only
+	private String host;
+	private int port;
+	private boolean debug, verbose;
 
 	ConnectionHandler handler;
 
-	PeerConnection(ProxyConnection peer, ConnectionHandler peerHandler) {
+	PeerConnection(ProxyConnection peer, ConnectionHandler peerHandler,
+			String host, int port, boolean debug, boolean verbose) {
 		this.peer = peer;
 		this.peerHandler = peerHandler;
+		this.host = host;
+		this.port = port;
+		this.debug = debug;
+		this.verbose = verbose;
+		if (verbose) {
+			Log.v("Connection Launched, " + toString(false));
+		}
+	}
+
+	String toString(boolean recv) {
+		return peerHandler.getRemoteAddr() + ":" + peerHandler.getRemotePort() +
+				(recv ? " <= " : " => ") + host + ":" + port;
 	}
 
 	@Override
@@ -48,11 +63,18 @@ class PeerConnection implements Connection {
 
 	@Override
 	public void onQueue(int delta, int total) {
+		if (verbose) {
+			Log.v((total == 0 ? "Connection Unblocked, " : "Connection Blocked, ") +
+					toString(false));
+		}
 		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 	}
 
 	@Override
 	public void onConnect() {
+		if (verbose) {
+			Log.v("Connection Established, " + toString(false));
+		}
 		peerHandler.send(CONNECTION_ESTABLISHED);
 		established = true;
 	}
@@ -60,7 +82,12 @@ class PeerConnection implements Connection {
 	@Override
 	public void onDisconnect() {
 		if (!established) {
+			if (debug) {
+				Log.d("Connection Failed, " + toString(false));
+			}
 			peer.gatewayTimeout();
+		} else if (verbose) {
+			Log.v("Connection Lost, " + toString(true));
 		}
 		peer.disconnect();
 	}
@@ -68,55 +95,42 @@ class PeerConnection implements Connection {
 
 /** Connection for request except <b>CONNECT</b> */
 class ClientConnection implements Connection {
-	private static final byte[] CRLF = {'\r', '\n'};
-	private static final byte[] COLON = {':', ' '};
-	private static final byte[] SPACE = {' '};
-	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
-	private static final byte[] HTTP10 = "HTTP/1.0".getBytes();
-	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
-
-	private static void writeHeaders(ByteArrayQueue data, HttpPacket packet) {
-		Iterator<Map.Entry<String, ArrayList<String>>> it =
-				packet.getHeaders().entrySet().iterator();
-		while (it.hasNext()) {
-			Map.Entry<String, ArrayList<String>> entry = it.next();
-			it.remove();
-			ArrayList<String> values = entry.getValue();
-			int size = values.size();
-			if (size < 1) {
-				continue;
-			}
-			byte[] keyBytes = values.get(0).getBytes();
-			for (int i = 1; i < size; i ++) {
-				data.add(keyBytes).add(COLON).
-						add(values.get(i).getBytes()).add(CRLF);
-			}
-		}
-		data.add(CRLF);
-	}
-
 	private ProxyConnection peer;
 	private ConnectionHandler peerHandler;
 	private HttpPacket request, response = new HttpPacket();
-	private boolean secure, head = false, connectionClose = false;
-	private String host, path = null;
+	private boolean secure, begun = false, connectionClose = false, debug, verbose;
+	private String host;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 
 	ConnectionHandler handler;
 
 	ClientConnection(ProxyConnection peer, ConnectionHandler peerHandler,
-			HttpPacket request, boolean secure, String host) {
+			HttpPacket request, boolean secure, String host, boolean debug, boolean verbose) {
 		this.peer = peer;
 		this.peerHandler = peerHandler;
 		this.request = request;
 		this.secure = secure;
 		this.host = host;
+		this.debug = debug;
+		this.verbose = verbose;
 	}
 
-	void init(String path_, boolean head_, boolean connectionClose_) {
-		path = path_;
-		head = head_;
+	String toString(boolean recv) {
+		String path = request.getPath();
+		return peerHandler.getRemoteAddr() + ":" + peerHandler.getRemotePort() +
+				(recv ? " <= " : " => ") + (secure ? "https://" : "http://") +
+				host + (path == null ? "" : path);
+	}
+
+	void begin(String path, boolean head, boolean connectionClose_) {
+		begun = false;
+		request.setPath(path);
+		request.removeHeader("PROXY-AUTHORIZATION");
+		request.removeHeader("PROXY-CONNECTION");
+		request.setHeader("Connection", "keep-alive");
+		response.setType(head ? HttpPacket.TYPE_RESPONSE_FOR_HEAD : HttpPacket.TYPE_RESPONSE);
 		connectionClose = connectionClose_;
+		sendRequest(true);
 	}
 
 	boolean isComplete() {
@@ -131,7 +145,10 @@ class ClientConnection implements Connection {
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
 		if (this != peer.getClient()) {
-			// Should not receive data here
+			if (debug) {
+				Log.d("Unexpected Response: \"" + new String(b, off, len) + "\", " +
+						toString(true));
+			}
 			handler.disconnect();
 			onDisconnect();
 			return;
@@ -140,37 +157,50 @@ class ClientConnection implements Connection {
 		try {
 			response.read(queue);
 		} catch (HttpPacketException e) {
+			if (debug) {
+				Log.d(e.getMessage() + ", " + toString(true));
+			}
 			// Disconnect Peer for a Bad Response
 			handler.disconnect();
 			onDisconnect();
 			return;
 		}
-		if (path == null) {
+		if (begun) {
 			sendResponse(false);
 		} else if (response.isCompleteHeader()) {
-			path = null;
+			if (verbose) {
+				Log.v("Response Header Received, " + toString(true));
+			}
+			begun = true;
+			response.removeHeader("PROXY-CONNECTION");
+			response.setHeader("Connection", connectionClose ? "close" : "keep-alive");
 			sendResponse(true);
 		}
 	}
 
 	@Override
 	public void onQueue(int delta, int total) {
+		if (verbose) {
+			Log.v((total == 0 ? "Request Unblocked, " : "Request Blocked, ") +
+					toString(false));
+		}
 		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
-	}
-
-	@Override
-	public void onConnect() {
-		response.setType(head ? HttpPacket.Type.RESPONSE_FOR_HEAD : HttpPacket.Type.RESPONSE);
 	}
 
 	@Override
 	public void onDisconnect() {
 		peer.getClientMap(secure).remove(host);
 		if (response.isComplete()) {
+			if (verbose) {
+				Log.v("Client Lost, " + toString(true));
+			}
 			response.reset();
 			return;
 		}
-		if (path != null && !response.isCompleteHeader()) {
+		if (!begun && !response.isCompleteHeader()) {
+			if (debug) {
+				Log.d("Incomplete Header, " + toString(true));
+			}
 			peer.badGateway();
 		}
 		peerHandler.disconnect();
@@ -178,50 +208,20 @@ class ClientConnection implements Connection {
 
 	void sendRequest(boolean begin) {
 		ByteArrayQueue data = new ByteArrayQueue();
-		if (begin) {
-			data.add(request.getMethod().getBytes()).add(SPACE).
-					add(path.getBytes()).add(SPACE).
-					add(HTTP11).add(CRLF);
-			request.removeHeader("PROXY-AUTHORIZATION");
-			request.removeHeader("PROXY-CONNECTION");
-			request.setHeader("Connection", "keep-alive");
-			writeHeaders(data, request);
-		}
-		ByteArrayQueue body = request.getBody();
-		if (request.isChunked()) {
-			if (body.length() > 0) {
-				data.add(Integer.toHexString(body.length()).getBytes());
-				data.add(CRLF);
-				data.add(body.array(), body.offset(), body.length());
-				data.add(CRLF);
-			}
-			if (request.isComplete()) {
-				data.add(FINAL_CRLF);
-				writeHeaders(data, request);
-			}
-		} else if (body.length() > 0) {
-			data.add(body.array(), body.offset(), body.length());
-		}
+		request.write(data, false, begin);
 		handler.send(data.array(), data.offset(), data.length());
-		if (!request.isComplete()) {
-			return;
+		if (request.isComplete()) {
+			if (verbose) {
+				Log.v("Request Sent, " + toString(false));
+			}
+			request.reset();
 		}
-		request.reset();
 	}
 
 	private void sendResponse(boolean begin) {
 		ByteArrayQueue data = new ByteArrayQueue();
-		if (begin) {
-			data.add(request.isHttp10() ? HTTP10 : HTTP11).add(SPACE).
-					add(("" + response.getStatus()).getBytes()).add(SPACE).
-					add(response.getMessage().getBytes()).add(CRLF);
-			writeHeaders(data, response);
-		}
-		ByteArrayQueue body = response.getBody();
+		response.write(data, request.isHttp10(), begin);
 		if (request.isHttp10()) {
-			if (body.length() > 0) {
-				data.add(body.array(), body.offset(), body.length());
-			}
 			peerHandler.send(data.array(), data.offset(), data.length());
 			if (response.isComplete()) {
 				handler.disconnect();
@@ -229,31 +229,24 @@ class ClientConnection implements Connection {
 			}
 			return;
 		}
-		if (response.isChunked()) {
-			if (body.length() > 0) {
-				data.add(Integer.toHexString(body.length()).getBytes());
-				data.add(CRLF);
-				data.add(body.array(), body.offset(), body.length());
-				data.add(CRLF);
-			}
-			if (response.isComplete()) {
-				data.add(FINAL_CRLF);
-				writeHeaders(data, response);
-			}
-		} else if (body.length() > 0) {
-			data.add(body.array(), body.offset(), body.length());
-		}
 		peerHandler.send(data.array(), data.offset(), data.length());
 		if (!response.isComplete()) {
 			return;
 		}
 		if (connectionClose) {
+			if (verbose) {
+				Log.v("Client Closed due to HTTP/1.0 or " +
+						"\"Connection: close\", " + toString(true));
+			}
 			handler.disconnect();
 			onDisconnect();
 		} else {
 			response.reset();
 			peer.setClient(null);
 			// Unblock Next Request if Response Completed
+			if (verbose) {
+				Log.v("Request Unblocked due to Complete Response, " + toString(false));
+			}
 			peerHandler.setBufferSize(MAX_BUFFER_SIZE);
 			peer.read();
 		}
@@ -288,6 +281,7 @@ public class ProxyConnection implements Connection {
 	private Executor executor;
 	private SSLContext sslc;
 	private BiPredicate<String, String> auth;
+	private boolean debug, verbose;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket packet = new HttpPacket();
 	private PeerConnection peer = null;
@@ -314,6 +308,10 @@ public class ProxyConnection implements Connection {
 
 	HashMap<String, ClientConnection> getClientMap(boolean secure) {
 		return secure ? secureClientMap : clientMap;
+	}
+
+	private String getRemoteInfo() {
+		return handler.getRemoteAddr() + ":" + handler.getRemotePort();
 	}
 
 	private void readEx() throws HttpPacketException {
@@ -353,6 +351,7 @@ public class ProxyConnection implements Connection {
 						readEx();
 					}
 				}
+				Log.d("Auth Failed from " + handler.getRemoteAddr());
 				return;
 			}
 		}
@@ -375,7 +374,7 @@ public class ProxyConnection implements Connection {
 			if (port < 0 || port > 0xFFFF) {
 				throw new HttpPacketException(HttpPacketException.Type.PORT, value);
 			}
-			peer = new PeerConnection(this, handler);
+			peer = new PeerConnection(this, handler, host, port, debug, verbose);
 			try {
 				connector.connect(peer, host, port);
 			} catch (IOException e) {
@@ -439,8 +438,9 @@ public class ProxyConnection implements Connection {
 		}
 
 		client = getClientMap(secure).get(host);
+		boolean created = false;
 		if (client == null) {
-			client = new ClientConnection(this, handler, packet, secure, host);
+			client = new ClientConnection(this, handler, packet, secure, host, debug, verbose);
 			getClientMap(secure).put(host, client);
 			Connection connection;
 			if (secure) {
@@ -454,9 +454,14 @@ public class ProxyConnection implements Connection {
 			} catch (IOException e) {
 				throw new HttpPacketException(HttpPacketException.Type.HOST, connectHost);
 			}
+			created = true;
+		} else if (verbose) {
+			Log.v("Client Reused, " + client.toString(false));
 		}
-		client.init(path, method.equals("HEAD"), connectionClose);
-		client.sendRequest(true);
+		client.begin(path, method.equals("HEAD"), connectionClose);
+		if (verbose) {
+			Log.v((created ? "Client Created, " : "Client Reused, ") + client.toString(false));
+		}
 	}
 
 	void read() {
@@ -466,31 +471,43 @@ public class ProxyConnection implements Connection {
 		try {
 			readEx();
 		} catch (HttpPacketException e) {
+			if (debug) {
+				Log.d(e.getMessage() + ", " + getRemoteInfo());
+			}
 			handler.send(BAD_REQUEST);
 			disconnect();
 		}
 		// Block Next Request if Request Completed but Response not yet
 		if (packet.isComplete() && client != null && !client.isComplete()) {
+			if (verbose) {
+				Log.v("Request Blocked due to Incomplete Response, " +
+						client.toString(false));
+			}
 			handler.setBufferSize(0);
 		}
 	}
 
 	void disconnect() {
 		for (ClientConnection client_ : clientMap.values()) {
+			Log.v("Client Closed, " + client_.toString(false));
 			client_.handler.disconnect();
 		}
 		for (ClientConnection client_ : secureClientMap.values()) {
+			Log.v("Client Closed, " + client_.toString(false));
 			client_.handler.disconnect();
 		}
 		handler.disconnect();
 	}
 
 	public ProxyConnection(Connector connector, Executor executor,
-			SSLContext sslc, BiPredicate<String, String> auth) {
+			SSLContext sslc, BiPredicate<String, String> auth,
+			boolean debug, boolean verbose) {
 		this.connector = connector;
 		this.executor = executor;
 		this.sslc = sslc;
 		this.auth = auth;
+		this.debug = debug;
+		this.verbose = verbose;
 	}
 
 	@Override
@@ -512,8 +529,16 @@ public class ProxyConnection implements Connection {
 	@Override
 	public void onQueue(int delta, int total) {
 		if (peer != null) {
+			if (verbose) {
+				Log.v((total == 0 ? "Connection Unblocked, " : "Connection Blocked, ") +
+						peer.toString(true));
+			}
 			peer.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 		} else if (client != null) {
+			if (verbose) {
+				Log.v((total == 0 ? "Response Unblocked, " : "Response Blocked, ") +
+						client.toString(true));
+			}
 			client.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 		}
 	}
@@ -521,6 +546,9 @@ public class ProxyConnection implements Connection {
 	@Override
 	public void onDisconnect() {
 		if (peer != null) {
+			if (verbose) {
+				Log.v("Connection Closed, " + peer.toString(false));
+			}
 			peer.handler.disconnect();
 		}
 		disconnect();

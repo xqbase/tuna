@@ -2,22 +2,78 @@ package com.xqbase.tuna.proxy;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.security.cert.X509Certificate;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.function.BiPredicate;
 import java.util.logging.Logger;
 
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 
+import sun.security.x509.AlgorithmId;
+import sun.security.x509.CertificateAlgorithmId;
+import sun.security.x509.CertificateSerialNumber;
+import sun.security.x509.CertificateValidity;
+import sun.security.x509.CertificateVersion;
+import sun.security.x509.CertificateX509Key;
+import sun.security.x509.X500Name;
+import sun.security.x509.X509CertImpl;
+import sun.security.x509.X509CertInfo;
+
 import com.xqbase.tuna.ConnectorImpl;
+import com.xqbase.tuna.ServerConnection;
+import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.SSLManagers;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
 import com.xqbase.util.Service;
+import com.xqbase.util.Time;
 
 public class HttpProxy {
+	private static SSLContext getSSLContext(String dn, long expire)
+			throws IOException, GeneralSecurityException {
+		KeyManager[] kms;
+		if (dn == null) {
+			kms = SSLManagers.DEFAULT_KEY_MANAGERS;
+		} else {
+			KeyStore ks = KeyStore.getInstance("JKS");
+			ks.load(null, null);
+			KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+			kpg.initialize(1024);
+			KeyPair keyPair = kpg.genKeyPair();
+			long now = System.currentTimeMillis();
+			X509CertInfo info = new X509CertInfo();
+			info.set("version", new CertificateVersion(2));
+			info.set("serialNumber", new CertificateSerialNumber(0));
+			info.set("algorithmID",
+					new CertificateAlgorithmId(AlgorithmId.get("SHA1withRSA")));
+			X500Name x500Name = new X500Name(dn);
+			info.set("subject", x500Name);
+			info.set("key", new CertificateX509Key(keyPair.getPublic()));
+			info.set("validity", new CertificateValidity(new
+					Date(now), new Date(now + expire)));
+			info.set("issuer", x500Name);
+			X509CertImpl cert = new X509CertImpl(info);
+			cert.sign(keyPair.getPrivate(), "SHA1withRSA");
+			ks.setKeyEntry("", keyPair.getPrivate(), new char[0],
+					new X509Certificate[] {cert});
+			KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
+			kmf.init(ks, new char[0]);
+			kms = kmf.getKeyManagers();
+		}
+		SSLContext sslc = SSLContext.getInstance("TLS");
+		sslc.init(kms, SSLManagers.DEFAULT_TRUST_MANAGERS, null);
+		return sslc;
+	}
+
 	private static Service service = new Service();
 
 	public static void main(String[] args) {
@@ -29,6 +85,23 @@ public class HttpProxy {
 		String host = p.getProperty("host");
 		host = host == null || host.isEmpty() ? "0.0.0.0" : host;
 		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
+		String log = p.getProperty("log");
+		boolean debug, verbose;
+		if (log == null) {
+			debug = verbose = false;
+		} else {
+			switch (log) {
+			case "debug":
+				debug = true;
+				verbose = false;
+				break;
+			case "verbose":
+				debug = verbose = true;
+				break;
+			default:
+				debug = verbose = false;
+			}
+		}
 
 		HashMap<String, String> authMap = new HashMap<>();
 		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
@@ -53,9 +126,16 @@ public class HttpProxy {
 					}
 				}, 0, 10000);
 			}
-			SSLContext sslc = SSLContext.getInstance("TLS");
-			sslc.init(SSLManagers.DEFAULT_KEY_MANAGERS, SSLManagers.DEFAULT_TRUST_MANAGERS, null);
-			connector.add(() -> new ProxyConnection(connector, connector, sslc, auth), host, port);
+			SSLContext sslcClient = getSSLContext(null, 0);
+			ServerConnection server = () -> new ProxyConnection(connector,
+					connector, sslcClient, auth, debug, verbose);
+			if (Conf.getBoolean(p.getProperty("ssl"), false)) {
+				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
+				connector.add(server.appendFilter(() -> new SSLFilter(connector,
+						sslcServer, SSLFilter.SERVER_NO_AUTH)), host, port);
+			} else {
+				connector.add(server, host, port);
+			}
 			Log.i("HTTP Proxy Started on " + host + ":" + port);
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
