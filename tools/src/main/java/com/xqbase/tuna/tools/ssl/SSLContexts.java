@@ -23,10 +23,9 @@ import sun.security.x509.X509CertImpl;
 import sun.security.x509.X509CertInfo;
 
 import com.xqbase.tuna.util.SSLManagers;
-import com.xqbase.util.Time;
 
 class SSLContexts {
-	static SSLContext get(String dn)
+	static SSLContext get(String dn, long expire)
 			throws IOException, GeneralSecurityException {
 		KeyManager[] kms;
 		if (dn == null) {
@@ -47,7 +46,7 @@ class SSLContexts {
 			info.set("subject", x500Name);
 			info.set("key", new CertificateX509Key(keyPair.getPublic()));
 			info.set("validity", new CertificateValidity(new
-					Date(now), new Date(now + Time.WEEK * 52)));
+					Date(now), new Date(now + expire)));
 			info.set("issuer", x500Name);
 			X509CertImpl cert = new X509CertImpl(info);
 			cert.sign(keyPair.getPrivate(), "SHA1withRSA");
