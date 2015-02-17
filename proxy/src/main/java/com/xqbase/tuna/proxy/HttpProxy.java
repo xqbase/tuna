@@ -6,8 +6,10 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.function.BiPredicate;
@@ -38,6 +40,8 @@ import com.xqbase.util.Service;
 import com.xqbase.util.Time;
 
 public class HttpProxy {
+	private static final List<String> LOG_VALUE = Arrays.asList("debug", "verbose");
+
 	private static SSLContext getSSLContext(String dn, long expire)
 			throws IOException, GeneralSecurityException {
 		KeyManager[] kms;
@@ -85,23 +89,8 @@ public class HttpProxy {
 		String host = p.getProperty("host");
 		host = host == null || host.isEmpty() ? "0.0.0.0" : host;
 		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
-		String log = p.getProperty("log");
-		boolean debug, verbose;
-		if (log == null) {
-			debug = verbose = false;
-		} else {
-			switch (log) {
-			case "debug":
-				debug = true;
-				verbose = false;
-				break;
-			case "verbose":
-				debug = verbose = true;
-				break;
-			default:
-				debug = verbose = false;
-			}
-		}
+		String logValue = p.getProperty("log");
+		int logLevel = logValue == null ? 0 : LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
 		HashMap<String, String> authMap = new HashMap<>();
 		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
@@ -128,7 +117,7 @@ public class HttpProxy {
 			}
 			SSLContext sslcClient = getSSLContext(null, 0);
 			ServerConnection server = () -> new ProxyConnection(connector,
-					connector, sslcClient, auth, debug, verbose);
+					connector, sslcClient, auth, p.getProperty("realm"), logLevel);
 			if (Conf.getBoolean(p.getProperty("ssl"), false)) {
 				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
 				connector.add(server.appendFilter(() -> new SSLFilter(connector,
