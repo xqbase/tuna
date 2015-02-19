@@ -212,7 +212,7 @@ class ClientConnection implements Connection {
 	}
 
 	void sendRequest(boolean begin) {
-		ProxyConnection.write(request, handler, false, begin);
+		request.write(handler, false, begin);
 		if (request.isComplete()) {
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Request Sent, " + toString(false));
@@ -224,7 +224,7 @@ class ClientConnection implements Connection {
 	}
 
 	private void sendResponse(boolean begin) {
-		ProxyConnection.write(response, proxyHandler, request.isHttp10(), begin);
+		response.write(proxyHandler, request.isHttp10(), begin);
 		if (request.isHttp10()) {
 			if (response.isComplete()) {
 				handler.disconnect();
@@ -284,12 +284,6 @@ public class ProxyConnection implements Connection {
 			("HTTP/1.1 400 Bad Request" + ERROR_HEADERS).getBytes();
 	private static final byte[] NOT_IMPLEMENTED =
 			("HTTP/1.1 501 Not Implemented" + ERROR_HEADERS).getBytes();
-
-	static void write(HttpPacket packet, ConnectionHandler handler, boolean http10, boolean begin) {
-		ByteArrayQueue data = new ByteArrayQueue();
-		packet.write(data, http10, begin);
-		handler.send(data.array(), data.offset(), data.length());
-	}
 
 	private Connector connector;
 	private Executor executor;
@@ -356,11 +350,11 @@ public class ProxyConnection implements Connection {
 				if (connectionClose || !request.isComplete()) {
 					// Skip reading body
 					response.setHeader("Connection", "close");
-					write(response, handler, false, true);
+					response.write(handler, false, true);
 					handler.disconnect();
 				} else { 
 					response.setHeader("Connection", "keep-alive");
-					write(response, handler, false, true);
+					response.write(handler, false, true);
 					request.reset();
 					// No request from peer, so continue reading
 					if (queue.length() > 0) {

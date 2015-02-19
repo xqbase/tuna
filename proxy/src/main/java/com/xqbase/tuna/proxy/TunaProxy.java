@@ -39,7 +39,7 @@ import com.xqbase.util.Numbers;
 import com.xqbase.util.Service;
 import com.xqbase.util.Time;
 
-public class HttpProxy {
+public class TunaProxy {
 	private static final List<String> LOG_VALUE = Arrays.asList("debug", "verbose");
 
 	private static SSLContext getSSLContext(String dn, long expire)
@@ -84,8 +84,8 @@ public class HttpProxy {
 		if (!service.startup(args)) {
 			return;
 		}
-		Logger logger = Log.getAndSet(Conf.openLogger("HttpProxy.", 16777216, 10));
-		Properties p = Conf.load("HttpProxy");
+		Logger logger = Log.getAndSet(Conf.openLogger("TunaProxy.", 16777216, 10));
+		Properties p = Conf.load("TunaProxy");
 		String host = p.getProperty("host");
 		host = host == null || host.isEmpty() ? "0.0.0.0" : host;
 		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
