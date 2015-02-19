@@ -37,7 +37,6 @@
 	</properties>
 
 	<modules>
-		<module>util</module>
 		<module>core</module>
 		<module>misc</module>
 		<module>tools</module>

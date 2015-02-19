@@ -98,8 +98,6 @@ class PeerConnection implements Connection {
 class ClientConnection implements Connection {
 	private static final int LOG_DEBUG = ProxyConnection.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyConnection.LOG_VERBOSE;
-	private static final byte[] BAD_GATEWAY =
-			("HTTP/1.1 502 Bad Gateway" + ProxyConnection.ERROR_HEADERS).getBytes();
 
 	private ProxyConnection proxy;
 	private ConnectionHandler proxyHandler, handler;
@@ -202,14 +200,14 @@ class ClientConnection implements Connection {
 			}
 			return;
 		}
-		if (!begun) {
-			if (logLevel >= LOG_DEBUG) {
+		if (logLevel >= LOG_DEBUG) {
+			if (!begun) {
 				Log.d("Incomplete Header, " + toString(true));
+			} else if (logLevel >= LOG_VERBOSE) {
+				Log.v("Client Lost in Response, " + toString(true));
 			}
-			proxyHandler.send(BAD_GATEWAY);
-		} else if (logLevel >= LOG_VERBOSE) {
-			Log.v("Client Lost in Response, " + toString(true));
 		}
+		// TODO if (!begun) retry request 
 		proxy.disconnect();
 	}
 
