@@ -5,6 +5,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.util.ByteArrayQueue;
 
 public class HttpPacket {
@@ -437,5 +438,19 @@ public class HttpPacket {
 			data.add(body.array(), body.offset(), length);
 			body.remove(length);
 		}
+	}
+
+	/**
+	 * @param handler {@link ConnectionHandler} to write into
+	 * @param http10 <code>true</code> to write body in HTTP/1.0 mode,
+	 *        regardless "Transfer-Encoding"
+	 * @param begin <code>true</code> to write entire Request or Response,
+	 *        including Begin Line and Headers,
+	 *        and <code>false</code> to write Body and Trailers (if available) only
+	 */
+	public void write(ConnectionHandler handler, boolean http10, boolean begin) {
+		ByteArrayQueue data = new ByteArrayQueue();
+		write(data, http10, begin);
+		handler.send(data.array(), data.offset(), data.length());
 	}
 }

@@ -50,7 +50,7 @@
 					</descriptorRefs>
 					<archive>
 						<manifest>
-							<mainClass>com.xqbase.tuna.proxy.HttpProxy</mainClass>
+							<mainClass>com.xqbase.tuna.proxy.TunaProxy</mainClass>
 						</manifest>
 					</archive>
 				</configuration>
