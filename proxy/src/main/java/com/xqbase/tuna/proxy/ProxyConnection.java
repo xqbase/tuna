@@ -66,8 +66,8 @@ class PeerConnection implements Connection {
 	public void onQueue(int delta, int total) {
 		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 		if (logLevel >= LOG_VERBOSE) {
-			Log.v((total == 0 ? "Connection Unblocked, " : "Connection Blocked, ") +
-					toString(false));
+			Log.v((total == 0 ? "Connection Unblocked, " :
+					"Connection Blocked, ") + toString(false));
 		}
 	}
 
@@ -98,6 +98,9 @@ class PeerConnection implements Connection {
 class ClientConnection implements Connection {
 	private static final int LOG_DEBUG = ProxyConnection.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyConnection.LOG_VERBOSE;
+
+	private static final byte[] BAD_GATEWAY = ("HTTP/1.1 502 Bad Gateway" +
+			ProxyConnection.ERROR_HEADERS).getBytes();
 
 	private ProxyConnection proxy;
 	private ConnectionHandler proxyHandler, handler;
@@ -134,10 +137,6 @@ class ClientConnection implements Connection {
 		sendRequest(true);
 	}
 
-	boolean isComplete() {
-		return response.isComplete();
-	}
-
 	ConnectionHandler getHandler() {
 		return handler;
 	}
@@ -149,7 +148,7 @@ class ClientConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		if (!proxy.isCurrentClient(this)) {
+		if (!proxy.isCurrentClient(this) || response.isComplete()) {
 			if (logLevel >= LOG_DEBUG) {
 				Log.d("Unexpected Response: \"" + new String(b, off, len) +
 						"\", " + toString(true));
@@ -166,6 +165,9 @@ class ClientConnection implements Connection {
 				Log.d(e.getMessage() + ", " + toString(true));
 			}
 			// Disconnect for a Bad Response
+			if (!response.isCompleteHeader()) {
+				handler.send(BAD_GATEWAY);
+			}
 			handler.disconnect();
 			onDisconnect();
 			return;
@@ -184,10 +186,13 @@ class ClientConnection implements Connection {
 
 	@Override
 	public void onQueue(int delta, int total) {
+		if (!proxy.isCurrentClient(this)) {
+			return;
+		}
 		proxyHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
 		if (logLevel >= LOG_VERBOSE) {
-			Log.v((total == 0 ? "Request Unblocked, " : "Request Blocked, ") +
-					toString(false));
+			Log.v((total == 0 ? "Request Unblocked, " :
+					"Request Blocked, ") + toString(false));
 		}
 	}
 
@@ -213,12 +218,19 @@ class ClientConnection implements Connection {
 
 	void sendRequest(boolean begin) {
 		request.write(handler, false, begin);
-		if (request.isComplete()) {
+		if (!request.isComplete()) {
+			return;
+		}
+		if (logLevel >= LOG_VERBOSE) {
+			Log.v("Request Sent, " + toString(false));
+		}
+		if (response.isComplete()) {
+			reset();
+		} else {
+			proxyHandler.setBufferSize(0);
 			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Request Sent, " + toString(false));
-			}
-			if (response.isComplete()) {
-				reset();
+				Log.v("Request Blocked due to Complete Request but " +
+						"Incomplete Response, " + toString(false));
 			}
 		}
 	}
@@ -235,12 +247,16 @@ class ClientConnection implements Connection {
 		if (!response.isComplete()) {
 			return;
 		}
+		handler.setBufferSize(MAX_BUFFER_SIZE);
+		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+			Log.v("Response Unblocked due to Complete Response, " + toString(false));
+		}
 		connectionClose = connectionClose || response.isHttp10() ||
-				response.testHeader("CONNECTION", "close", true);
+				response.testHeader("CONNECTION", "close", true) || queue.length() > 0;
 		if (connectionClose) {
 			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
 				Log.v("Response Sent and Client Closed due to HTTP/1.0 or " +
-						"\"Connection: close\", " + toString(true));
+						"\"Connection: close\" or Excess Data, " + toString(true));
 			}
 			handler.disconnect();
 			onDisconnect();
@@ -256,18 +272,14 @@ class ClientConnection implements Connection {
 		request.reset();
 		response.reset();
 		proxy.clearCurrentClient();
-		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
-			Log.v("Client Kept Alive, " + toString(false));
-		}
-		if (queue.length() == 0) {
-			return;
-		}
-		// Unblock Next Request if both Request and Response Completed
 		proxyHandler.setBufferSize(MAX_BUFFER_SIZE);
 		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
-			Log.v("Request Unblocked due to Complete Request and Response, " + toString(false));
+			Log.v("Client Kept Alive and Request Unblocked due to " +
+					"Complete Request and Response, " + toString(false));
 		}
-		proxy.read();
+		if (queue.length() > 0) {
+			proxy.read();
+		}
 	}
 }
 
@@ -458,7 +470,6 @@ public class ProxyConnection implements Connection {
 		}
 
 		client = getClientMap(secure).get(host);
-		boolean created = false;
 		if (client == null) {
 			client = new ClientConnection(this, handler, logLevel, request, secure, host);
 			getClientMap(secure).put(host, client);
@@ -474,12 +485,13 @@ public class ProxyConnection implements Connection {
 			} catch (IOException e) {
 				throw new HttpPacketException(HttpPacketException.Type.HOST, connectHost);
 			}
-			created = true;
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("Client Created, " + client.toString(false));
+			}
+		} else if (logLevel >= LOG_VERBOSE) {
+			Log.v("Client Reused, " + client.toString(false));
 		}
 		client.begin(path, method.equals("HEAD"), connectionClose);
-		if (logLevel >= LOG_VERBOSE) {
-			Log.v((created ? "Client Created, " : "Client Reused, ") + client.toString(false));
-		}
 	}
 
 	void read() {
@@ -537,30 +549,23 @@ public class ProxyConnection implements Connection {
 		queue.add(b, off, len);
 		if (!request.isComplete()) {
 			read();
-		} else if (client != null && !client.isComplete()) {
-			// Block Next Request if Request Completed but Response not yet
-			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Request Blocked due to Complete Request but" +
-						"Incomplete Response, " + client.toString(false));
-			}
-			handler.setBufferSize(0);
 		}
 	}
 
 	@Override
 	public void onQueue(int delta, int total) {
 		if (peer != null) {
-			if (logLevel >= LOG_VERBOSE) {
-				Log.v((total == 0 ? "Connection Unblocked, " : "Connection Blocked, ") +
-						peer.toString(true));
-			}
 			peer.getHandler().setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
-		} else if (client != null) {
 			if (logLevel >= LOG_VERBOSE) {
-				Log.v((total == 0 ? "Response Unblocked, " : "Response Blocked, ") +
-						client.toString(true));
+				Log.v((total == 0 ? "Connection Unblocked, " :
+						"Connection Blocked, ") + peer.toString(true));
 			}
+		} else if (client != null) {
 			client.getHandler().setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v((total == 0 ? "Response Unblocked, " :
+						"Response Blocked, ") + client.toString(true));
+			}
 		}
 	}
 
