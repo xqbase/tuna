@@ -105,7 +105,7 @@ class ClientConnection implements Connection {
 	private ProxyConnection proxy;
 	private ConnectionHandler proxyHandler, handler;
 	private HttpPacket request, response = new HttpPacket();
-	private boolean secure, begun = false, connectionClose = false;
+	private boolean secure, begun = false, requestClose = false, responseClose = false;
 	private int logLevel;
 	private String host;
 	private ByteArrayQueue queue = new ByteArrayQueue();
@@ -126,14 +126,11 @@ class ClientConnection implements Connection {
 				(secure ? "https://" : "http://") + host + (path == null ? "" : path);
 	}
 
-	void begin(String path, boolean head, boolean connectionClose_) {
+	void begin(boolean head, boolean connectionClose) {
 		begun = false;
-		request.setPath(path);
-		request.removeHeader("PROXY-AUTHORIZATION");
-		request.removeHeader("PROXY-CONNECTION");
-		request.setHeader("Connection", "keep-alive");
-		response.setType(head ? HttpPacket.TYPE_RESPONSE_FOR_HEAD : HttpPacket.TYPE_RESPONSE);
-		connectionClose = connectionClose_;
+		response.setType(head ? HttpPacket.TYPE_RESPONSE_HEAD : request.isHttp10() ?
+				HttpPacket.TYPE_RESPONSE_HTTP10 : HttpPacket.TYPE_RESPONSE);
+		requestClose = connectionClose;
 		sendRequest(true);
 	}
 
@@ -178,8 +175,10 @@ class ClientConnection implements Connection {
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Response Header Received, " + toString(true));
 			}
+			responseClose = requestClose || response.isHttp10() ||
+					response.testHeader("CONNECTION", "close", true);
+			response.setHeader("Connection", requestClose ? "close" : "keep-alive");
 			begun = true;
-			response.setHeader("Connection", connectionClose ? "close" : "keep-alive");
 			sendResponse(true);
 		}
 	}
@@ -217,7 +216,7 @@ class ClientConnection implements Connection {
 	}
 
 	void sendRequest(boolean begin) {
-		request.write(handler, false, begin);
+		request.write(handler, begin);
 		if (!request.isComplete()) {
 			return;
 		}
@@ -236,35 +235,33 @@ class ClientConnection implements Connection {
 	}
 
 	private void sendResponse(boolean begin) {
-		response.write(proxyHandler, request.isHttp10(), begin);
-		if (request.isHttp10()) {
-			if (response.isComplete()) {
-				handler.disconnect();
-				onDisconnect();
-			}
-			return;
-		}
+		response.write(proxyHandler, begin);
 		if (!response.isComplete()) {
 			return;
 		}
-		handler.setBufferSize(MAX_BUFFER_SIZE);
-		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
-			Log.v("Response Unblocked due to Complete Response, " + toString(false));
+		if (requestClose) {
+			proxy.disconnect();
+			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+				Log.v("Proxy Connection Closed due to HTTP/1.0 or " +
+						"\"Connection: close\" in Request, " + toString(false));
+			}
+			return;
 		}
-		connectionClose = connectionClose || response.isHttp10() ||
-				response.testHeader("CONNECTION", "close", true) || queue.length() > 0;
-		if (connectionClose) {
+		if (responseClose || queue.length() > 0) {
 			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
 				Log.v("Response Sent and Client Closed due to HTTP/1.0 or " +
-						"\"Connection: close\" or Excess Data, " + toString(true));
+						"\"Connection: close\" in Response or Excess Data, " + toString(true));
 			}
 			handler.disconnect();
 			onDisconnect();
-		} else if (request.isComplete()) {
+		} else {
+			handler.setBufferSize(MAX_BUFFER_SIZE);
 			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
-				Log.v("Response Sent, " + toString(true));
+				Log.v("Response Sent and Unblocked, " + toString(true));
 			}
-			reset();
+			if (request.isComplete()) {
+				reset();
+			}
 		}
 	}
 
@@ -277,9 +274,7 @@ class ClientConnection implements Connection {
 			Log.v("Client Kept Alive and Request Unblocked due to " +
 					"Complete Request and Response, " + toString(false));
 		}
-		if (queue.length() > 0) {
-			proxy.read();
-		}
+		proxy.read();
 	}
 }
 
@@ -362,11 +357,11 @@ public class ProxyConnection implements Connection {
 				if (connectionClose || !request.isComplete()) {
 					// Skip reading body
 					response.setHeader("Connection", "close");
-					response.write(handler, false, true);
+					response.write(handler, true);
 					handler.disconnect();
 				} else { 
 					response.setHeader("Connection", "keep-alive");
-					response.write(handler, false, true);
+					response.write(handler, true);
 					request.reset();
 					// No request from peer, so continue reading
 					if (queue.length() > 0) {
@@ -468,6 +463,12 @@ public class ProxyConnection implements Connection {
 				}
 			}
 		}
+		request.setPath(path);
+		if (request.getHeader("HOST") == null) {
+			request.setHeader("Host", host);
+		}
+		request.removeHeader("PROXY-AUTHORIZATION");
+		request.removeHeader("PROXY-CONNECTION");
 
 		client = getClientMap(secure).get(host);
 		if (client == null) {
@@ -491,10 +492,13 @@ public class ProxyConnection implements Connection {
 		} else if (logLevel >= LOG_VERBOSE) {
 			Log.v("Client Reused, " + client.toString(false));
 		}
-		client.begin(path, method.equals("HEAD"), connectionClose);
+		client.begin(method.equals("HEAD"), connectionClose);
 	}
 
 	void read() {
+		if (queue.length() == 0) {
+			return;
+		}
 		try {
 			readEx();
 		} catch (HttpPacketException e) {
