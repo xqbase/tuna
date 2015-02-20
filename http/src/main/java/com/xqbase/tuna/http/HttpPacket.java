@@ -11,8 +11,8 @@ import com.xqbase.tuna.util.ByteArrayQueue;
 public class HttpPacket {
 	public static final int TYPE_REQUEST = 0;
 	public static final int TYPE_RESPONSE = 1;
-	public static final int TYPE_RESPONSE_FOR_HEAD = 2;
-	public static final int TYPE_RESPONSE_FOR_CONNECT = 3;
+	public static final int TYPE_RESPONSE_HEAD = 2;
+	public static final int TYPE_RESPONSE_HTTP10 = 3;
 
 	private static final int PHASE_BEGIN = 0;
 	private static final int PHASE_HEADER = 1;
@@ -32,6 +32,7 @@ public class HttpPacket {
 	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
 
 	private int type = TYPE_REQUEST, phase = PHASE_BEGIN, status = 0, bytesToRead = 0;
+	private boolean http10 = false;
 	private String method = null, path = null, message = null;
 	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
 	private ByteArrayQueue body = new ByteArrayQueue();
@@ -58,7 +59,7 @@ public class HttpPacket {
 
 	/**
 	 * @param type {@link #TYPE_REQUEST}, {@link #TYPE_RESPONSE},
-	 *        {@link #TYPE_RESPONSE_FOR_HEAD} or {@link #TYPE_RESPONSE_FOR_CONNECT}
+	 *        {@link #TYPE_RESPONSE_HEAD} or {@link #TYPE_RESPONSE_HTTP10}
 	 */
 	public void setType(int type) {
 		this.type = type;
@@ -66,12 +67,15 @@ public class HttpPacket {
 
 	/** @return <code>true</code> for an HTTP/1.0 request or response */
 	public boolean isHttp10() {
-		return bytesToRead < 0;
+		return http10;
 	}
 
-	/** @return <code>true</code> for an HTTP/1.1 request or response */
-	public boolean isHttp11() {
-		return bytesToRead >= 0;
+	/**
+	 * @param http10 <code>true</code> to write body in HTTP/1.0 mode,
+	 *         regardless "Transfer-Encoding"
+	 */
+	public void setHttp10(boolean http10) {
+		this.http10 = http10;
 	}
 
 	/** @return <code>true</code> for a complete header for request or response */ 
@@ -206,7 +210,7 @@ public class HttpPacket {
 			}
 			String proto = (type == TYPE_REQUEST ? ss[2] : ss[0]).toUpperCase();
 			if (proto.equals("HTTP/1.0")) {
-				bytesToRead = -1;
+				http10 = true;
 			} else if (!proto.equals("HTTP/1.1")) {
 				throw new HttpPacketException(HttpPacketException.Type.PROTOCOL, proto);
 			}
@@ -223,9 +227,6 @@ public class HttpPacket {
 					throw new HttpPacketException(HttpPacketException.Type.STATUS, ss[1]);
 				}
 				message = ss[2];
-				if (type == TYPE_RESPONSE_FOR_CONNECT && status == 200) {
-					bytesToRead = -1;
-				}
 			}
 			line.setLength(0);
 			phase = PHASE_HEADER;
@@ -242,7 +243,7 @@ public class HttpPacket {
 				readHeader();
 			}
 			phase = PHASE_BODY;
-			if (bytesToRead == 0 && type != TYPE_RESPONSE_FOR_HEAD) {
+			if (type != TYPE_RESPONSE_HEAD) {
 				if (testHeader("TRANSFER-ENCODING", "chunked", true)) {
 					phase = PHASE_CHUNK_SIZE;
 				} else {
@@ -257,6 +258,9 @@ public class HttpPacket {
 							throw new HttpPacketException(HttpPacketException.
 									Type.CONTENT_LENGTH, contentLength);
 						}
+					} else if (type == TYPE_RESPONSE_HTTP10 ||
+							(type == TYPE_RESPONSE && http10)) {
+						bytesToRead = -1;
 					}
 				}
 			}
@@ -402,13 +406,11 @@ public class HttpPacket {
 
 	/**
 	 * @param data {@link ByteArrayQueue} to write into
-	 * @param http10 <code>true</code> to write body in HTTP/1.0 mode,
-	 *        regardless "Transfer-Encoding"
 	 * @param begin <code>true</code> to write entire Request or Response,
 	 *        including Begin Line and Headers,
 	 *        and <code>false</code> to write Body and Trailers (if available) only
 	 */
-	public void write(ByteArrayQueue data, boolean http10, boolean begin) {
+	public void write(ByteArrayQueue data, boolean begin) {
 		if (begin) {
 			if (type == TYPE_REQUEST) {
 				data.add(method.getBytes()).add(SPACE).
@@ -442,15 +444,13 @@ public class HttpPacket {
 
 	/**
 	 * @param handler {@link ConnectionHandler} to write into
-	 * @param http10 <code>true</code> to write body in HTTP/1.0 mode,
-	 *        regardless "Transfer-Encoding"
 	 * @param begin <code>true</code> to write entire Request or Response,
 	 *        including Begin Line and Headers,
 	 *        and <code>false</code> to write Body and Trailers (if available) only
 	 */
-	public void write(ConnectionHandler handler, boolean http10, boolean begin) {
+	public void write(ConnectionHandler handler, boolean begin) {
 		ByteArrayQueue data = new ByteArrayQueue();
-		write(data, http10, begin);
+		write(data, begin);
 		handler.send(data.array(), data.offset(), data.length());
 	}
 }
