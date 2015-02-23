@@ -25,8 +25,6 @@ class PeerConnection implements Connection {
 
 	private static final byte[] CONNECTION_ESTABLISHED =
 			"HTTP/1.0 200 Connection Established\r\n\r\n".getBytes();
-	private static final byte[] GATEWAY_TIMEOUT =
-			("HTTP/1.1 504 Gateway Timeout" + ProxyConnection.ERROR_HEADERS).getBytes();
 
 	private ProxyConnection peer;
 	private ConnectionHandler peerHandler, handler;
@@ -86,7 +84,7 @@ class PeerConnection implements Connection {
 			if (logLevel >= LOG_DEBUG) {
 				Log.d("Connection Failed, " + toString(false));
 			}
-			peerHandler.send(GATEWAY_TIMEOUT);
+			peerHandler.send(ProxyConnection.GATEWAY_TIMEOUT);
 		} else if (logLevel >= LOG_VERBOSE) {
 			Log.v("Connection Lost, " + toString(true));
 		}
@@ -99,16 +97,13 @@ class ClientConnection implements Connection {
 	private static final int LOG_DEBUG = ProxyConnection.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyConnection.LOG_VERBOSE;
 
-	private static final byte[] BAD_GATEWAY = ("HTTP/1.1 502 Bad Gateway" +
-			ProxyConnection.ERROR_HEADERS).getBytes();
-
 	private ProxyConnection proxy;
 	private ConnectionHandler proxyHandler, handler;
 	private HttpPacket request, response = new HttpPacket();
-	private boolean secure, begun = false, requestClose = false, responseClose = false;
+	private boolean secure, established = false, begun = false, chunked = false,
+			requestClose = false, responseClose = false;
 	private int logLevel;
 	private String host;
-	private ByteArrayQueue queue = new ByteArrayQueue();
 
 	ClientConnection(ProxyConnection proxy, ConnectionHandler proxyHandler,
 			int logLevel, HttpPacket request, boolean secure, String host) {
@@ -126,12 +121,20 @@ class ClientConnection implements Connection {
 				(secure ? "https://" : "http://") + host + (path == null ? "" : path);
 	}
 
+	boolean isBegun() {
+		return begun;
+	}
+
 	void begin(boolean head, boolean connectionClose) {
-		begun = false;
+		begun = chunked = false;
 		response.setType(head ? HttpPacket.TYPE_RESPONSE_HEAD : request.isHttp10() ?
 				HttpPacket.TYPE_RESPONSE_HTTP10 : HttpPacket.TYPE_RESPONSE);
 		requestClose = connectionClose;
 		sendRequest(true);
+	}
+
+	void remove() {
+		proxy.getClientMap(secure).remove(host);
 	}
 
 	ConnectionHandler getHandler() {
@@ -151,10 +154,10 @@ class ClientConnection implements Connection {
 						"\", " + toString(true));
 			}
 			handler.disconnect();
-			onDisconnect();
+			remove();
 			return;
 		}
-		queue.add(b, off, len);
+		ByteArrayQueue queue = new ByteArrayQueue(b, off, len);
 		try {
 			response.read(queue);
 		} catch (HttpPacketException e) {
@@ -163,22 +166,31 @@ class ClientConnection implements Connection {
 			}
 			// Disconnect for a Bad Response
 			if (!response.isCompleteHeader()) {
-				handler.send(BAD_GATEWAY);
+				handler.send(ProxyConnection.BAD_GATEWAY);
 			}
-			handler.disconnect();
-			onDisconnect();
+			proxy.disconnect();
 			return;
 		}
 		if (begun) {
+			responseClose = responseClose || queue.length() > 0;
 			sendResponse(false);
 		} else if (response.isCompleteHeader()) {
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Response Header Received, " + toString(true));
 			}
-			responseClose = requestClose || response.isHttp10() ||
-					response.testHeader("CONNECTION", "close", true);
-			response.setHeader("Connection", requestClose ? "close" : "keep-alive");
 			begun = true;
+			responseClose = requestClose || response.isHttp10() ||
+					response.testHeader("CONNECTION", "close", true, true) ||
+					queue.length() > 0;
+			// Write in Chunked mode when Request is HTTP/1.1 and
+			// Response is HTTP/1.0 and has no Content-Length
+			if (!request.isHttp10() && response.isHttp10() &&
+					response.getHeader("CONTENT-LENGTH") == null) {
+				chunked = true;
+				response.setHeader("Transfer-Encoding", "chunked");
+			}
+			response.setHttp10(request.isHttp10());
+			response.setHeader("Connection", requestClose ? "close" : "keep-alive");
 			sendResponse(true);
 		}
 	}
@@ -196,27 +208,46 @@ class ClientConnection implements Connection {
 	}
 
 	@Override
+	public void onConnect() {
+		established = true;
+	}
+
+	@Override
 	public void onDisconnect() {
-		proxy.getClientMap(secure).remove(host);
+		remove();
 		if (!proxy.isCurrentClient(this)) {
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Lost in Keep-Alive, " + toString(true));
 			}
 			return;
 		}
+		if (chunked) {
+			response.endRead();
+			response.write(proxyHandler, false, chunked);
+			reset();
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("Client Lost and Proxy Responded " +
+						"a Final Chunk, " + toString(true));
+			}
+			return;
+		}
 		if (logLevel >= LOG_DEBUG) {
 			if (!begun) {
-				Log.d("Incomplete Header, " + toString(true));
+				Log.d((established ? "Incomplete Header, " :
+						"Client Not Connected, ") + toString(true));
 			} else if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Lost in Response, " + toString(true));
 			}
 		}
 		// TODO if (!begun) retry request 
+		if (!established) {
+			proxyHandler.send(ProxyConnection.GATEWAY_TIMEOUT);
+		}
 		proxy.disconnect();
 	}
 
 	void sendRequest(boolean begin) {
-		request.write(handler, begin);
+		request.write(handler, begin, false);
 		if (!request.isComplete()) {
 			return;
 		}
@@ -235,7 +266,7 @@ class ClientConnection implements Connection {
 	}
 
 	private void sendResponse(boolean begin) {
-		response.write(proxyHandler, begin);
+		response.write(proxyHandler, begin, chunked);
 		if (!response.isComplete()) {
 			return;
 		}
@@ -247,21 +278,21 @@ class ClientConnection implements Connection {
 			}
 			return;
 		}
-		if (responseClose || queue.length() > 0) {
+		if (responseClose) {
 			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
 				Log.v("Response Sent and Client Closed due to HTTP/1.0 or " +
-						"\"Connection: close\" in Response or Excess Data, " + toString(true));
+						"\"Connection: close\" in Response, " + toString(true));
 			}
 			handler.disconnect();
-			onDisconnect();
+			remove();
 		} else {
 			handler.setBufferSize(MAX_BUFFER_SIZE);
 			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
 				Log.v("Response Sent and Unblocked, " + toString(true));
 			}
-			if (request.isComplete()) {
-				reset();
-			}
+		}
+		if (request.isComplete()) {
+			reset();
 		}
 	}
 
@@ -283,14 +314,17 @@ public class ProxyConnection implements Connection {
 	public static final int LOG_DEBUG = 1;
 	public static final int LOG_VERBOSE = 2;
 
-	static final String ERROR_HEADERS = "\r\n" +
+	private static final String ERROR_HEADERS = "\r\n" +
 			"Content-Length: 0\r\n" +
 			"Connection: close\r\n\r\n";
-
 	private static final byte[] BAD_REQUEST =
 			("HTTP/1.1 400 Bad Request" + ERROR_HEADERS).getBytes();
 	private static final byte[] NOT_IMPLEMENTED =
 			("HTTP/1.1 501 Not Implemented" + ERROR_HEADERS).getBytes();
+	static final byte[] BAD_GATEWAY =
+			("HTTP/1.1 502 Bad Gateway" + ERROR_HEADERS).getBytes();
+	static final byte[] GATEWAY_TIMEOUT =
+			("HTTP/1.1 504 Gateway Timeout" + ERROR_HEADERS).getBytes();
 
 	private Connector connector;
 	private Executor executor;
@@ -333,8 +367,8 @@ public class ProxyConnection implements Connection {
 		}
 
 		boolean connectionClose = request.isHttp10() ||
-				request.testHeader("CONNECTION", "close", true) ||
-				request.testHeader("PROXY-CONNECTION", "close", true);
+				request.testHeader("CONNECTION", "close", true, true) ||
+				request.testHeader("PROXY-CONNECTION", "close", true, true);
 		if (auth != null) {
 			boolean authenticated = false;
 			String proxyAuth = request.getHeader("PROXY-AUTHORIZATION");
@@ -357,11 +391,11 @@ public class ProxyConnection implements Connection {
 				if (connectionClose || !request.isComplete()) {
 					// Skip reading body
 					response.setHeader("Connection", "close");
-					response.write(handler, true);
+					response.write(handler, true, false);
 					handler.disconnect();
 				} else { 
 					response.setHeader("Connection", "keep-alive");
-					response.write(handler, true);
+					response.write(handler, true, false);
 					request.reset();
 					// No request from peer, so continue reading
 					if (queue.length() > 0) {
@@ -505,7 +539,7 @@ public class ProxyConnection implements Connection {
 			if (logLevel >= LOG_DEBUG) {
 				Log.d(e.getMessage() + ", from " + handler.getRemoteAddr());
 			}
-			if (!request.isCompleteHeader()) {
+			if (client == null || !client.isBegun()) {
 				handler.send(BAD_REQUEST);
 			}
 			disconnect();
