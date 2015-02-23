@@ -244,7 +244,7 @@ public class HttpPacket {
 			}
 			phase = PHASE_BODY;
 			if (type != TYPE_RESPONSE_HEAD) {
-				if (testHeader("TRANSFER-ENCODING", "chunked", true)) {
+				if (testHeader("TRANSFER-ENCODING", "chunked", true, true)) {
 					phase = PHASE_CHUNK_SIZE;
 				} else {
 					String contentLength = getHeader("CONTENT-LENGTH");
@@ -323,29 +323,29 @@ public class HttpPacket {
 		}
 	}
 
+	public void endRead() {
+		phase = PHASE_END;
+	}
+
 	/**
 	 * @param key Field Name in Upper Case
 	 * @param value Field Value
 	 * @param ignoreCase <code>true</code> to ignore case
+	 * @param trim <code>true</code> to trim Field Value
 	 */
-	public boolean testHeader(String key, String value, boolean ignoreCase) {
+	public boolean testHeader(String key, String value, boolean ignoreCase, boolean trim) {
 		ArrayList<String> values = headers.get(key);
 		if (values == null) {
 			return false;
 		}
 		int size = values.size();
-		if (ignoreCase) {
-			String value_ = value.toLowerCase();
-			for (int i = 1; i < size; i ++) {
-				if (values.get(i).toLowerCase().equals(value_)) {
-					return true;
-				}
-			}
-		} else {
-			for (int i = 1; i < size; i ++) {
-				if (values.get(i).equals(value)) {
-					return true;
-				}
+		String v2 = ignoreCase ? value.toLowerCase() : value;
+		for (int i = 1; i < size; i ++) {
+			String v1 = values.get(i);
+			v1 = ignoreCase ? v1.toLowerCase() : v1;
+			v1 = trim ? v1.trim() : v1;
+			if (v1.equals(v2)) {
+				return true;
 			}
 		}
 		return false;
@@ -409,8 +409,9 @@ public class HttpPacket {
 	 * @param begin <code>true</code> to write entire Request or Response,
 	 *        including Begin Line and Headers,
 	 *        and <code>false</code> to write Body and Trailers (if available) only
+	 * @param forceChunked <code>true</code> to force to write in Chunked mode
 	 */
-	public void write(ByteArrayQueue data, boolean begin) {
+	public void write(ByteArrayQueue data, boolean begin, boolean forceChunked) {
 		if (begin) {
 			if (type == TYPE_REQUEST) {
 				data.add(method.getBytes()).add(SPACE).
@@ -424,7 +425,8 @@ public class HttpPacket {
 			writeHeaders(data);
 		}
 		int length = body.length();
-		if (!http10 && phase >= PHASE_CHUNK_SIZE && phase <= PHASE_END_CHUNK) {
+		if (forceChunked || (!http10 && phase >= PHASE_CHUNK_SIZE &&
+				phase <= PHASE_END_CHUNK)) {
 			if (length > 0) {
 				data.add(Integer.toHexString(length).getBytes());
 				data.add(CRLF);
@@ -432,7 +434,7 @@ public class HttpPacket {
 				body.remove(length);
 				data.add(CRLF);
 			}
-			if (phase == PHASE_END_CHUNK) {
+			if (phase >= PHASE_END_CHUNK) {
 				data.add(FINAL_CRLF);
 				writeHeaders(data);
 			}
@@ -447,10 +449,11 @@ public class HttpPacket {
 	 * @param begin <code>true</code> to write entire Request or Response,
 	 *        including Begin Line and Headers,
 	 *        and <code>false</code> to write Body and Trailers (if available) only
+	 * @param forceChunked <code>true</code> to force to write in Chunked mode
 	 */
-	public void write(ConnectionHandler handler, boolean begin) {
+	public void write(ConnectionHandler handler, boolean begin, boolean forceChunked) {
 		ByteArrayQueue data = new ByteArrayQueue();
-		write(data, begin);
+		write(data, begin, forceChunked);
 		handler.send(data.array(), data.offset(), data.length());
 	}
 }
