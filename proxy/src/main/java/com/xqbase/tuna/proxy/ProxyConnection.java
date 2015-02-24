@@ -214,6 +214,9 @@ class ClientConnection implements Connection {
 	@Override
 	public void onConnect() {
 		established = true;
+		if (logLevel >= LOG_VERBOSE) {
+			Log.v("Client Established, " + toString(false));
+		}
 	}
 
 	@Override
@@ -439,7 +442,7 @@ public class ProxyConnection implements Connection {
 				peer.getHandler().send(body.array(), body.offset(), body.length());
 			}
 			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Connection Launched, " + peer.toString(false));
+				Log.v("Connection Created, " + peer.toString(false));
 			}
 			return;
 		}
