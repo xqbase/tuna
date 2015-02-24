@@ -89,7 +89,7 @@ public class TunaProxy {
 		String host = p.getProperty("host");
 		host = host == null || host.isEmpty() ? "0.0.0.0" : host;
 		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
-		String logValue = p.getProperty("log");
+		String logValue = Conf.DEBUG ? "verbose" : p.getProperty("log");
 		int logLevel = logValue == null ? 0 : LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
 		HashMap<String, String> authMap = new HashMap<>();

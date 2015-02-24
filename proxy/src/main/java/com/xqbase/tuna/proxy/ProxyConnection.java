@@ -118,7 +118,8 @@ class ClientConnection implements Connection {
 	String toString(boolean recv) {
 		String path = request.getPath();
 		return proxy.getRemote() + (recv ? " <= " : " => ") +
-				(secure ? "https://" : "http://") + host + (path == null ? "" : path);
+				(secure ? "https://" : "http://") + host + (path == null ? "" : path) +
+				" (" + handler.getLocalAddr() + ":" + handler.getLocalPort() + ")";
 	}
 
 	boolean isBegun() {
@@ -174,25 +175,28 @@ class ClientConnection implements Connection {
 		if (begun) {
 			responseClose = responseClose || queue.length() > 0;
 			sendResponse(false);
-		} else if (response.isCompleteHeader()) {
-			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Response Header Received, " + toString(true));
-			}
-			begun = true;
-			responseClose = requestClose || response.isHttp10() ||
-					response.testHeader("CONNECTION", "close", true, true) ||
-					queue.length() > 0;
-			// Write in Chunked mode when Request is HTTP/1.1 and
-			// Response is HTTP/1.0 and has no Content-Length
-			if (!request.isHttp10() && response.isHttp10() &&
-					response.getHeader("CONTENT-LENGTH") == null) {
-				chunked = true;
-				response.setHeader("Transfer-Encoding", "chunked");
-			}
-			response.setHttp10(request.isHttp10());
-			response.setHeader("Connection", requestClose ? "close" : "keep-alive");
-			sendResponse(true);
+			return;
 		}
+		if (!response.isCompleteHeader()) {
+			return;
+		}
+		if (logLevel >= LOG_VERBOSE) {
+			Log.v("Response Header Received, " + toString(true));
+		}
+		begun = true;
+		responseClose = requestClose || response.isHttp10() ||
+				response.testHeader("CONNECTION", "close", true, true) ||
+				queue.length() > 0;
+		// Write in Chunked mode when Request is HTTP/1.1 and
+		// Response is HTTP/1.0 and has no Content-Length
+		if (!request.isHttp10() && response.isHttp10() &&
+				response.getHeader("CONTENT-LENGTH") == null) {
+			chunked = true;
+			response.setHeader("Transfer-Encoding", "chunked");
+		}
+		response.setHttp10(request.isHttp10());
+		response.setHeader("Connection", requestClose ? "close" : "keep-alive");
+		sendResponse(true);
 	}
 
 	@Override
@@ -224,11 +228,11 @@ class ClientConnection implements Connection {
 		if (chunked) {
 			response.endRead();
 			response.write(proxyHandler, false, chunked);
-			reset();
 			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Client Lost and Proxy Responded " +
-						"a Final Chunk, " + toString(true));
+				Log.v("Client Lost and Proxy Responded a Final Chunk, " +
+						toString(true));
 			}
+			reset();
 			return;
 		}
 		if (logLevel >= LOG_DEBUG) {
@@ -256,12 +260,6 @@ class ClientConnection implements Connection {
 		}
 		if (response.isComplete()) {
 			reset();
-		} else {
-			proxyHandler.setBufferSize(0);
-			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Request Blocked due to Complete Request but " +
-						"Incomplete Response, " + toString(false));
-			}
 		}
 	}
 
@@ -299,12 +297,13 @@ class ClientConnection implements Connection {
 	private void reset() {
 		request.reset();
 		response.reset();
-		proxy.clearCurrentClient();
 		proxyHandler.setBufferSize(MAX_BUFFER_SIZE);
 		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
-			Log.v("Client Kept Alive and Request Unblocked due to " +
+			Log.v((proxy.getClientMap(secure).get(host) == null ? "Client Closed" :
+					"Client Kept Alive") + " and Request Unblocked due to " +
 					"Complete Request and Response, " + toString(false));
 		}
+		proxy.clearCurrentClient();
 		proxy.read();
 	}
 }
@@ -319,6 +318,8 @@ public class ProxyConnection implements Connection {
 			"Connection: close\r\n\r\n";
 	private static final byte[] BAD_REQUEST =
 			("HTTP/1.1 400 Bad Request" + ERROR_HEADERS).getBytes();
+	private static final byte[] REQUEST_ENTITY_TOO_LARGE =
+			("HTTP/1.1 413 Request Entity Too Large" + ERROR_HEADERS).getBytes();
 	private static final byte[] NOT_IMPLEMENTED =
 			("HTTP/1.1 501 Not Implemented" + ERROR_HEADERS).getBytes();
 	static final byte[] BAD_GATEWAY =
@@ -414,7 +415,7 @@ public class ProxyConnection implements Connection {
 			String path = request.getPath();
 			int colon = path.lastIndexOf(':');
 			if (colon < 0) {
-				throw new HttpPacketException(HttpPacketException.Type.DESTINATION, path);
+				throw new HttpPacketException("Invalid Destination", path);
 			}
 			String host = path.substring(0, colon);
 			String value = path.substring(colon + 1);
@@ -425,13 +426,13 @@ public class ProxyConnection implements Connection {
 				port = -1;
 			}
 			if (port < 0 || port > 0xFFFF) {
-				throw new HttpPacketException(HttpPacketException.Type.PORT, value);
+				throw new HttpPacketException("Invalid Port", value);
 			}
 			peer = new PeerConnection(this, handler, logLevel, host, port);
 			try {
 				connector.connect(peer, host, port);
 			} catch (IOException e) {
-				throw new HttpPacketException(HttpPacketException.Type.HOST, host);
+				throw new HttpPacketException("Invalid Host", host);
 			}
 			ByteArrayQueue body = request.getBody();
 			if (body.length() > 0) {
@@ -478,7 +479,7 @@ public class ProxyConnection implements Connection {
 			// Use "Host" in headers if "host:port" not in path
 			host = request.getHeader("HOST");
 			if (host == null) {
-				throw new HttpPacketException(HttpPacketException.Type.HOST, "");
+				throw new HttpPacketException("Invalid Host", "");
 			}
 			int colon = host.lastIndexOf(':');
 			if (colon < 0) {
@@ -493,7 +494,7 @@ public class ProxyConnection implements Connection {
 					port = -1;
 				}
 				if (port < 0 || port > 0xFFFF) {
-					throw new HttpPacketException(HttpPacketException.Type.PORT, value);
+					throw new HttpPacketException("Invalid Port", value);
 				}
 			}
 		}
@@ -518,7 +519,7 @@ public class ProxyConnection implements Connection {
 			try {
 				connector.connect(connection, connectHost, port);
 			} catch (IOException e) {
-				throw new HttpPacketException(HttpPacketException.Type.HOST, connectHost);
+				throw new HttpPacketException("Invalid Host", connectHost);
 			}
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Created, " + client.toString(false));
@@ -537,10 +538,12 @@ public class ProxyConnection implements Connection {
 			readEx();
 		} catch (HttpPacketException e) {
 			if (logLevel >= LOG_DEBUG) {
-				Log.d(e.getMessage() + ", from " + handler.getRemoteAddr());
+				Log.d(e.getMessage() + ", " + getRemote());
 			}
 			if (client == null || !client.isBegun()) {
-				handler.send(BAD_REQUEST);
+				handler.send(e.getType() == HttpPacketException.HEADER_SIZE ||
+						e.getType() == HttpPacketException.HEADER_COUNT ?
+						REQUEST_ENTITY_TOO_LARGE : BAD_REQUEST);
 			}
 			disconnect();
 		}
@@ -585,7 +588,13 @@ public class ProxyConnection implements Connection {
 		}
 
 		queue.add(b, off, len);
-		if (!request.isComplete()) {
+		if (request.isComplete()) {
+			handler.setBufferSize(0);
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("Request Blocked due to Complete Request but Incomplete Response, " +
+						(client == null ? getRemote() : client.toString(false)));
+			}
+		} else {
 			read();
 		}
 	}

@@ -5,39 +5,24 @@ import java.io.IOException;
 public class HttpPacketException extends IOException {
 	private static final long serialVersionUID = 1L;
 
-	public static enum Type {
-		BEGIN_LINE("Begin Line"),
-		PROTOCOL("Protocol"),
-		STATUS("Status"),
-		CONTENT_LENGTH("Content-Length"),
-		CHUNK_SIZE("Chunk Size"),
-		DESTINATION("Destination"),
-		HOST("Host"),
-		PORT("Port"),
-		;
+	public static final String
+			HEADER_SIZE = "Header Size Exceeds Limit",
+			HEADER_COUNT = "Header Count Exceeds Limit",
+			BEGIN_LINE = "Invalid Begin Line",
+			PROTOCOL = "Invalid Protocol",
+			STATUS = "Invalid Status",
+			CONTENT_LENGTH = "Invalid Content-Length",
+			CHUNK_SIZE = "Invalid Chunk Size";
 
-		private String value;
+	private String type, value;
 
-		private Type(String value) {
-			this.value = value;
-		}
-
-		@Override
-		public String toString() {
-			return value;
-		}
-	}
-
-	private Type type;
-	private String value;
-
-	public HttpPacketException(Type type, String value) {
-		super("Invalid " + type + ": \"" + value + "\"");
+	public HttpPacketException(String type, String value) {
+		super(type + ": \"" + value + "\"");
 		this.type = type;
 		this.value = value;
 	}
 
-	public Type getType() {
+	public String getType() {
 		return type;
 	}
 

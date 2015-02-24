@@ -31,7 +31,8 @@ public class HttpPacket {
 	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
 	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
 
-	private int type = TYPE_REQUEST, phase = PHASE_BEGIN, status = 0, bytesToRead = 0;
+	private int type = TYPE_REQUEST, phase = PHASE_BEGIN, maxHeaderSize = 8192,
+			maxHeaderCount = 128, headerCount = 0, status = 0, bytesToRead = 0;
 	private boolean http10 = false;
 	private String method = null, path = null, message = null;
 	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
@@ -40,7 +41,7 @@ public class HttpPacket {
 
 	public void reset() {
 		phase = PHASE_BEGIN;
-		status = bytesToRead = 0;
+		headerCount = status = bytesToRead = 0;
 		method = path = message = null;
 		headers.clear();
 		body.clear();
@@ -55,6 +56,16 @@ public class HttpPacket {
 	/** @return <code>true</code> for reading response */
 	public boolean isResponse() {
 		return type != TYPE_REQUEST;
+	}
+
+	/** @param maxHeaderSize */
+	public void setMaxHeaderSize(int maxHeaderSize) {
+		this.maxHeaderSize = maxHeaderSize;
+	}
+
+	/** @param maxHeaderCount */
+	public void setMaxHeaderCount(int maxHeaderCount) {
+		this.maxHeaderCount = maxHeaderCount;
 	}
 
 	/**
@@ -144,7 +155,7 @@ public class HttpPacket {
 	}
 
 	/** @return <code>true</code> for a complete line */
-	private boolean readLine(ByteArrayQueue queue) {
+	private boolean readLine(ByteArrayQueue queue) throws HttpPacketException {
 		byte[] b = queue.array();
 		int begin = queue.offset();
 		int end = begin + queue.length();
@@ -156,6 +167,10 @@ public class HttpPacket {
 			}
 			if (c != '\r') {
 				line.append(c);
+			}
+			if (line.length() > maxHeaderSize) {
+				throw new HttpPacketException(HttpPacketException.
+						HEADER_SIZE, "" + maxHeaderSize);
 			}
 		}
 		queue.remove(end - begin);
@@ -180,11 +195,16 @@ public class HttpPacket {
 	}
 
 	/** @return number of bytes read */
-	private void readHeader() {
+	private void readHeader() throws HttpPacketException {
 		int colon = line.indexOf(": ");
 		if (colon < 0) {
 			line.setLength(0);
 			return;
+		}
+		headerCount ++;
+		if (headerCount > maxHeaderCount) {
+			throw new HttpPacketException(HttpPacketException.
+					HEADER_COUNT, "" + maxHeaderCount);
 		}
 		String originalKey = line.substring(0, colon);
 		String key = originalKey.toUpperCase();
@@ -206,13 +226,13 @@ public class HttpPacket {
 			}
 			String[] ss = line.toString().split(" ", 3);
 			if (ss.length < 3) {
-				throw new HttpPacketException(HttpPacketException.Type.BEGIN_LINE, line.toString());
+				throw new HttpPacketException(HttpPacketException.BEGIN_LINE, line.toString());
 			}
 			String proto = (type == TYPE_REQUEST ? ss[2] : ss[0]).toUpperCase();
 			if (proto.equals("HTTP/1.0")) {
 				http10 = true;
 			} else if (!proto.equals("HTTP/1.1")) {
-				throw new HttpPacketException(HttpPacketException.Type.PROTOCOL, proto);
+				throw new HttpPacketException(HttpPacketException.PROTOCOL, proto);
 			}
 			if (type == TYPE_REQUEST) {
 				method = ss[0];
@@ -224,7 +244,7 @@ public class HttpPacket {
 				try {
 					status = Integer.parseInt(ss[1]);
 				} catch (NumberFormatException e) {
-					throw new HttpPacketException(HttpPacketException.Type.STATUS, ss[1]);
+					throw new HttpPacketException(HttpPacketException.STATUS, ss[1]);
 				}
 				message = ss[2];
 			}
@@ -256,7 +276,7 @@ public class HttpPacket {
 						}
 						if (bytesToRead < 0) {
 							throw new HttpPacketException(HttpPacketException.
-									Type.CONTENT_LENGTH, contentLength);
+									CONTENT_LENGTH, contentLength);
 						}
 					} else if (type == TYPE_RESPONSE_HTTP10 ||
 							(type == TYPE_RESPONSE && http10)) {
@@ -298,7 +318,7 @@ public class HttpPacket {
 					bytesToRead = -1;
 				}
 				if (bytesToRead < 0) {
-					throw new HttpPacketException(HttpPacketException.Type.CHUNK_SIZE, value);
+					throw new HttpPacketException(HttpPacketException.CHUNK_SIZE, value);
 				}
 				line.setLength(0);
 				if (bytesToRead == 0) {
