@@ -1,4 +1,4 @@
-package com.xqbase.tuna.tools.ssl;
+package com.xqbase.tuna.cli;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -23,8 +23,8 @@ public class SSLForward {
 			return;
 		}
 		if (args.length < 3) {
-			System.out.println("SSLForward Usage: java -cp tuna.jar " +
-					"com.xqbase.tuna.tools.ssl.SSLForward " +
+			System.out.println("SSLForward Usage: java -cp tuna-tools.jar " +
+					"com.xqbase.tuna.cli.SSLForward " +
 					"[<local-host>] <local-port> <remote-host> <remote-port>");
 			service.shutdown();
 			return;

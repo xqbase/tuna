@@ -1,1 +1,1 @@
-start javaw -cp lib/tuna-tools.jar com.xqbase.tuna.tools.BroadcastFrame
+start javaw -cp lib/tuna-tools.jar com.xqbase.tuna.gui.BroadcastFrame

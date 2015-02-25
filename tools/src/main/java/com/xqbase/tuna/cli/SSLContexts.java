@@ -1,4 +1,4 @@
-package com.xqbase.tuna.tools.ssl;
+package com.xqbase.tuna.cli;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;

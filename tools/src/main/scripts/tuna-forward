@@ -1,0 +1,16 @@
+#!/bin/bash
+# chkconfig: 345 75 25
+# description: Tuna Forward
+
+PID_FILE=/var/run/tuna-forward.pid
+case "$1" in
+	start)
+		/usr/share/java/bin/java -Xms16m -Xmx32m -cp /usr/local/tuna/lib/tuna-tools.jar com.xqbase.tuna.cli.Forward 80 tuna.xqbase.com 80 &
+		echo $! > $PID_FILE
+		;;
+	stop)
+		read pid < $PID_FILE
+		kill $pid
+		rm $PID_FILE
+		;;
+esac
