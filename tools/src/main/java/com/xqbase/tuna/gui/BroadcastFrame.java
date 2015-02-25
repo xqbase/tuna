@@ -1,4 +1,4 @@
-package com.xqbase.tuna.tools;
+package com.xqbase.tuna.gui;
 
 import java.io.IOException;
 

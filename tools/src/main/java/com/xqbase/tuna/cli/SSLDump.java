@@ -1,4 +1,4 @@
-package com.xqbase.tuna.tools.ssl;
+package com.xqbase.tuna.cli;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -24,8 +24,8 @@ public class SSLDump {
 			return;
 		}
 		if (args.length < 2) {
-			System.out.println("SSLDump Usage: java -cp tuna.jar " +
-					"com.xqbase.tuna.tools.ssl.SSLDump <host-name> <host-addr> [<port>]");
+			System.out.println("SSLDump Usage: java -cp tuna-tools.jar " +
+					"com.xqbase.tuna.cli.SSLDump <host-name> <host-addr> [<port>]");
 			service.shutdown();
 			return;
 		}

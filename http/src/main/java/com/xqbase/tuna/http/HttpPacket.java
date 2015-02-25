@@ -14,7 +14,7 @@ public class HttpPacket {
 	public static final int TYPE_RESPONSE_HEAD = 2;
 	public static final int TYPE_RESPONSE_HTTP10 = 3;
 
-	private static final int PHASE_BEGIN = 0;
+	private static final int PHASE_START = 0;
 	private static final int PHASE_HEADER = 1;
 	private static final int PHASE_BODY = 2;
 	private static final int PHASE_CHUNK_SIZE = 3;
@@ -31,7 +31,7 @@ public class HttpPacket {
 	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
 	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
 
-	private int type = TYPE_REQUEST, phase = PHASE_BEGIN, maxHeaderSize = 8192,
+	private int type = TYPE_REQUEST, phase = PHASE_START, maxHeaderSize = 8192,
 			maxHeaderCount = 128, headerCount = 0, status = 0, bytesToRead = 0;
 	private boolean http10 = false;
 	private String method = null, path = null, message = null;
@@ -40,7 +40,7 @@ public class HttpPacket {
 	private StringBuilder line = new StringBuilder();
 
 	public void reset() {
-		phase = PHASE_BEGIN;
+		phase = PHASE_START;
 		headerCount = status = bytesToRead = 0;
 		method = path = message = null;
 		headers.clear();
@@ -196,7 +196,7 @@ public class HttpPacket {
 
 	/** @return number of bytes read */
 	private void readHeader() throws HttpPacketException {
-		int colon = line.indexOf(": ");
+		int colon = line.indexOf(":");
 		if (colon < 0) {
 			line.setLength(0);
 			return;
@@ -214,25 +214,25 @@ public class HttpPacket {
 			values.add(originalKey);
 			headers.put(key, values);
 		}
-		values.add(line.substring(colon + 2));
+		values.add(line.substring(colon + 1).trim());
 		line.setLength(0);
 	}
 
 	/** @throws HttpPacketException a bad request or response */
 	public void read(ByteArrayQueue queue) throws HttpPacketException {
-		if (phase == PHASE_BEGIN) {
+		if (phase == PHASE_START) {
 			if (!readLine(queue)) {
 				return;
 			}
 			String[] ss = line.toString().split(" ", 3);
 			if (ss.length < 3) {
-				throw new HttpPacketException(HttpPacketException.BEGIN_LINE, line.toString());
+				throw new HttpPacketException(HttpPacketException.START_LINE, line.toString());
 			}
-			String proto = (type == TYPE_REQUEST ? ss[2] : ss[0]).toUpperCase();
-			if (proto.equals("HTTP/1.0")) {
+			String version = (type == TYPE_REQUEST ? ss[2] : ss[0]).toUpperCase();
+			if (version.equals("HTTP/1.0")) {
 				http10 = true;
-			} else if (!proto.equals("HTTP/1.1")) {
-				throw new HttpPacketException(HttpPacketException.PROTOCOL, proto);
+			} else if (!version.equals("HTTP/1.1")) {
+				throw new HttpPacketException(HttpPacketException.VERSION, version);
 			}
 			if (type == TYPE_REQUEST) {
 				method = ss[0];
@@ -264,7 +264,7 @@ public class HttpPacket {
 			}
 			phase = PHASE_BODY;
 			if (type != TYPE_RESPONSE_HEAD) {
-				if (testHeader("TRANSFER-ENCODING", "chunked", true, true)) {
+				if (testHeader("TRANSFER-ENCODING", "chunked")) {
 					phase = PHASE_CHUNK_SIZE;
 				} else {
 					String contentLength = getHeader("CONTENT-LENGTH");
@@ -348,36 +348,32 @@ public class HttpPacket {
 	}
 
 	/**
-	 * @param key Field Name in Upper Case
-	 * @param value Field Value
-	 * @param ignoreCase <code>true</code> to ignore case
-	 * @param trim <code>true</code> to trim Field Value
+	 * @param key Field Name in <b>Upper Case</b>
+	 * @param value Field Value in <b>Lower Case</b>
 	 */
-	public boolean testHeader(String key, String value, boolean ignoreCase, boolean trim) {
+	public boolean testHeader(String key, String value) {
 		ArrayList<String> values = headers.get(key);
 		if (values == null) {
 			return false;
 		}
 		int size = values.size();
-		String v2 = ignoreCase ? value.toLowerCase() : value;
 		for (int i = 1; i < size; i ++) {
-			String v1 = values.get(i);
-			v1 = ignoreCase ? v1.toLowerCase() : v1;
-			v1 = trim ? v1.trim() : v1;
-			if (v1.equals(v2)) {
-				return true;
+			for (String s : values.get(i).split(",")) {
+				if (s.trim().toLowerCase().equals(value)) {
+					return true;
+				}
 			}
 		}
 		return false;
 	}
 
-	/** @param key Field Name in Upper Case */
+	/** @param key Field Name in <b>Upper Case</b> */
 	public String getHeader(String key) {
 		ArrayList<String> values = headers.get(key);
 		return values == null || values.size() != 2 ? null : values.get(1);
 	}
 
-	/** @param key Field Name in Upper Case */
+	/** @param key Field Name in <b>Upper Case</b> */
 	public void removeHeader(String key) {
 		headers.remove(key);
 	}
@@ -427,7 +423,7 @@ public class HttpPacket {
 	/**
 	 * @param data {@link ByteArrayQueue} to write into
 	 * @param begin <code>true</code> to write entire Request or Response,
-	 *        including Begin Line and Headers,
+	 *        including Start Line and Headers,
 	 *        and <code>false</code> to write Body and Trailers (if available) only
 	 * @param forceChunked <code>true</code> to force to write in Chunked mode
 	 */
@@ -467,7 +463,7 @@ public class HttpPacket {
 	/**
 	 * @param handler {@link ConnectionHandler} to write into
 	 * @param begin <code>true</code> to write entire Request or Response,
-	 *        including Begin Line and Headers,
+	 *        including Start Line and Headers,
 	 *        and <code>false</code> to write Body and Trailers (if available) only
 	 * @param forceChunked <code>true</code> to force to write in Chunked mode
 	 */

@@ -43,7 +43,8 @@ class PeerConnection implements Connection {
 	}
 
 	String toString(boolean recv) {
-		return peer.getRemote() + (recv ? " <= " : " => ") + host + ":" + port;
+		return peer.getRemote() + (recv ? " <= " : " => ") + host + ":" + port +
+				" (" + handler.getLocalAddr() + ":" + handler.getLocalPort() + ")";
 	}
 
 	ConnectionHandler getHandler() {
@@ -159,33 +160,41 @@ class ClientConnection implements Connection {
 			return;
 		}
 		ByteArrayQueue queue = new ByteArrayQueue(b, off, len);
-		try {
-			response.read(queue);
-		} catch (HttpPacketException e) {
-			if (logLevel >= LOG_DEBUG) {
-				Log.d(e.getMessage() + ", " + toString(true));
+		while (true) {
+			try {
+				response.read(queue);
+			} catch (HttpPacketException e) {
+				if (logLevel >= LOG_DEBUG) {
+					Log.d(e.getMessage() + ", " + toString(true));
+				}
+				// Disconnect for a Bad Response
+				if (!response.isCompleteHeader()) {
+					handler.send(ProxyConnection.BAD_GATEWAY);
+				}
+				proxy.disconnect();
+				return;
 			}
-			// Disconnect for a Bad Response
+			if (begun) {
+				responseClose = responseClose || queue.length() > 0;
+				sendResponse(false);
+				return;
+			}
 			if (!response.isCompleteHeader()) {
-				handler.send(ProxyConnection.BAD_GATEWAY);
+				return;
 			}
-			proxy.disconnect();
-			return;
-		}
-		if (begun) {
-			responseClose = responseClose || queue.length() > 0;
-			sendResponse(false);
-			return;
-		}
-		if (!response.isCompleteHeader()) {
-			return;
-		}
-		if (logLevel >= LOG_VERBOSE) {
-			Log.v("Response Header Received, " + toString(true));
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("Response Header Received, " + toString(true));
+			}
+			int status = response.getStatus();
+			if (status != 100) { // Not Necessary to Support "102 Processing"
+				break;
+			}
+			response.write(proxyHandler, true, false);
+			response.reset();
 		}
 		begun = true;
 		responseClose = requestClose || response.isHttp10() ||
-				response.testHeader("CONNECTION", "close", true, true) ||
+				response.testHeader("CONNECTION", "close") ||
 				queue.length() > 0;
 		// Write in Chunked mode when Request is HTTP/1.1 and
 		// Response is HTTP/1.0 and has no Content-Length
@@ -215,7 +224,7 @@ class ClientConnection implements Connection {
 	public void onConnect() {
 		established = true;
 		if (logLevel >= LOG_VERBOSE) {
-			Log.v("Client Established, " + toString(false));
+			Log.v("Client Connection Established, " + toString(false));
 		}
 	}
 
@@ -241,7 +250,7 @@ class ClientConnection implements Connection {
 		if (logLevel >= LOG_DEBUG) {
 			if (!begun) {
 				Log.d((established ? "Incomplete Header, " :
-						"Client Not Connected, ") + toString(true));
+						"Client Connection Failed, ") + toString(true));
 			} else if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Lost in Response, " + toString(true));
 			}
@@ -329,6 +338,8 @@ public class ProxyConnection implements Connection {
 			("HTTP/1.1 502 Bad Gateway" + ERROR_HEADERS).getBytes();
 	static final byte[] GATEWAY_TIMEOUT =
 			("HTTP/1.1 504 Gateway Timeout" + ERROR_HEADERS).getBytes();
+	private static final byte[] HTTP_VERSION_NOT_SUPPORTED =
+			("HTTP/1.1 505 HTTP Version Not Supported" + ERROR_HEADERS).getBytes();
 
 	private Connector connector;
 	private Executor executor;
@@ -371,8 +382,8 @@ public class ProxyConnection implements Connection {
 		}
 
 		boolean connectionClose = request.isHttp10() ||
-				request.testHeader("CONNECTION", "close", true, true) ||
-				request.testHeader("PROXY-CONNECTION", "close", true, true);
+				request.testHeader("CONNECTION", "close") ||
+				request.testHeader("PROXY-CONNECTION", "close");
 		if (auth != null) {
 			boolean authenticated = false;
 			String proxyAuth = request.getHeader("PROXY-AUTHORIZATION");
@@ -482,7 +493,7 @@ public class ProxyConnection implements Connection {
 			// Use "Host" in headers if "host:port" not in path
 			host = request.getHeader("HOST");
 			if (host == null) {
-				throw new HttpPacketException("Invalid Host", "");
+				throw new HttpPacketException("Missing Host", "");
 			}
 			int colon = host.lastIndexOf(':');
 			if (colon < 0) {
@@ -544,9 +555,12 @@ public class ProxyConnection implements Connection {
 				Log.d(e.getMessage() + ", " + getRemote());
 			}
 			if (client == null || !client.isBegun()) {
-				handler.send(e.getType() == HttpPacketException.HEADER_SIZE ||
-						e.getType() == HttpPacketException.HEADER_COUNT ?
-						REQUEST_ENTITY_TOO_LARGE : BAD_REQUEST);
+				String type = e.getType();
+				handler.send(type == HttpPacketException.HEADER_SIZE ||
+						type == HttpPacketException.HEADER_COUNT ?
+						REQUEST_ENTITY_TOO_LARGE :
+						type == HttpPacketException.VERSION ?
+						HTTP_VERSION_NOT_SUPPORTED : BAD_REQUEST);
 			}
 			disconnect();
 		}

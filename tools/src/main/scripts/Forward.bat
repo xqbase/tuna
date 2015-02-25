@@ -1,1 +1,1 @@
-start java -cp lib/tuna-tools.jar com.xqbase.tuna.tools.ForwardFrame
+start java -cp lib/tuna-tools.jar com.xqbase.tuna.gui.ForwardFrame

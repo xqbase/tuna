@@ -8,8 +8,8 @@ public class HttpPacketException extends IOException {
 	public static final String
 			HEADER_SIZE = "Header Size Exceeds Limit",
 			HEADER_COUNT = "Header Count Exceeds Limit",
-			BEGIN_LINE = "Invalid Begin Line",
-			PROTOCOL = "Invalid Protocol",
+			START_LINE = "Invalid Start Line",
+			VERSION = "Unrecognized Version",
 			STATUS = "Invalid Status",
 			CONTENT_LENGTH = "Invalid Content-Length",
 			CHUNK_SIZE = "Invalid Chunk Size";
