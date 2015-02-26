@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.function.BiPredicate;
+import java.util.function.UnaryOperator;
 import java.util.logging.Logger;
 
 import javax.net.ssl.KeyManager;
@@ -32,7 +33,7 @@ import sun.security.x509.X509CertInfo;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.ssl.SSLFilter;
-import com.xqbase.tuna.util.SSLManagers;
+import com.xqbase.tuna.ssl.SSLManagers;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -94,20 +95,35 @@ public class TunaProxy {
 		String logValue = Conf.DEBUG ? "verbose" : p.getProperty("log");
 		int logLevel = logValue == null ? 0 : LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
-		HashMap<String, String> authMap = new HashMap<>();
+		boolean lookupEnabled = Conf.getBoolean(p.getProperty("lookup"), false);
 		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
+		HashMap<String, String> lookupMap = new HashMap<>();
+		HashMap<String, String> authMap = new HashMap<>();
+		UnaryOperator<String> lookup = lookupEnabled ? lookupMap::get : t -> t;
 		BiPredicate<String, String> auth;
 		if (authEnabled) {
 			auth = (t, u) -> {
+				if (t == null) {
+					return false;
+				}
 				String password = authMap.get(t);
 				return password != null && password.equals(u);
 			};
 		} else {
-			auth = null;
+			auth = (t, u) -> true;
 		}
 
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
+			if (lookupEnabled) {
+				connector.scheduleDelayed(() -> {
+					lookupMap.clear();
+					Properties p_ = Conf.load("Lookup");
+					for (Map.Entry<?, ?> entry : p_.entrySet()) {
+						lookupMap.put((String) entry.getKey(), (String) entry.getValue());
+					}
+				}, 0, 10000);
+			}
 			if (authEnabled) {
 				connector.scheduleDelayed(() -> {
 					authMap.clear();
@@ -117,9 +133,11 @@ public class TunaProxy {
 					}
 				}, 0, 10000);
 			}
+
 			SSLContext sslcClient = getSSLContext(null, 0);
-			ServerConnection server = () -> new ProxyConnection(connector,
-					connector, sslcClient, auth, p.getProperty("realm"), logLevel);
+			ProxyContext context = new ProxyContext(connector, connector, sslcClient,
+					lookup, auth, p.getProperty("realm"), logLevel);
+			ServerConnection server = () -> new ProxyConnection(context);
 			if (Conf.getBoolean(p.getProperty("ssl"), false)) {
 				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
 				connector.add(server.appendFilter(() -> new SSLFilter(connector,

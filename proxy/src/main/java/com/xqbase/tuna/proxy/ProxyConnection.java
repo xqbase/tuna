@@ -4,14 +4,9 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.Base64;
 import java.util.HashMap;
-import java.util.concurrent.Executor;
-import java.util.function.BiPredicate;
-
-import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
-import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.http.HttpPacketException;
 import com.xqbase.tuna.ssl.SSLFilter;
@@ -42,8 +37,8 @@ class PeerConnection implements Connection {
 		this.port = port;
 	}
 
-	String toString(boolean recv) {
-		return peer.getRemote() + (recv ? " <= " : " => ") + host + ":" + port +
+	String toString(boolean resp) {
+		return peer.getRemote() + (resp ? " <= " : " => ") + host + ":" + port +
 				" (" + handler.getLocalAddr() + ":" + handler.getLocalPort() + ")";
 	}
 
@@ -85,7 +80,7 @@ class PeerConnection implements Connection {
 			if (logLevel >= LOG_DEBUG) {
 				Log.d("Connection Failed, " + toString(false));
 			}
-			peerHandler.send(ProxyConnection.GATEWAY_TIMEOUT);
+			peer.gatewayTimeout();
 		} else if (logLevel >= LOG_VERBOSE) {
 			Log.v("Connection Lost, " + toString(true));
 		}
@@ -116,10 +111,10 @@ class ClientConnection implements Connection {
 		this.host = host;
 	}
 
-	String toString(boolean recv) {
-		String path = request.getPath();
-		return proxy.getRemote() + (recv ? " <= " : " => ") +
-				(secure ? "https://" : "http://") + host + (path == null ? "" : path) +
+	String toString(boolean resp) {
+		String uri = request.getUri();
+		return proxy.getRemote() + (resp ? " <= " : " => ") +
+				(secure ? "https://" : "http://") + host + (uri == null ? "" : uri) +
 				" (" + handler.getLocalAddr() + ":" + handler.getLocalPort() + ")";
 	}
 
@@ -169,7 +164,7 @@ class ClientConnection implements Connection {
 				}
 				// Disconnect for a Bad Response
 				if (!response.isCompleteHeader()) {
-					handler.send(ProxyConnection.BAD_GATEWAY);
+					proxy.badGateway();
 				}
 				proxy.disconnect();
 				return;
@@ -182,15 +177,18 @@ class ClientConnection implements Connection {
 			if (!response.isCompleteHeader()) {
 				return;
 			}
-			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Response Header Received, " + toString(true));
-			}
 			int status = response.getStatus();
 			if (status != 100) { // Not Necessary to Support "102 Processing"
+				if (logLevel >= LOG_VERBOSE) {
+					Log.v("Response Header Received, " + toString(true));
+				}
 				break;
 			}
 			response.write(proxyHandler, true, false);
 			response.reset();
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("\"100 Continue\" Received, " + toString(true));
+			}
 		}
 		begun = true;
 		responseClose = requestClose || response.isHttp10() ||
@@ -204,7 +202,15 @@ class ClientConnection implements Connection {
 			response.setHeader("Transfer-Encoding", "chunked");
 		}
 		response.setHttp10(request.isHttp10());
-		response.setHeader("Connection", requestClose ? "close" : "keep-alive");
+		if (response.getStatus() == 101) {
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("\"101 Switching Protocols\" Received, " + toString(true));
+			}
+			request.continueRead();
+			proxy.read();
+		} else {
+			response.setHeader("Connection", requestClose ? "close" : "keep-alive");
+		}
 		sendResponse(true);
 	}
 
@@ -257,7 +263,7 @@ class ClientConnection implements Connection {
 		}
 		// TODO if (!begun) retry request 
 		if (!established) {
-			proxyHandler.send(ProxyConnection.GATEWAY_TIMEOUT);
+			proxy.gatewayTimeout();
 		}
 		proxy.disconnect();
 	}
@@ -330,23 +336,21 @@ public class ProxyConnection implements Connection {
 			"Connection: close\r\n\r\n";
 	private static final byte[] BAD_REQUEST =
 			("HTTP/1.1 400 Bad Request" + ERROR_HEADERS).getBytes();
+	private static final byte[] FORBIDDEN =
+			("HTTP/1.1 403 Forbidden" + ERROR_HEADERS).getBytes();
 	private static final byte[] REQUEST_ENTITY_TOO_LARGE =
 			("HTTP/1.1 413 Request Entity Too Large" + ERROR_HEADERS).getBytes();
 	private static final byte[] NOT_IMPLEMENTED =
 			("HTTP/1.1 501 Not Implemented" + ERROR_HEADERS).getBytes();
-	static final byte[] BAD_GATEWAY =
+	private static final byte[] BAD_GATEWAY =
 			("HTTP/1.1 502 Bad Gateway" + ERROR_HEADERS).getBytes();
-	static final byte[] GATEWAY_TIMEOUT =
+	private static final byte[] GATEWAY_TIMEOUT =
 			("HTTP/1.1 504 Gateway Timeout" + ERROR_HEADERS).getBytes();
 	private static final byte[] HTTP_VERSION_NOT_SUPPORTED =
 			("HTTP/1.1 505 HTTP Version Not Supported" + ERROR_HEADERS).getBytes();
 
-	private Connector connector;
-	private Executor executor;
-	private SSLContext sslc;
-	private BiPredicate<String, String> auth;
-	private String realm;
-	private int logLevel;
+	private int logLevel; 
+	private ProxyContext context;
 	private ConnectionHandler handler;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket request = new HttpPacket();
@@ -371,6 +375,14 @@ public class ProxyConnection implements Connection {
 		return handler.getRemoteAddr() + ":" + handler.getRemotePort();
 	}
 
+	void badGateway() {
+		handler.send(BAD_GATEWAY);
+	}
+
+	void gatewayTimeout() {
+		handler.send(GATEWAY_TIMEOUT);
+	}
+
 	private void readEx() throws HttpPacketException {
 		request.read(queue);
 		if (client != null) {
@@ -384,55 +396,63 @@ public class ProxyConnection implements Connection {
 		boolean connectionClose = request.isHttp10() ||
 				request.testHeader("CONNECTION", "close") ||
 				request.testHeader("PROXY-CONNECTION", "close");
-		if (auth != null) {
-			boolean authenticated = false;
-			String proxyAuth = request.getHeader("PROXY-AUTHORIZATION");
-			if (proxyAuth != null && proxyAuth.toUpperCase().startsWith("BASIC ")) {
-				String basic = new String(Base64.getDecoder().decode(proxyAuth.substring(6)));
-				int colon = basic.indexOf(':');
-				if (colon >= 0) {
-					authenticated = auth.test(basic.substring(0, colon),
-							basic.substring(colon + 1));
+		String username = null, password = null;
+		String proxyAuth = request.getHeader("PROXY-AUTHORIZATION");
+		if (proxyAuth != null && proxyAuth.toUpperCase().startsWith("BASIC ")) {
+			String basic = new String(Base64.getDecoder().decode(proxyAuth.substring(6)));
+			int colon = basic.indexOf(':');
+			if (colon >= 0) {
+				username = basic.substring(0, colon);
+				password = basic.substring(colon + 1);
+			}
+		}
+		if (!context.test(username, password)) {
+			String realm = context.getRealm();
+			HttpPacket response = new HttpPacket();
+			response.setType(HttpPacket.TYPE_RESPONSE);
+			response.setStatus(407);
+			response.setReason("Proxy Authentication Required");
+			response.setHeader("Proxy-Authenticate", realm == null ||
+					realm.isEmpty() ? "Basic" : "Basic realm=\"" + realm + "\"");
+			response.setHeader("Content-Length", "0");
+			if (connectionClose || !request.isComplete()) {
+				// Skip reading body
+				response.setHeader("Connection", "close");
+				response.write(handler, true, false);
+				disconnect();
+			} else { 
+				response.setHeader("Connection", "keep-alive");
+				response.write(handler, true, false);
+				request.reset();
+				// No request from peer, so continue reading
+				if (queue.length() > 0) {
+					readEx();
 				}
 			}
-			if (!authenticated) {
-				HttpPacket response = new HttpPacket();
-				response.setType(HttpPacket.TYPE_RESPONSE);
-				response.setStatus(407);
-				response.setMessage("Proxy Authentication Required");
-				response.setHeader("Proxy-Authenticate", realm == null ||
-						realm.isEmpty() ? "Basic" : "Basic realm=\"" + realm + "\"");
-				response.setHeader("Content-Length", "0");
-				if (connectionClose || !request.isComplete()) {
-					// Skip reading body
-					response.setHeader("Connection", "close");
-					response.write(handler, true, false);
-					handler.disconnect();
-				} else { 
-					response.setHeader("Connection", "keep-alive");
-					response.write(handler, true, false);
-					request.reset();
-					// No request from peer, so continue reading
-					if (queue.length() > 0) {
-						readEx();
-					}
-				}
-				if (logLevel >= LOG_DEBUG) {
-					Log.d("Auth Failed, " + getRemote());
-				}
-				return;
+			if (logLevel >= LOG_DEBUG) {
+				Log.d("Auth Failed, " + getRemote());
 			}
+			return;
 		}
 
 		String method = request.getMethod().toUpperCase();
 		if (method.equals("CONNECT")) {
-			String path = request.getPath();
-			int colon = path.lastIndexOf(':');
-			if (colon < 0) {
-				throw new HttpPacketException("Invalid Destination", path);
+			String uri = context.apply(request.getUri().toLowerCase());
+			if (uri == null) {
+				if (logLevel >= LOG_DEBUG) {
+					Log.d("Connection to \"" + request.getUri() +
+							"\" is Forbidden, " + getRemote());
+				}
+				handler.send(FORBIDDEN);
+				disconnect();
+				return;
 			}
-			String host = path.substring(0, colon);
-			String value = path.substring(colon + 1);
+			int colon = uri.lastIndexOf(':');
+			if (colon < 0) {
+				throw new HttpPacketException("Invalid Destination", uri);
+			}
+			String host = uri.substring(0, colon);
+			String value = uri.substring(colon + 1);
 			int port;
 			try {
 				port = Integer.parseInt(value);
@@ -444,7 +464,7 @@ public class ProxyConnection implements Connection {
 			}
 			peer = new PeerConnection(this, handler, logLevel, host, port);
 			try {
-				connector.connect(peer, host, port);
+				context.connect(peer, host, port);
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", host);
 			}
@@ -458,63 +478,70 @@ public class ProxyConnection implements Connection {
 			return;
 		}
 
-		String path = request.getPath();
+		String uri = request.getUri();
 		boolean secure = false;
-		String host, connectHost;
+		String host;
 		int port;
 		try {
-			// Use "host:port" in path
-			URL url = new URL(path);
+			// Use "host:port" in URI
+			URL url = new URL(uri);
 			String proto = url.getProtocol().toLowerCase();
 			if (proto.equals("https")) {
 				secure = true;
 			} else if (!proto.equals("http")) {
 				if (logLevel >= LOG_DEBUG) {
-					Log.d("Unable to Implement \"" + proto + "\", " + getRemote());
+					Log.d("\"" + proto + "\" Not Implemented, " + getRemote());
 				}
 				handler.send(NOT_IMPLEMENTED);
 				disconnect();
 				return;
 			}
-			connectHost = url.getHost();
 			port = url.getPort();
-			if (port < 0) {
-				host = connectHost;
-				port = url.getDefaultPort();
-			} else {
-				host = connectHost + ":" + port;
-			}
-			port = port < 0 ? url.getDefaultPort() : port;
+			host = url.getHost() + (port < 0 ? "" : ":" + port);
 			String query = url.getQuery();
-			path = url.getPath();
-			path = (path == null || path.isEmpty() ? "/" : path) +
+			uri = url.getPath();
+			uri = (uri == null || uri.isEmpty() ? "/" : uri) +
 					(query == null || query.isEmpty() ? "" : "?" + query);
 		} catch (IOException e) {
-			// Use "Host" in headers if "host:port" not in path
+			// Use "Host" in headers if "host:port" not in URI
 			host = request.getHeader("HOST");
 			if (host == null) {
 				throw new HttpPacketException("Missing Host", "");
 			}
-			int colon = host.lastIndexOf(':');
-			if (colon < 0) {
-				connectHost = host;
-				port = 80;
-			} else {
-				connectHost = host.substring(0, colon);
-				String value = host.substring(colon + 1);
-				try {
-					port = Integer.parseInt(value);
-				} catch (NumberFormatException e_) {
-					port = -1;
-				}
-				if (port < 0 || port > 0xFFFF) {
-					throw new HttpPacketException("Invalid Port", value);
-				}
+		}
+
+		String originalHost = host;
+		host = context.apply(originalHost.toLowerCase());
+		if (host == null) {
+			if (logLevel >= LOG_DEBUG) {
+				Log.d("Request to \"" + originalHost +
+						"\" is Forbidden, " + getRemote());
+			}
+			handler.send(FORBIDDEN);
+			disconnect();
+			return;
+		}
+		int colon = host.lastIndexOf(':');
+		String connectHost;
+		if (colon < 0) {
+			connectHost = host;
+			port = secure ? 443 : 80;
+		} else {
+			connectHost = host.substring(0, colon);
+			String value = host.substring(colon + 1);
+			try {
+				port = Integer.parseInt(value);
+			} catch (NumberFormatException e_) {
+				port = -1;
+			}
+			if (port < 0 || port > 0xFFFF) {
+				throw new HttpPacketException("Invalid Port", value);
 			}
 		}
-		request.setPath(path);
+
+		request.setUri(uri);
 		if (request.getHeader("HOST") == null) {
-			request.setHeader("Host", host);
+			request.setHeader("Host", originalHost);
 		}
 		request.removeHeader("PROXY-AUTHORIZATION");
 		request.removeHeader("PROXY-CONNECTION");
@@ -525,13 +552,13 @@ public class ProxyConnection implements Connection {
 			getClientMap(secure).put(host, client);
 			Connection connection;
 			if (secure) {
-				connection = client.appendFilter(new SSLFilter(executor,
-						sslc, SSLFilter.CLIENT, connectHost, port));
+				connection = client.appendFilter(new SSLFilter(context,
+						context.getSSLContext(), SSLFilter.CLIENT, connectHost, port));
 			} else {
 				connection = client;
 			}
 			try {
-				connector.connect(connection, connectHost, port);
+				context.connect(connection, connectHost, port);
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", connectHost);
 			}
@@ -556,8 +583,7 @@ public class ProxyConnection implements Connection {
 			}
 			if (client == null || !client.isBegun()) {
 				String type = e.getType();
-				handler.send(type == HttpPacketException.HEADER_SIZE ||
-						type == HttpPacketException.HEADER_COUNT ?
+				handler.send(type == HttpPacketException.HEADER_SIZE ?
 						REQUEST_ENTITY_TOO_LARGE :
 						type == HttpPacketException.VERSION ?
 						HTTP_VERSION_NOT_SUPPORTED : BAD_REQUEST);
@@ -582,14 +608,9 @@ public class ProxyConnection implements Connection {
 		handler.disconnect();
 	}
 
-	public ProxyConnection(Connector connector, Executor executor, SSLContext sslc,
-			BiPredicate<String, String> auth, String realm, int logLevel) {
-		this.connector = connector;
-		this.executor = executor;
-		this.sslc = sslc;
-		this.auth = auth;
-		this.realm = realm;
-		this.logLevel = logLevel;
+	public ProxyConnection(ProxyContext context) {
+		this.context = context;
+		logLevel = context.getLogLevel();
 	}
 
 	@Override

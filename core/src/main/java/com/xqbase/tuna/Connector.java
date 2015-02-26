@@ -7,7 +7,7 @@ public interface Connector {
 	public static final String ANY_LOCAL_ADDRESS =
 			new InetSocketAddress(0).getAddress().getHostAddress();
 
-	public interface Closeable extends AutoCloseable {
+	public static interface Closeable extends AutoCloseable {
 		@Override
 		public void close();
 	}

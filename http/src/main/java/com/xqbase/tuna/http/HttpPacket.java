@@ -31,18 +31,18 @@ public class HttpPacket {
 	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
 	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
 
-	private int type = TYPE_REQUEST, phase = PHASE_START, maxHeaderSize = 8192,
-			maxHeaderCount = 128, headerCount = 0, status = 0, bytesToRead = 0;
+	private int type = TYPE_REQUEST, phase = PHASE_START,
+			headerLimit = 32768, headerSize = 0, status = 0, bytesToRead = 0;
 	private boolean http10 = false;
-	private String method = null, path = null, message = null;
+	private String method = null, uri = null, reason = null;
 	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
 	private ByteArrayQueue body = new ByteArrayQueue();
 	private StringBuilder line = new StringBuilder();
 
 	public void reset() {
 		phase = PHASE_START;
-		headerCount = status = bytesToRead = 0;
-		method = path = message = null;
+		headerSize = status = bytesToRead = 0;
+		method = uri = reason = null;
 		headers.clear();
 		body.clear();
 		line.setLength(0);
@@ -58,14 +58,9 @@ public class HttpPacket {
 		return type != TYPE_REQUEST;
 	}
 
-	/** @param maxHeaderSize */
-	public void setMaxHeaderSize(int maxHeaderSize) {
-		this.maxHeaderSize = maxHeaderSize;
-	}
-
-	/** @param maxHeaderCount */
-	public void setMaxHeaderCount(int maxHeaderCount) {
-		this.maxHeaderCount = maxHeaderCount;
+	/** @param headerLimit */
+	public void setHeaderLimit(int headerLimit) {
+		this.headerLimit = headerLimit;
 	}
 
 	/**
@@ -114,14 +109,14 @@ public class HttpPacket {
 		this.method = method;
 	}
 
-	/** @return Request Path, only available for reading request */
-	public String getPath() {
-		return path;
+	/** @return Request URI, only available for reading request */
+	public String getUri() {
+		return uri;
 	}
 
-	/** @param path Request Path, only available for writing request */
-	public void setPath(String path) {
-		this.path = path;
+	/** @param uri Request URI, only available for writing request */
+	public void setUri(String uri) {
+		this.uri = uri;
 	}
 
 	/** @return Response Status, only available for reading response */
@@ -129,19 +124,19 @@ public class HttpPacket {
 		return status;
 	}
 
-	/** @param status Response Status, only available for writing response */
+	/** @param status Status Code, only available for writing response */
 	public void setStatus(int status) {
 		this.status = status;
 	}
 
-	/** @return Response Message, only available for reading response */
-	public String getMessage() {
-		return message;
+	/** @return Reason Phrase, only available for reading response */
+	public String getReason() {
+		return reason;
 	}
 
-	/** @param message Response Message, only available for writing response */
-	public void setMessage(String message) {
-		this.message = message;
+	/** @param reason Reason Phrase, only available for writing response */
+	public void setReason(String reason) {
+		this.reason = reason;
 	}
 
 	/** @return HTTP Headers for request or response */
@@ -160,6 +155,11 @@ public class HttpPacket {
 		int begin = queue.offset();
 		int end = begin + queue.length();
 		for (int i = begin; i < end; i ++) {
+			headerSize ++;
+			if (headerSize > headerLimit) {
+				throw new HttpPacketException(HttpPacketException.
+						HEADER_SIZE, "" + headerLimit);
+			}
 			char c = (char) b[i];
 			if (c == '\n') {
 				queue.remove(i - begin + 1);
@@ -167,10 +167,6 @@ public class HttpPacket {
 			}
 			if (c != '\r') {
 				line.append(c);
-			}
-			if (line.length() > maxHeaderSize) {
-				throw new HttpPacketException(HttpPacketException.
-						HEADER_SIZE, "" + maxHeaderSize);
 			}
 		}
 		queue.remove(end - begin);
@@ -195,16 +191,11 @@ public class HttpPacket {
 	}
 
 	/** @return number of bytes read */
-	private void readHeader() throws HttpPacketException {
+	private void readHeader() {
 		int colon = line.indexOf(":");
 		if (colon < 0) {
 			line.setLength(0);
 			return;
-		}
-		headerCount ++;
-		if (headerCount > maxHeaderCount) {
-			throw new HttpPacketException(HttpPacketException.
-					HEADER_COUNT, "" + maxHeaderCount);
 		}
 		String originalKey = line.substring(0, colon);
 		String key = originalKey.toUpperCase();
@@ -236,7 +227,7 @@ public class HttpPacket {
 			}
 			if (type == TYPE_REQUEST) {
 				method = ss[0];
-				path = ss[1];
+				uri = ss[1];
 				if (method.toUpperCase().equals("CONNECT")) {
 					bytesToRead = -1;
 				}
@@ -246,7 +237,10 @@ public class HttpPacket {
 				} catch (NumberFormatException e) {
 					throw new HttpPacketException(HttpPacketException.STATUS, ss[1]);
 				}
-				message = ss[2];
+				reason = ss[2];
+				if (status == 101) {
+					bytesToRead = -1;
+				}
 			}
 			line.setLength(0);
 			phase = PHASE_HEADER;
@@ -302,6 +296,8 @@ public class HttpPacket {
 					}
 					phase = PHASE_CHUNK_CRLF;
 				}
+				// Reset "headerSize" before reading Chunk Size 
+				headerSize = 0;
 				if (!readLine(queue)) {
 					return;
 				}
@@ -323,6 +319,8 @@ public class HttpPacket {
 				line.setLength(0);
 				if (bytesToRead == 0) {
 					phase = PHASE_TRAILER;
+					// Reset "headerSize" before reading Trailer
+					headerSize = 0;
 					break;
 				}
 				phase = PHASE_CHUNK_DATA;
@@ -345,6 +343,11 @@ public class HttpPacket {
 
 	public void endRead() {
 		phase = PHASE_END;
+	}
+
+	public void continueRead() {
+		phase = PHASE_BODY;
+		bytesToRead = -1;
 	}
 
 	/**
@@ -431,12 +434,12 @@ public class HttpPacket {
 		if (begin) {
 			if (type == TYPE_REQUEST) {
 				data.add(method.getBytes()).add(SPACE).
-						add(path.getBytes()).add(SPACE).
+						add(uri.getBytes()).add(SPACE).
 						add(http10 ? HTTP10 : HTTP11).add(CRLF);
 			} else {
 				data.add(http10 ? HTTP10 : HTTP11).add(SPACE).
 						add(("" + status).getBytes()).add(SPACE).
-						add(message.getBytes()).add(CRLF);
+						add(reason.getBytes()).add(CRLF);
 			}
 			writeHeaders(data);
 		}

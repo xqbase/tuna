@@ -46,7 +46,7 @@ public class TestHttp10 {
 					if (!request.isComplete()) {
 						return;
 					}
-					if (request.getPath().equals("/32")) {
+					if (request.getUri().equals("/32")) {
 						handler.send(RESP_CHUNKED);
 						handler.send(RESP_BODY);
 						begun = true;

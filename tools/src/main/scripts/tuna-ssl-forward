@@ -2,7 +2,7 @@
 # chkconfig: 345 75 25
 # description: Tuna SSL Forward
 
-PID_FILE=/var/run/tuna-forward.pid
+PID_FILE=/var/run/tuna-ssl-forward.pid
 case "$1" in
 	start)
 		/usr/share/java/bin/java -Xms16m -Xmx32m -cp /usr/local/tuna/lib/tuna-tools.jar com.xqbase.tuna.cli.SSLForward 80 tuna.xqbase.com 443 &
