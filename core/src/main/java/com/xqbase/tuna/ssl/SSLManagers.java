@@ -1,4 +1,4 @@
-package com.xqbase.tuna.util;
+package com.xqbase.tuna.ssl;
 
 import java.security.cert.X509Certificate;
 

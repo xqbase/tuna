@@ -22,7 +22,7 @@ import sun.security.x509.X500Name;
 import sun.security.x509.X509CertImpl;
 import sun.security.x509.X509CertInfo;
 
-import com.xqbase.tuna.util.SSLManagers;
+import com.xqbase.tuna.ssl.SSLManagers;
 
 class SSLContexts {
 	static SSLContext get(String dn, long expire)
