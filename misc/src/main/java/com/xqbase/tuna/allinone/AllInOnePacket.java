@@ -1,16 +1,15 @@
-package com.xqbase.tuna.multicast;
+package com.xqbase.tuna.allinone;
 
 import com.xqbase.tuna.packet.PacketException;
 import com.xqbase.tuna.packet.PacketParser;
 import com.xqbase.tuna.util.Bytes;
 
-class MulticastPacket {
+class AllInOnePacket {
 	// Edge Commands
 	static final int EDGE_PING			= 0x100;
 	static final int EDGE_CONNECT		= 0x101;
 	static final int EDGE_DATA			= 0x102;
 	static final int EDGE_DISCONNECT	= 0x103;
-
 	// Origin Commands
 	static final int ORIGIN_PONG		= 0x200;
 	static final int ORIGIN_MULTICAST	= 0x201;
@@ -46,14 +45,14 @@ class MulticastPacket {
 	int connId, command, numConns, size;
 
 	/** @param len */
-	MulticastPacket(byte[] b, int off, int len) {
+	AllInOnePacket(byte[] b, int off, int len) {
 		connId = Bytes.toInt(b, off + 4);
 		command = Bytes.toShort(b, off + 8);
 		numConns = Bytes.toShort(b, off + 10);
 		size = Bytes.toShort(b, off + 12) & 0xFFFF;
 	}
 
-	MulticastPacket(int connId, int command, int numConns, int size) {
+	AllInOnePacket(int connId, int command, int numConns, int size) {
 		this.connId = connId;
 		this.command = command;
 		this.numConns = numConns;

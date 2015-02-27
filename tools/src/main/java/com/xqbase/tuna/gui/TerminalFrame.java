@@ -43,7 +43,7 @@ public class TerminalFrame extends ConnectorFrame {
 	private JTextField txtPort = new JTextField("23");
 
 	JButton btnConnect = new JButton("Connect");
-	JTextField txtName = new JTextField("My Name");
+	JTextField txtName = new JTextField("");
 	JCheckBox chkAnonymous = new JCheckBox("Anonymous");
 	JCheckBox chkQuiet = new JCheckBox("Quiet");
 	JButton btnSend = new JButton("Send");
@@ -190,6 +190,7 @@ public class TerminalFrame extends ConnectorFrame {
 		lblName.setBounds(12, 36, 36, 24);
 		add(lblName);
 
+		txtName.setText(Names.get());
 		txtName.setBounds(48, 36, 114, 24);
 		add(txtName);
 
