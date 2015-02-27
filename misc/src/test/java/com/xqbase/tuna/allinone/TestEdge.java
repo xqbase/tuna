@@ -1,11 +1,11 @@
-package com.xqbase.tuna.multicast;
+package com.xqbase.tuna.allinone;
 
 import java.io.IOException;
 
 import com.xqbase.tuna.ConnectionWrapper;
 import com.xqbase.tuna.ConnectorImpl;
+import com.xqbase.tuna.allinone.EdgeServer;
 import com.xqbase.tuna.misc.DumpFilter;
-import com.xqbase.tuna.multicast.EdgeServer;
 
 public class TestEdge {
 	public static void main(String[] args) throws IOException {

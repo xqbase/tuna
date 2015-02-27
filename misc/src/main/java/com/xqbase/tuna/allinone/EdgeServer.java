@@ -1,4 +1,4 @@
-package com.xqbase.tuna.multicast;
+package com.xqbase.tuna.allinone;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -54,8 +54,8 @@ class ClientConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		byte[] head = new MulticastPacket(connId,
-				MulticastPacket.EDGE_DATA, 0, len).getHead();
+		byte[] head = new AllInOnePacket(connId,
+				AllInOnePacket.EDGE_DATA, 0, len).getHead();
 		origin.handler.send(Bytes.add(head, 0, head.length, b, off, len));
 	}
 
@@ -69,7 +69,7 @@ class ClientConnection implements Connection {
 		} catch (UnknownHostException e) {
 			throw new RuntimeException(e);
 		}
-		byte[] head = new MulticastPacket(connId, MulticastPacket.EDGE_CONNECT,
+		byte[] head = new AllInOnePacket(connId, AllInOnePacket.EDGE_CONNECT,
 				0, localAddrBytes.length + remoteAddrBytes.length + 4).getHead();
 		origin.handler.send(Bytes.add(head, localAddrBytes, Bytes.fromShort(handler.getLocalPort()),
 				remoteAddrBytes, Bytes.fromShort(handler.getRemotePort())));
@@ -86,8 +86,8 @@ class ClientConnection implements Connection {
 		origin.connMap.remove(Integer.valueOf(connId));
 		// Do not return connId until ORIGIN_CLOSE received
 		// origin.idPool.returnId(connId);
-		origin.handler.send(new MulticastPacket(connId,
-				MulticastPacket.EDGE_DISCONNECT, 0, 0).getHead());
+		origin.handler.send(new AllInOnePacket(connId,
+				AllInOnePacket.EDGE_DISCONNECT, 0, 0).getHead());
 	}
 }
 
@@ -106,12 +106,12 @@ class OriginConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		MulticastPacket packet = new MulticastPacket(b, off, len);
+		AllInOnePacket packet = new AllInOnePacket(b, off, len);
 		int command = packet.command;
-		if (command == MulticastPacket.ORIGIN_PONG) {
+		if (command == AllInOnePacket.ORIGIN_PONG) {
 			return;
 		}
-		if (command == MulticastPacket.ORIGIN_MULTICAST) {
+		if (command == AllInOnePacket.ORIGIN_MULTICAST) {
 			int numConns = packet.numConns;
 			if (16 + numConns * 4 + packet.size > len) {
 				// throw new PacketException("Wrong Packet Size");
@@ -128,14 +128,14 @@ class OriginConnection implements Connection {
 			}
 		} else {
 			int connId = packet.connId;
-			if (command == MulticastPacket.ORIGIN_CLOSE) {
+			if (command == AllInOnePacket.ORIGIN_CLOSE) {
 				idPool.returnId(connId);
 			}
 			ClientConnection connection = connMap.get(Integer.valueOf(connId));
 			if (connection == null) {
 				return;
 			}
-			if (command == MulticastPacket.ORIGIN_DATA) {
+			if (command == AllInOnePacket.ORIGIN_DATA) {
 				if (16 + packet.size > len) {
 					// throw new PacketException("Wrong Packet Size");
 					handler.disconnect();
@@ -143,7 +143,7 @@ class OriginConnection implements Connection {
 					return;
 				}
 				connection.handler.send(b, off + 16, packet.size);
-			} else { // MulticastPacket.ORIGIN_DISCONNECT
+			} else { // AllInOnePacket.ORIGIN_DISCONNECT
 				connMap.remove(Integer.valueOf(connId));
 				idPool.returnId(connId);
 				connection.activeClose = true;
@@ -155,8 +155,8 @@ class OriginConnection implements Connection {
 	@Override
 	public void onConnect() {
 		closeable = timer.scheduleDelayed(() -> {
-			handler.send(new MulticastPacket(0,
-					MulticastPacket.EDGE_PING, 0, 0).getHead());
+			handler.send(new AllInOnePacket(0,
+					AllInOnePacket.EDGE_PING, 0, 0).getHead());
 		}, 45000, 45000);
 	}
 
@@ -201,6 +201,6 @@ public class EdgeServer implements ServerConnection {
 
 	/** @return The connection to the {@link OriginServer}. */
 	public Connection getOriginConnection() {
-		return origin.appendFilter(new PacketFilter(MulticastPacket.getParser()));
+		return origin.appendFilter(new PacketFilter(AllInOnePacket.getParser()));
 	}
 }

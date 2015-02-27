@@ -7,12 +7,14 @@ import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.ServerConnection;
 
 class BroadcastConnection implements Connection {
-	private LinkedHashSet<BroadcastConnection> connections;
+	private static final ConnectionHandler[] EMPTY_HANDLER = new ConnectionHandler[0];
+
+	private LinkedHashSet<ConnectionHandler> handlers;
 	private boolean noEcho;
 	private ConnectionHandler handler;
 
-	public BroadcastConnection(LinkedHashSet<BroadcastConnection> connections, boolean noEcho) {
-		this.connections = connections;
+	public BroadcastConnection(LinkedHashSet<ConnectionHandler> handlers, boolean noEcho) {
+		this.handlers = handlers;
 		this.noEcho = noEcho;
 	}
 
@@ -23,22 +25,22 @@ class BroadcastConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		for (BroadcastConnection connection : connections.toArray(new BroadcastConnection[0])) {
-			// "connection.onDisconnect()" might change connections
-			if (!noEcho || connection != this) {
-				connection.handler.send(b, off, len);
+		for (ConnectionHandler handler_ : handlers.toArray(EMPTY_HANDLER)) {
+			// "connection.onDisconnect()" might change "handlers"
+			if (!noEcho || handler_ != handler) {
+				handler_.send(b, off, len);
 			}
 		}
 	}
 
 	@Override
 	public void onConnect() {
-		connections.add(this);
+		handlers.add(handler);
 	}
 
 	@Override
 	public void onDisconnect() {
-		connections.remove(this);
+		handlers.remove(handler);
 	}
 }
 
@@ -50,7 +52,7 @@ class BroadcastConnection implements Connection {
  * when it is removed from a connector.
  */
 public class BroadcastServer implements ServerConnection {
-	private LinkedHashSet<BroadcastConnection> connections = new LinkedHashSet<>();
+	private LinkedHashSet<ConnectionHandler> handlers = new LinkedHashSet<>();
 	private boolean noEcho;
 
 	/**
@@ -65,6 +67,6 @@ public class BroadcastServer implements ServerConnection {
 
 	@Override
 	public Connection get() {
-		return new BroadcastConnection(connections, noEcho);
+		return new BroadcastConnection(handlers, noEcho);
 	}
 }

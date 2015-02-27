@@ -12,8 +12,16 @@ public class ConnectionWrapper implements Connection, ConnectionHandler {
 	private Connection connection;
 	private ConnectionHandler handler;
 
+	public Connection getConnection() {
+		return connection;
+	}
+
 	public void setConnection(Connection connection) {
 		this.connection = connection;
+	}
+
+	public ConnectionHandler getHandler() {
+		return handler;
 	}
 
 	@Override
