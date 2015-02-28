@@ -25,6 +25,9 @@ class BroadcastConnection implements Connection {
 	@Override
 	public void setHandler(ConnectionHandler handler) {
 		this.handler = handler;
+		if (MulticastHandler.isMulticast(handler)) {
+			multicast[0] = handler;
+		}
 	}
 
 	@Override
@@ -34,11 +37,7 @@ class BroadcastConnection implements Connection {
 
 	@Override
 	public void onConnect() {
-		if (MulticastHandler.isMulticast(handler)) {
-			multicast[0] = handler;
-		} else {
-			handlers.add(handler);
-		}
+		handlers.add(handler);
 	}
 
 	@Override
@@ -55,9 +54,7 @@ public class TestMulticast {
 				new BroadcastConnection(handlers, multicast)).
 				appendFilter(() -> new DumpFilter().setDumpText(true)).
 				appendFilter(ZLibFilter::new);
-		Connection connection = server.get();
-		connection.setHandler(new MulticastHandler(handlers));
-		connection.onConnect();
+		server.get().setHandler(new MulticastHandler(handlers));
 		try (
 			ConnectorImpl connector = new ConnectorImpl();
 			OriginServer origin = new OriginServer(server, connector);

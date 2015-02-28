@@ -34,32 +34,14 @@ public interface Connection {
 	/** Adds a {@link ConnectionWrapper} as a filter into the network end of the connection. */
 	public default Connection appendFilter(ConnectionWrapper filter) {
 		filter.setConnection(this);
-		setHandler(filter);
-		return new Connection() {
+		ConnectionWrapper appended = new ConnectionWrapper() {
 			@Override
 			public void setHandler(ConnectionHandler handler) {
 				filter.setHandler(handler);
-			}
-
-			@Override
-			public void onRecv(byte[] b, int off, int len) {
-				filter.onRecv(b, off, len);
-			}
-
-			@Override
-			public void onQueue(int delta, int total) {
-				filter.onQueue(delta, total);
-			}
-
-			@Override
-			public void onConnect() {
-				filter.onConnect();
-			}
-
-			@Override
-			public void onDisconnect() {
-				filter.onDisconnect();
+				Connection.this.setHandler(filter);
 			}
 		};
+		appended.setConnection(filter);
+		return appended;
 	}
 }

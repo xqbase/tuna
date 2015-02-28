@@ -14,7 +14,9 @@ import com.xqbase.tuna.util.Bytes;
  * connection, which can save the network bandwidth by the multicast approach.<p>
  * For detailed usage, see {@link TestMulticast} from github.com
  */
-public class MulticastHandler extends ConnectionWrapper {
+public class MulticastHandler extends ConnectionHandler.Adapter {
+	private static final int HEAD_SIZE = AllInOnePacket.HEAD_SIZE;
+
 	public static boolean isMulticast(ConnectionHandler handler) {
 		ConnectionHandler handler_ = handler;
 		while (!(handler_ instanceof MulticastHandler)) {
@@ -40,7 +42,7 @@ public class MulticastHandler extends ConnectionWrapper {
 			send(b, off + 64000, len - 64000);
 			return;
 		}
-		int maxNumConns = (65535 - 16 - len) / 4;
+		int maxNumConns = (65535 - HEAD_SIZE - len) / 2;
 		HashMap<EdgeConnection, ArrayList<Integer>> connListMap = new HashMap<>();
 		// "connections.iterator()" is called
 		for (ConnectionHandler handler : handlers) {
@@ -70,37 +72,18 @@ public class MulticastHandler extends ConnectionWrapper {
 			int numConnsSent = 0;
 			while (numConnsToSend > 0) {
 				int numConns = Math.min(numConnsToSend, maxNumConns);
-				byte[] connListBytes = new byte[numConns * 4];
+				byte[] bb = new byte[HEAD_SIZE + numConns * 2 + len];
+				new AllInOnePacket(numConns * 2 + len,
+						AllInOnePacket.HANDLER_MULTICAST, numConns).fillHead(bb, 0);
 				for (int i = 0; i < numConns; i ++) {
-					Bytes.setInt(connList.get(numConnsSent + i).intValue(),
-							connListBytes, i * 4);
+					Bytes.setShort(connList.get(numConnsSent + i).intValue(),
+							bb, HEAD_SIZE + i * 2);
 				}
-				byte[] head = new AllInOnePacket(0,
-						AllInOnePacket.ORIGIN_MULTICAST, numConns, len).getHead();
-				edge.handler.send(Bytes.add(head, connListBytes, Bytes.sub(b, off, len)));
+				System.arraycopy(b, off, bb, HEAD_SIZE + numConns * 2, len);
+				edge.handler.send(bb);
 				numConnsToSend -= numConns;
 				numConnsSent += numConns;
 			}
 		}
-	}
-
-	@Override
-	public String getLocalAddr() {
-		return "0.0.0.0";
-	}
-
-	@Override
-	public int getLocalPort() {
-		return 0;
-	}
-
-	@Override
-	public String getRemoteAddr() {
-		return "0.0.0.0";
-	}
-
-	@Override
-	public int getRemotePort() {
-		return 0;
 	}
 }
