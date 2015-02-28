@@ -18,6 +18,58 @@ public class DoSServerFilter implements Supplier<ConnectionWrapper> {
 		return data;
 	}
 
+	class DoSFilter extends ConnectionWrapper {
+		@Override
+		public void onRecv(byte[] b, int off, int len) {
+			checkTimeout();
+			int[] requests_ = getData(getRemoteAddr(), requestsMap, 2);
+			requests_[1] += len;
+			if (bytes > 0 && requests_[1] > bytes) {
+				onBlock(this, requests_[0], requests_[1], 0);
+			} else {
+				super.onRecv(b, off, len);
+			}
+		}
+
+		private boolean connected = false;
+
+		private void disconnect_() {
+			if (connected) {
+				connected = false;
+				getData(getRemoteAddr(), connectionsMap, 1)[0] --;
+			}
+		}
+
+		@Override
+		public void onConnect() {
+			connected = true;
+			String ip = getRemoteAddr();
+			int[] connections_ = getData(ip, connectionsMap, 1);
+			connections_[0] ++;
+			checkTimeout();
+			int[] requests_ = getData(ip, requestsMap, 2);
+			requests_[0] ++;
+			if ((connections > 0 && connections_[0] > connections) ||
+					(requests > 0 && requests_[0] > requests)) {
+				onBlock(this, connections_[0], requests_[0], 0);
+			} else {
+				super.onConnect();
+			}
+		}
+
+		@Override
+		public void onDisconnect() {
+			super.onDisconnect();
+			disconnect_();
+		}
+
+		@Override
+		public void disconnect() {
+			super.disconnect();
+			disconnect_();
+		}
+	}
+
 	/** To record how many connections from one IP. */
 	HashMap<String, int[]> connectionsMap = new HashMap<>();
 	/** To record how many requests and bytes from one IP. */
@@ -75,56 +127,6 @@ public class DoSServerFilter implements Supplier<ConnectionWrapper> {
 
 	@Override
 	public ConnectionWrapper get() {
-		return new ConnectionWrapper() {
-			@Override
-			public void onRecv(byte[] b, int off, int len) {
-				checkTimeout();
-				int[] requests_ = getData(getRemoteAddr(), requestsMap, 2);
-				requests_[1] += len;
-				if (bytes > 0 && requests_[1] > bytes) {
-					onBlock(this, requests_[0], requests_[1], 0);
-				} else {
-					super.onRecv(b, off, len);
-				}
-			}
-
-			private boolean connected = false;
-
-			private void disconnect_() {
-				if (connected) {
-					connected = false;
-					getData(getRemoteAddr(), connectionsMap, 1)[0] --;
-				}
-			}
-
-			@Override
-			public void onConnect() {
-				connected = true;
-				String ip = getRemoteAddr();
-				int[] connections_ = getData(ip, connectionsMap, 1);
-				connections_[0] ++;
-				checkTimeout();
-				int[] requests_ = getData(ip, requestsMap, 2);
-				requests_[0] ++;
-				if ((connections > 0 && connections_[0] > connections) ||
-						(requests > 0 && requests_[0] > requests)) {
-					onBlock(this, connections_[0], requests_[0], 0);
-				} else {
-					super.onConnect();
-				}
-			}
-
-			@Override
-			public void onDisconnect() {
-				super.onDisconnect();
-				disconnect_();
-			}
-
-			@Override
-			public void disconnect() {
-				super.disconnect();
-				disconnect_();
-			}
-		};
+		return new DoSFilter();
 	}
 }

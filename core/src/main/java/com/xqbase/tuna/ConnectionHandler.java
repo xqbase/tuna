@@ -3,6 +3,58 @@ package com.xqbase.tuna;
 import java.util.concurrent.Executor;
 
 public interface ConnectionHandler extends TimerHandler, EventQueue, Executor {
+	public static class Adapter implements ConnectionHandler {
+		@Override
+		public void send(byte[] b, int off, int len) {
+			// Do Nothing
+		}
+
+		@Override
+		public void disconnect() {
+			// Do Nothing
+		}
+
+		@Override
+		public void setBufferSize(int bufferSize) {
+			// Do Nothing
+		}
+
+		@Override
+		public String getLocalAddr() {
+			return Connector.ANY_LOCAL_ADDRESS;
+		}
+
+		@Override
+		public int getLocalPort() {
+			return 0;
+		}
+
+		@Override
+		public String getRemoteAddr() {
+			return Connector.ANY_LOCAL_ADDRESS;
+		}
+
+		@Override
+		public int getRemotePort() {
+			return 0;
+		}
+
+		@Override
+		public Closeable postAtTime(Runnable runnable, long uptime) {
+			return () -> {/**/};
+		}
+
+		@Override
+		public void invokeLater(Runnable runnable) {
+			// Do Nothing
+		}
+
+		@Override
+		public void execute(Runnable command) {
+			// Do Nothing
+		}
+	}
+
 	/**
 	 * Sends a sequence of bytes in the application end,
 	 * equivalent to <code>send(b, 0, b.length).</code>

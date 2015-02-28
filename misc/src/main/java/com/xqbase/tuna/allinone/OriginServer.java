@@ -8,12 +8,15 @@ import java.util.LinkedHashSet;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
+import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
 import com.xqbase.tuna.util.Bytes;
 
 class VirtualHandler implements ConnectionHandler {
+	private static final int HEAD_SIZE = AllInOnePacket.HEAD_SIZE;
+
 	private String localAddr, remoteAddr;
 	private int localPort, remotePort;
 
@@ -34,27 +37,30 @@ class VirtualHandler implements ConnectionHandler {
 			localPort = Bytes.toShort(Bytes.sub(addr, addrLen, 2)) & 0xFFFF;
 			remotePort = Bytes.toShort(Bytes.sub(addr, addrLen * 2 + 2, 2)) & 0xFFFF;
 		} else {
-			localAddr = remoteAddr = InetAddress.getLoopbackAddress().getHostAddress();
+			localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
 		}
 	}
 
 	@Override
 	public void send(byte[] b, int off, int len) {
-		byte[] head = new AllInOnePacket(connId,
-				AllInOnePacket.ORIGIN_DATA, 0, len).getHead();
+		byte[] head = new AllInOnePacket(len,
+				AllInOnePacket.HANDLER_SEND, connId).getHead();
 		edge.handler.send(Bytes.add(head, 0, head.length, b, off, len));
 	}
 
 	@Override
 	public void disconnect() {
 		edge.connMap.remove(Integer.valueOf(connId));
-		edge.handler.send(new AllInOnePacket(connId,
-				AllInOnePacket.ORIGIN_DISCONNECT, 0, 0).getHead());
+		edge.handler.send(new AllInOnePacket(0,
+				AllInOnePacket.HANDLER_DISCONNECT, connId).getHead());
 	}
 
 	@Override
 	public void setBufferSize(int bufferSize) {
-		// Nothing to do
+		byte[] b = new byte[HEAD_SIZE + 2];
+		new AllInOnePacket(2, AllInOnePacket.HANDLER_BUFFER, connId).fillHead(b, 0);
+		Bytes.setShort(bufferSize, b, HEAD_SIZE);
+		edge.handler.send(b);
 	}
 
 	@Override
@@ -94,6 +100,8 @@ class VirtualHandler implements ConnectionHandler {
 }
 
 class EdgeConnection implements Connection {
+	private static final int HEAD_SIZE = AllInOnePacket.HEAD_SIZE;
+
 	HashMap<Integer, Connection> connMap = new HashMap<>();
 	OriginServer origin;
 	ConnectionHandler handler;
@@ -115,38 +123,48 @@ class EdgeConnection implements Connection {
 		accessed = System.currentTimeMillis();
 		origin.timeoutSet.add(this);
 		AllInOnePacket packet = new AllInOnePacket(b, off, len);
-		int connId = packet.connId;
-		int command = packet.command;
-		if (command == AllInOnePacket.EDGE_PING) {
-			handler.send(new AllInOnePacket(0, AllInOnePacket.ORIGIN_PONG, 0, 0).getHead());
-		} else if (command == AllInOnePacket.EDGE_CONNECT) {
-			if (connMap.containsKey(Integer.valueOf(connId))) {
+		int cid = packet.cid;
+		switch (packet.cmd) {
+		case AllInOnePacket.CLIENT_PING:
+			handler.send(new AllInOnePacket(0, AllInOnePacket.SERVER_PONG, 0).getHead());
+			break;
+		case AllInOnePacket.CLIENT_AUTH:
+			// TODO Auth
+			return;
+		case AllInOnePacket.CONNECTION_CONNECT:
+			if (connMap.containsKey(Integer.valueOf(cid))) {
 				// throw new PacketException("#" + connId + " Already Exists");
 				disconnect();
 				return;
 			}
 			Connection connection = origin.server.get();
 			VirtualHandler virtualHandler = new VirtualHandler(this,
-					connId, Bytes.sub(b, off + 16, len - 16));
+					cid, Bytes.sub(b, off + HEAD_SIZE, len - HEAD_SIZE));
 			connection.setHandler(virtualHandler);
-			connMap.put(Integer.valueOf(connId), connection);
+			connMap.put(Integer.valueOf(cid), connection);
 			connection.onConnect();
-		} else {
-			Connection connection = connMap.get(Integer.valueOf(connId));
+			break;
+		default:
+			connection = connMap.get(Integer.valueOf(cid));
 			if (connection == null) {
 				return;
 			}
-			if (command == AllInOnePacket.EDGE_DATA) {
-				if (16 + packet.size > len) {
-					// throw new PacketException("Wrong Packet Size");
-					disconnect();
-					return;
+			switch (packet.cmd) {
+			case AllInOnePacket.CONNECTION_RECV:
+				if (packet.size > 0) {
+					connection.onRecv(b, off + HEAD_SIZE, packet.size);
 				}
-				connection.onRecv(b, off + 16, packet.size);
-			} else { // AllInOnePacket.EDGE_DISCONNECT
-				connMap.remove(Integer.valueOf(connId));
-				handler.send(new AllInOnePacket(connId,
-						AllInOnePacket.ORIGIN_CLOSE, 0, 0).getHead());
+				break;
+			case AllInOnePacket.CONNECTION_QUEUE:
+				if (packet.size >= 8) {
+					connection.onQueue(Bytes.toInt(b, off + HEAD_SIZE),
+							Bytes.toInt(b, off + HEAD_SIZE + 4));
+				}
+				break;
+			case AllInOnePacket.CONNECTION_DISCONNECT:
+				connMap.remove(Integer.valueOf(cid));
+				handler.send(new AllInOnePacket(0,
+						AllInOnePacket.HANDLER_CLOSE, cid).getHead());
 				connection.onDisconnect();
 			}
 		}

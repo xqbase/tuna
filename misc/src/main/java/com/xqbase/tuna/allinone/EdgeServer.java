@@ -2,9 +2,7 @@ package com.xqbase.tuna.allinone;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayDeque;
 import java.util.HashMap;
-import java.util.HashSet;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
@@ -13,33 +11,11 @@ import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
 import com.xqbase.tuna.util.Bytes;
 
-class IdPool {
-	private int maxId = 0;
-
-	private ArrayDeque<Integer> returned = new ArrayDeque<>();
-	private HashSet<Integer> borrowed = new HashSet<>();
-
-	public int borrowId() {
-		Integer i = returned.poll();
-		if (i == null) {
-			i = Integer.valueOf(maxId);
-			maxId ++;
-		}
-		borrowed.add(i);
-		return i.intValue();
-	}
-
-	public void returnId(int id) {
-		Integer i = Integer.valueOf(id);
-		if (borrowed.remove(i)) {
-			returned.offer(i);
-		}
-	}
-}
-
 class ClientConnection implements Connection {
+	private static final int HEAD_SIZE = AllInOnePacket.HEAD_SIZE;
+
 	private OriginConnection origin;
-	private int connId;
+	private int cid;
 
 	ConnectionHandler handler;
 
@@ -54,14 +30,15 @@ class ClientConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		byte[] head = new AllInOnePacket(connId,
-				AllInOnePacket.EDGE_DATA, 0, len).getHead();
-		origin.handler.send(Bytes.add(head, 0, head.length, b, off, len));
+		byte[] bb = new byte[HEAD_SIZE + len];
+		new AllInOnePacket(len, AllInOnePacket.CONNECTION_RECV, cid).fillHead(bb, 0);
+		System.arraycopy(b, off, bb, HEAD_SIZE, len);
+		origin.handler.send(bb);
 	}
 
 	@Override
 	public void onConnect() {
-		connId = origin.idPool.borrowId();
+		cid = origin.idPool.borrowId();
 		byte[] localAddrBytes, remoteAddrBytes;
 		try {
 			localAddrBytes = InetAddress.getByName(handler.getLocalAddr()).getAddress();
@@ -69,11 +46,17 @@ class ClientConnection implements Connection {
 		} catch (UnknownHostException e) {
 			throw new RuntimeException(e);
 		}
-		byte[] head = new AllInOnePacket(connId, AllInOnePacket.EDGE_CONNECT,
-				0, localAddrBytes.length + remoteAddrBytes.length + 4).getHead();
-		origin.handler.send(Bytes.add(head, localAddrBytes, Bytes.fromShort(handler.getLocalPort()),
-				remoteAddrBytes, Bytes.fromShort(handler.getRemotePort())));
-		origin.connMap.put(Integer.valueOf(connId), this);
+		byte[] b = new byte[HEAD_SIZE + localAddrBytes.length + remoteAddrBytes.length + 4];
+		new AllInOnePacket(localAddrBytes.length + remoteAddrBytes.length + 4,
+				AllInOnePacket.CONNECTION_CONNECT, cid).fillHead(b, 0);
+		System.arraycopy(localAddrBytes, 0, b, HEAD_SIZE, localAddrBytes.length);
+		Bytes.setShort(handler.getLocalPort(), b, HEAD_SIZE + localAddrBytes.length);
+		System.arraycopy(remoteAddrBytes, 0, b,
+				HEAD_SIZE + localAddrBytes.length + 2, localAddrBytes.length);
+		Bytes.setShort(handler.getRemotePort(), b, HEAD_SIZE +
+				localAddrBytes.length + 2 + remoteAddrBytes.length);
+		origin.handler.send(b);
+		origin.connMap.put(Integer.valueOf(cid), this);
 	}
 
 	boolean activeClose = false;
@@ -83,15 +66,17 @@ class ClientConnection implements Connection {
 		if (activeClose) {
 			return;
 		}
-		origin.connMap.remove(Integer.valueOf(connId));
+		origin.connMap.remove(Integer.valueOf(cid));
 		// Do not return connId until ORIGIN_CLOSE received
 		// origin.idPool.returnId(connId);
-		origin.handler.send(new AllInOnePacket(connId,
-				AllInOnePacket.EDGE_DISCONNECT, 0, 0).getHead());
+		origin.handler.send(new AllInOnePacket(0,
+				AllInOnePacket.CONNECTION_DISCONNECT, cid).getHead());
 	}
 }
 
 class OriginConnection implements Connection {
+	private static final int HEAD_SIZE = AllInOnePacket.HEAD_SIZE;
+
 	private TimerHandler.Closeable closeable = null;
 
 	HashMap<Integer, ClientConnection> connMap = new HashMap<>();
@@ -107,47 +92,54 @@ class OriginConnection implements Connection {
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
 		AllInOnePacket packet = new AllInOnePacket(b, off, len);
-		int command = packet.command;
-		if (command == AllInOnePacket.ORIGIN_PONG) {
+		switch (packet.cmd) {
+		case AllInOnePacket.SERVER_PONG:
 			return;
-		}
-		if (command == AllInOnePacket.ORIGIN_MULTICAST) {
-			int numConns = packet.numConns;
-			if (16 + numConns * 4 + packet.size > len) {
-				// throw new PacketException("Wrong Packet Size");
-				handler.disconnect();
-				onDisconnect();
+		case AllInOnePacket.SERVER_AUTH_REPLY:
+			// TODO Auth
+			return;
+		case AllInOnePacket.HANDLER_MULTICAST:
+			int numConns = packet.cid;
+			int dataOff = off + HEAD_SIZE + numConns * 2;
+			int dataLen = len - dataOff;
+			if (dataLen <= 0) {
 				return;
 			}
 			for (int i = 0; i < numConns; i ++) {
-				int connId = Bytes.toInt(b, off + 16 + i * 4);
-				ClientConnection conn = connMap.get(Integer.valueOf(connId));
+				int cid = Bytes.toShort(b, off + HEAD_SIZE + i * 2) & 0xFFFF;
+				ClientConnection conn = connMap.get(Integer.valueOf(cid));
 				if (conn != null) {
-					conn.handler.send(b, off + 16 + numConns * 4, packet.size);
+					conn.handler.send(b, dataOff, dataLen);
 				}
 			}
-		} else {
-			int connId = packet.connId;
-			if (command == AllInOnePacket.ORIGIN_CLOSE) {
-				idPool.returnId(connId);
-			}
-			ClientConnection connection = connMap.get(Integer.valueOf(connId));
+			return;
+		case AllInOnePacket.HANDLER_CLOSE:
+			idPool.returnId(packet.cid);
+			return;
+		default:
+			int cid = packet.cid;
+			ClientConnection connection = connMap.get(Integer.valueOf(cid));
 			if (connection == null) {
 				return;
 			}
-			if (command == AllInOnePacket.ORIGIN_DATA) {
-				if (16 + packet.size > len) {
-					// throw new PacketException("Wrong Packet Size");
-					handler.disconnect();
-					onDisconnect();
-					return;
+			switch (packet.cmd) {
+			case AllInOnePacket.HANDLER_SEND:
+				if (packet.size > 0) {
+					connection.handler.send(b, off + HEAD_SIZE, packet.size);
 				}
-				connection.handler.send(b, off + 16, packet.size);
-			} else { // AllInOnePacket.ORIGIN_DISCONNECT
-				connMap.remove(Integer.valueOf(connId));
-				idPool.returnId(connId);
+				return;
+			case AllInOnePacket.HANDLER_BUFFER:
+				if (packet.size >= 2) {
+					connection.handler.setBufferSize(Bytes.
+							toShort(b, off + HEAD_SIZE) & 0xFFFF);
+				}
+				return;
+			case AllInOnePacket.HANDLER_DISCONNECT:
+				connMap.remove(Integer.valueOf(cid));
+				idPool.returnId(cid);
 				connection.activeClose = true;
 				connection.handler.disconnect();
+				return;
 			}
 		}
 	}
@@ -155,8 +147,7 @@ class OriginConnection implements Connection {
 	@Override
 	public void onConnect() {
 		closeable = timer.scheduleDelayed(() -> {
-			handler.send(new AllInOnePacket(0,
-					AllInOnePacket.EDGE_PING, 0, 0).getHead());
+			handler.send(new AllInOnePacket(0, AllInOnePacket.CLIENT_PING, 0).getHead());
 		}, 45000, 45000);
 	}
 
