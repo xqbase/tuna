@@ -11,6 +11,7 @@ public class TestEdge {
 	public static void main(String[] args) throws IOException {
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			EdgeServer edge = new EdgeServer(connector);
+			edge.setAuthPhrase("guest".getBytes());
 			connector.add(edge, 2626);
 			connector.connect(edge.getOriginConnection().
 					appendFilter(new DumpFilter()).appendFilter(new ConnectionWrapper() {
