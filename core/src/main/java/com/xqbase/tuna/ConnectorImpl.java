@@ -90,21 +90,6 @@ class Client {
 			public int getRemotePort() {
 				return remote.getPort();
 			}
-
-			@Override
-			public TimerHandler.Closeable postAtTime(Runnable r, long uptime) {
-				return connector.postAtTime(r, uptime);
-			}
-
-			@Override
-			public void invokeLater(Runnable runnable) {
-				connector.invokeLater(runnable);
-			}
-
-			@Override
-			public void execute(Runnable runnable) {
-				connector.execute(runnable);
-			}
 		});
 	}
 

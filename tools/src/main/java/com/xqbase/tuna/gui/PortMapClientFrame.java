@@ -52,7 +52,7 @@ public class PortMapClientFrame extends ConnectorFrame {
 
 		connector = new ConnectorImpl();
 		try {
-			PortMapClient client = new PortMapClient(connector,
+			PortMapClient client = new PortMapClient(connector, connector,
 					Numbers.parseInt(txtPublicPort.getText(), 1, 65535),
 					txtPrivateHost.getText(),
 					Numbers.parseInt(txtPrivatePort.getText(), 1, 65535)) {

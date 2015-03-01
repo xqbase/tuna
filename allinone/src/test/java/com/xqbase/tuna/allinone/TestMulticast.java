@@ -57,17 +57,19 @@ public class TestMulticast {
 		server.get().setHandler(new MulticastHandler(handlers));
 		try (
 			ConnectorImpl connector = new ConnectorImpl();
-			OriginServer origin = new OriginServer(server, connector);
+			OriginServer origin = new OriginServer(server, null, connector);
 		) {
 			connector.add(new CrossDomainServer(new File(TestMulticast.class.
 					getResource("/crossdomain.xml").toURI())), 843);
 			connector.add(origin, 2323);
 			EdgeServer edge = new EdgeServer(connector);
 			connector.add(edge, 2424);
-			connector.connect(edge.getOriginConnection(), "127.0.0.1", 2323);
+			connector.connect(edge.getOriginConnection().appendFilter(new DumpFilter().
+					setUseClientMode(true).setDumpStream(System.err)), "127.0.0.1", 2323);
 			edge = new EdgeServer(connector);
 			connector.add(edge, 2525);
-			connector.connect(edge.getOriginConnection(), "127.0.0.1", 2323);
+			connector.connect(edge.getOriginConnection().appendFilter(new DumpFilter().
+					setUseClientMode(true).setDumpStream(System.err)), "127.0.0.1", 2323);
 			connector.doEvents();
 		}
 	}

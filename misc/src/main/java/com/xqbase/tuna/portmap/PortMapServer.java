@@ -98,6 +98,9 @@ class PublicServer implements ServerConnection {
 }
 
 class MapConnection implements Connection {
+	private static final PublicConnection[]
+			EMPTY_CONNECTIONS = new PublicConnection[0];
+
 	private PortMapServer mapServer;
 	private Connector.Closeable publicCloseable;
 
@@ -175,7 +178,7 @@ class MapConnection implements Connection {
 		}
 		publicCloseable.close();
 		for (PublicConnection connection : publicServer.connMap.values().
-				toArray(new PublicConnection[0])) {
+				toArray(EMPTY_CONNECTIONS)) {
 			// "disconnect()" might change "connMap"
 			connection.handler.disconnect();
 		}

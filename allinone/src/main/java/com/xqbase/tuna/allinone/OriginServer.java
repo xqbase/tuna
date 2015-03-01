@@ -5,6 +5,7 @@ import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.function.Predicate;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
@@ -14,53 +15,41 @@ import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
 import com.xqbase.tuna.util.Bytes;
 
-class VirtualHandler implements ConnectionHandler {
-	private static final int HEAD_SIZE = AllInOnePacket.HEAD_SIZE;
+class OriginVirtualHandler implements VirtualHandler {
+	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
 
+	private EdgeConnection edge;
 	private String localAddr, remoteAddr;
-	private int localPort, remotePort;
+	private int cid, localPort, remotePort;
 
-	EdgeConnection edge;
-	int connId;
-
-	VirtualHandler(EdgeConnection edge, int connId, byte[] addr) {
+	OriginVirtualHandler(EdgeConnection edge, int cid, String localAddr,
+			int localPort, String remoteAdd, int remotePort) {
 		this.edge = edge;
-		this.connId = connId;
-		if (addr.length == 12 || addr.length == 36) {
-			int addrLen = addr.length / 2 - 2;
-			try {
-				localAddr = InetAddress.getByAddress(Bytes.sub(addr, 0, addrLen)).getHostAddress();
-				remoteAddr = InetAddress.getByAddress(Bytes.sub(addr, addrLen + 2, addrLen)).getHostAddress();
-			} catch (IOException e) {
-				localAddr = remoteAddr = InetAddress.getLoopbackAddress().getHostAddress();
-			}
-			localPort = Bytes.toShort(Bytes.sub(addr, addrLen, 2)) & 0xFFFF;
-			remotePort = Bytes.toShort(Bytes.sub(addr, addrLen * 2 + 2, 2)) & 0xFFFF;
-		} else {
-			localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
-		}
+		this.cid = cid;
+		this.localAddr = localAddr;
+		this.localPort = localPort;
+		this.remoteAddr = remoteAdd;
+		this.remotePort = remotePort;
 	}
 
 	@Override
 	public void send(byte[] b, int off, int len) {
-		byte[] head = new AllInOnePacket(len,
-				AllInOnePacket.HANDLER_SEND, connId).getHead();
-		edge.handler.send(Bytes.add(head, 0, head.length, b, off, len));
+		byte[] bb = new byte[HEAD_SIZE + len];
+		System.arraycopy(b, off, bb, HEAD_SIZE, len);
+		AiOPacket.send(edge.handler, bb, AiOPacket.HANDLER_SEND, cid);
 	}
 
 	@Override
 	public void disconnect() {
-		edge.connMap.remove(Integer.valueOf(connId));
-		edge.handler.send(new AllInOnePacket(0,
-				AllInOnePacket.HANDLER_DISCONNECT, connId).getHead());
+		edge.connMap.remove(Integer.valueOf(cid));
+		AiOPacket.send(edge.handler, AiOPacket.HANDLER_DISCONNECT, cid);
 	}
 
 	@Override
 	public void setBufferSize(int bufferSize) {
 		byte[] b = new byte[HEAD_SIZE + 2];
-		new AllInOnePacket(2, AllInOnePacket.HANDLER_BUFFER, connId).fillHead(b, 0);
 		Bytes.setShort(bufferSize, b, HEAD_SIZE);
-		edge.handler.send(b);
+		AiOPacket.send(edge.handler, b, AiOPacket.HANDLER_BUFFER, cid);
 	}
 
 	@Override
@@ -84,32 +73,30 @@ class VirtualHandler implements ConnectionHandler {
 	}
 
 	@Override
-	public Closeable postAtTime(Runnable runnable, long uptime) {
-		return edge.handler.postAtTime(runnable, uptime);
+	public int getConnectionID() {
+		return cid;
 	}
 
 	@Override
-	public void invokeLater(Runnable runnable) {
-		edge.handler.invokeLater(runnable);
-	}
-
-	@Override
-	public void execute(Runnable command) {
-		edge.handler.execute(command);
+	public ConnectionHandler getAiOHandler() {
+		return edge.handler;
 	}
 }
 
 class EdgeConnection implements Connection {
-	private static final int HEAD_SIZE = AllInOnePacket.HEAD_SIZE;
+	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
+	private static final Connection[] EMPTY_CONNECTIONS = new Connection[0];
 
 	HashMap<Integer, Connection> connMap = new HashMap<>();
-	OriginServer origin;
 	ConnectionHandler handler;
 	long accessed = System.currentTimeMillis();
 
+	private OriginServer origin;
+	private boolean authed;
+
 	EdgeConnection(OriginServer origin) {
 		this.origin = origin;
-		appendFilter(new PacketFilter(AllInOnePacket.getParser()));
+		authed = origin.auth == null;
 	}
 
 	@Override
@@ -122,24 +109,52 @@ class EdgeConnection implements Connection {
 		origin.timeoutSet.remove(this);
 		accessed = System.currentTimeMillis();
 		origin.timeoutSet.add(this);
-		AllInOnePacket packet = new AllInOnePacket(b, off, len);
+		AiOPacket packet = new AiOPacket(b, off);
 		int cid = packet.cid;
 		switch (packet.cmd) {
-		case AllInOnePacket.CLIENT_PING:
-			handler.send(new AllInOnePacket(0, AllInOnePacket.SERVER_PONG, 0).getHead());
+		case AiOPacket.CLIENT_PING:
+			AiOPacket.send(handler, AiOPacket.SERVER_PONG, 0);
 			break;
-		case AllInOnePacket.CLIENT_AUTH:
-			// TODO Auth
+		case AiOPacket.CLIENT_AUTH:
+			if (origin.auth == null) {
+				return;
+			}
+			authed = origin.auth.test(Bytes.sub(b, HEAD_SIZE));
+			AiOPacket.send(handler, authed ? AiOPacket.SERVER_AUTH_OK :
+					AiOPacket.SERVER_AUTH_ERROR, 0);
 			return;
-		case AllInOnePacket.CONNECTION_CONNECT:
+		case AiOPacket.CONNECTION_CONNECT:
+			if (!authed) {
+				AiOPacket.send(handler, AiOPacket.SERVER_AUTH_NEED, 0);
+				disconnect();
+				return;
+			}
 			if (connMap.containsKey(Integer.valueOf(cid))) {
-				// throw new PacketException("#" + connId + " Already Exists");
+				// throw new PacketException("#" + cid + " Already Exists");
 				disconnect();
 				return;
 			}
 			Connection connection = origin.server.get();
-			VirtualHandler virtualHandler = new VirtualHandler(this,
-					cid, Bytes.sub(b, off + HEAD_SIZE, len - HEAD_SIZE));
+			String localAddr, remoteAddr;
+			int localPort, remotePort;
+			if (packet.size == 12 || packet.size == 36) {
+				int addrLen = packet.size / 2 - 2;
+				try {
+					localAddr = InetAddress.getByAddress(Bytes.
+							sub(b, HEAD_SIZE, addrLen)).getHostAddress();
+					remoteAddr = InetAddress.getByAddress(Bytes.
+							sub(b, HEAD_SIZE + addrLen + 2, addrLen)).getHostAddress();
+				} catch (IOException e) {
+					localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
+				}
+				localPort = Bytes.toShort(Bytes.sub(b, HEAD_SIZE + addrLen, 2)) & 0xFFFF;
+				remotePort = Bytes.toShort(Bytes.sub(b, HEAD_SIZE + addrLen * 2 + 2, 2)) & 0xFFFF;
+			} else {
+				localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
+				localPort = remotePort = 0;
+			}
+			OriginVirtualHandler virtualHandler = new OriginVirtualHandler(this,
+					cid, localAddr, localPort, remoteAddr, remotePort);
 			connection.setHandler(virtualHandler);
 			connMap.put(Integer.valueOf(cid), connection);
 			connection.onConnect();
@@ -150,30 +165,37 @@ class EdgeConnection implements Connection {
 				return;
 			}
 			switch (packet.cmd) {
-			case AllInOnePacket.CONNECTION_RECV:
+			case AiOPacket.CONNECTION_RECV:
 				if (packet.size > 0) {
 					connection.onRecv(b, off + HEAD_SIZE, packet.size);
 				}
 				break;
-			case AllInOnePacket.CONNECTION_QUEUE:
+			case AiOPacket.CONNECTION_QUEUE:
 				if (packet.size >= 8) {
 					connection.onQueue(Bytes.toInt(b, off + HEAD_SIZE),
 							Bytes.toInt(b, off + HEAD_SIZE + 4));
 				}
 				break;
-			case AllInOnePacket.CONNECTION_DISCONNECT:
+			case AiOPacket.CONNECTION_DISCONNECT:
 				connMap.remove(Integer.valueOf(cid));
-				handler.send(new AllInOnePacket(0,
-						AllInOnePacket.HANDLER_CLOSE, cid).getHead());
+				AiOPacket.send(handler, AiOPacket.HANDLER_CLOSE, cid);
 				connection.onDisconnect();
 			}
 		}
 	}
 
 	@Override
+	public void onConnect() {
+		if (!authed) {
+			AiOPacket.send(handler, AiOPacket.SERVER_AUTH_NEED, 0);
+		}
+	}
+
+	@Override
 	public void onDisconnect() {
 		origin.timeoutSet.remove(this);
-		for (Connection connection : connMap.values().toArray(new Connection[0])) {
+		for (Connection connection : connMap.
+				values().toArray(EMPTY_CONNECTIONS)) {
 			// "conn.onDisconnect()" might change "connMap"
 			connection.onDisconnect();
 		}
@@ -193,11 +215,14 @@ class EdgeConnection implements Connection {
 public class OriginServer implements ServerConnection, AutoCloseable {
 	LinkedHashSet<EdgeConnection> timeoutSet = new LinkedHashSet<>();
 	ServerConnection server;
+	Predicate<byte[]> auth;
 
 	private TimerHandler.Closeable closeable;
 
-	public OriginServer(ServerConnection server, TimerHandler timer) {
+	public OriginServer(ServerConnection server,
+			Predicate<byte[]> auth, TimerHandler timer) {
 		this.server = server;
+		this.auth = auth;
 		closeable = timer.scheduleDelayed(() -> {
 			long now = System.currentTimeMillis();
 			Iterator<EdgeConnection> i = timeoutSet.iterator();
@@ -213,7 +238,7 @@ public class OriginServer implements ServerConnection, AutoCloseable {
 	public Connection get() {
 		EdgeConnection edgeConnection = new EdgeConnection(this);
 		timeoutSet.add(edgeConnection);
-		return edgeConnection;
+		return edgeConnection.appendFilter(new PacketFilter(AiOPacket.PARSER));
 	}
 
 	@Override

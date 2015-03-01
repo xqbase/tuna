@@ -27,7 +27,8 @@ public class TestSSLForward {
 			BroadcastServer broadcastServer = new BroadcastServer(false) {
 				@Override
 				public Connection get() {
-					SSLFilter sslf = new SSLFilter(connector, sslc, SSLFilter.SERVER_WANT_AUTH);
+					SSLFilter sslf = new SSLFilter(connector, connector,
+							sslc, SSLFilter.SERVER_WANT_AUTH);
 					Connection connection = super.get().
 							appendFilter(new ConnectionWrapper() {
 						@Override
@@ -43,7 +44,7 @@ public class TestSSLForward {
 			connector.add(broadcastServer.appendFilter(() -> new DumpFilter()), 2323);
 
 			ForwardServer forwardServer = new ForwardServer(connector, "localhost", 2323);
-			forwardServer.appendRemoteFilter(() -> new SSLFilter(connector,
+			forwardServer.appendRemoteFilter(() -> new SSLFilter(connector, connector,
 					SSLUtil.getSSLContext(certKey, certMap), SSLFilter.CLIENT));
 			forwardServer.appendRemoteFilter(() -> new DumpFilter().
 					setDumpStream(System.err).setUseClientMode(true));

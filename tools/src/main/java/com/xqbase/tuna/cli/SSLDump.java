@@ -42,10 +42,10 @@ public class SSLDump {
 			SSLContext sslcClient = SSLContexts.get(null, 0);
 			ForwardServer server = new ForwardServer(connector, hostAddr, port);
 			server.appendRemoteFilter(() -> new SSLFilter(connector,
-					sslcClient, SSLFilter.CLIENT));
+					connector, sslcClient, SSLFilter.CLIENT));
 			connector.add(server.appendFilter(() -> new DumpFilter().setDumpText(true)).
 					appendFilter(() -> new SSLFilter(connector,
-					sslcServer, SSLFilter.SERVER_NO_AUTH)), 443);
+					connector, sslcServer, SSLFilter.SERVER_NO_AUTH)), 443);
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());

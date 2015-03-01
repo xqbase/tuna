@@ -1,8 +1,6 @@
 package com.xqbase.tuna;
 
-import java.util.concurrent.Executor;
-
-public interface ConnectionHandler extends TimerHandler, EventQueue, Executor {
+public interface ConnectionHandler {
 	public static class Adapter implements ConnectionHandler {
 		@Override
 		public void send(byte[] b, int off, int len) {
@@ -37,21 +35,6 @@ public interface ConnectionHandler extends TimerHandler, EventQueue, Executor {
 		@Override
 		public int getRemotePort() {
 			return 0;
-		}
-
-		@Override
-		public Closeable postAtTime(Runnable runnable, long uptime) {
-			return () -> {/**/};
-		}
-
-		@Override
-		public void invokeLater(Runnable runnable) {
-			// Do Nothing
-		}
-
-		@Override
-		public void execute(Runnable command) {
-			// Do Nothing
 		}
 	}
 

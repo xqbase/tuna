@@ -12,6 +12,7 @@ import javax.net.ssl.SSLEngineResult.Status;
 import javax.net.ssl.SSLSession;
 
 import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.tuna.util.Bytes;
 
@@ -49,6 +50,7 @@ public class SSLFilter extends ConnectionWrapper {
 	 */
 	public static final int CLIENT = 3;
 
+	private EventQueue eventQueue;
 	private Executor executor;
 	private SSLEngine ssle;
 	private int appBBSize;
@@ -64,8 +66,9 @@ public class SSLFilter extends ConnectionWrapper {
 	 * @param mode - SSL mode, must be {@link #SERVER_NO_AUTH},
 	 *        {@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
 	 */
-	public SSLFilter(Executor executor, SSLContext sslc, int mode) {
-		this(executor, sslc, mode, null, 0);
+	public SSLFilter(EventQueue eventQueue,
+			Executor executor, SSLContext sslc, int mode) {
+		this(eventQueue, executor, sslc, mode, null, 0);
 	}
 
 	/**
@@ -76,8 +79,9 @@ public class SSLFilter extends ConnectionWrapper {
 	 * @param peerHost - Advisory peer information.
 	 * @param peerPort - Advisory peer information.
 	 */
-	public SSLFilter(Executor executor, SSLContext sslc, int mode,
-			String peerHost, int peerPort) {
+	public SSLFilter(EventQueue eventQueue, Executor executor,
+			SSLContext sslc, int mode, String peerHost, int peerPort) {
+		this.eventQueue = eventQueue;
 		this.executor = executor;
 		if (peerHost == null) {
 			ssle = sslc.createSSLEngine();
@@ -200,7 +204,7 @@ public class SSLFilter extends ConnectionWrapper {
 		while ((task = ssle.getDelegatedTask()) != null) {
 			task.run();
 		}
-		invokeLater(() -> {
+		eventQueue.invokeLater(() -> {
 			hs = ssle.getHandshakeStatus();
 			try {
 				doHandshake();

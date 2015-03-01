@@ -552,7 +552,7 @@ public class ProxyConnection implements Connection {
 			getClientMap(secure).put(host, client);
 			Connection connection;
 			if (secure) {
-				connection = client.appendFilter(new SSLFilter(context,
+				connection = client.appendFilter(new SSLFilter(context, context,
 						context.getSSLContext(), SSLFilter.CLIENT, connectHost, port));
 			} else {
 				connection = client;

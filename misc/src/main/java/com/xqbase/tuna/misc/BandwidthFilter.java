@@ -1,10 +1,16 @@
 package com.xqbase.tuna.misc;
 
 import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.TimerHandler;
 
 public class BandwidthFilter extends ConnectionWrapper {
 	private long period = 0, limit = 0;
 	private long next = System.currentTimeMillis(), bytesRecv = 0;
+	private TimerHandler timer;
+
+	public BandwidthFilter(TimerHandler timer) {
+		this.timer = timer;
+	}
 
 	public long getPeriod() {
 		return period;
@@ -51,7 +57,7 @@ public class BandwidthFilter extends ConnectionWrapper {
 			super.setBufferSize((int) Math.min(limit - bytesRecv, MAX_BUFFER_SIZE));
 		} else {
 			super.setBufferSize(0);
-			postAtTime(() -> {
+			timer.postAtTime(() -> {
 				next += period;
 				bytesRecv = 0;
 				super.setBufferSize((int) Math.min(limit, MAX_BUFFER_SIZE));
