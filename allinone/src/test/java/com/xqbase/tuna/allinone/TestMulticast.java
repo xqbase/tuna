@@ -10,6 +10,7 @@ import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.misc.CrossDomainServer;
 import com.xqbase.tuna.misc.DumpFilter;
 import com.xqbase.tuna.misc.ZLibFilter;
+import com.xqbase.tuna.util.Bytes;
 
 class BroadcastConnection implements Connection {
 	private LinkedHashSet<ConnectionHandler> handlers;
@@ -55,21 +56,23 @@ public class TestMulticast {
 				appendFilter(() -> new DumpFilter().setDumpText(true)).
 				appendFilter(ZLibFilter::new);
 		server.get().setHandler(new MulticastHandler(handlers));
+		byte[] authPhrase = "guest".getBytes();
 		try (
 			ConnectorImpl connector = new ConnectorImpl();
-			OriginServer origin = new OriginServer(server, null, connector);
+			OriginServer origin = new OriginServer(server,
+					t -> Bytes.equals(t, authPhrase), connector);
 		) {
 			connector.add(new CrossDomainServer(new File(TestMulticast.class.
 					getResource("/crossdomain.xml").toURI())), 843);
 			connector.add(origin, 2323);
 			EdgeServer edge = new EdgeServer(connector);
+			edge.setAuthPhrase(authPhrase);
 			connector.add(edge, 2424);
-			connector.connect(edge.getOriginConnection().appendFilter(new DumpFilter().
-					setUseClientMode(true).setDumpStream(System.err)), "127.0.0.1", 2323);
+			connector.connect(edge.getOriginConnection(), "127.0.0.1", 2323);
 			edge = new EdgeServer(connector);
+			edge.setAuthPhrase(authPhrase);
 			connector.add(edge, 2525);
-			connector.connect(edge.getOriginConnection().appendFilter(new DumpFilter().
-					setUseClientMode(true).setDumpStream(System.err)), "127.0.0.1", 2323);
+			connector.connect(edge.getOriginConnection(), "127.0.0.1", 2323);
 			connector.doEvents();
 		}
 	}

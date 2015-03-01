@@ -15,14 +15,14 @@ import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
 import com.xqbase.tuna.util.Bytes;
 
-class OriginVirtualHandler implements VirtualHandler {
+class DirectVirtualHandler implements VirtualHandler {
 	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
 
 	private EdgeConnection edge;
 	private String localAddr, remoteAddr;
 	private int cid, localPort, remotePort;
 
-	OriginVirtualHandler(EdgeConnection edge, int cid, String localAddr,
+	DirectVirtualHandler(EdgeConnection edge, int cid, String localAddr,
 			int localPort, String remoteAdd, int remotePort) {
 		this.edge = edge;
 		this.cid = cid;
@@ -116,17 +116,15 @@ class EdgeConnection implements Connection {
 			AiOPacket.send(handler, AiOPacket.SERVER_PONG, 0);
 			break;
 		case AiOPacket.CLIENT_AUTH:
-			if (origin.auth == null) {
-				return;
-			}
-			authed = origin.auth.test(Bytes.sub(b, HEAD_SIZE));
+			authed = origin.auth == null ||
+					origin.auth.test(Bytes.sub(b, HEAD_SIZE, packet.size));
 			AiOPacket.send(handler, authed ? AiOPacket.SERVER_AUTH_OK :
 					AiOPacket.SERVER_AUTH_ERROR, 0);
 			return;
 		case AiOPacket.CONNECTION_CONNECT:
 			if (!authed) {
 				AiOPacket.send(handler, AiOPacket.SERVER_AUTH_NEED, 0);
-				disconnect();
+				AiOPacket.send(handler, AiOPacket.HANDLER_DISCONNECT, cid);
 				return;
 			}
 			if (connMap.containsKey(Integer.valueOf(cid))) {
@@ -153,7 +151,7 @@ class EdgeConnection implements Connection {
 				localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
 				localPort = remotePort = 0;
 			}
-			OriginVirtualHandler virtualHandler = new OriginVirtualHandler(this,
+			DirectVirtualHandler virtualHandler = new DirectVirtualHandler(this,
 					cid, localAddr, localPort, remoteAddr, remotePort);
 			connection.setHandler(virtualHandler);
 			connMap.put(Integer.valueOf(cid), connection);

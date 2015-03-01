@@ -91,6 +91,7 @@ class OriginConnection implements Connection {
 	private TimerHandler.Closeable closeable = null;
 
 	HashMap<Integer, ClientConnection> connMap = new HashMap<>();
+	byte[] authPhrase = null;
 	IdPool idPool = new IdPool();
 	TimerHandler timer;
 	ConnectionHandler handler;
@@ -106,9 +107,15 @@ class OriginConnection implements Connection {
 		switch (packet.cmd) {
 		case AiOPacket.SERVER_PONG:
 		case AiOPacket.SERVER_AUTH_OK:
-			return;
 		case AiOPacket.SERVER_AUTH_ERROR:
-			// TODO Auth Failed
+			// TODO Handle Auth Failure
+			return;
+		case AiOPacket.SERVER_AUTH_NEED:
+			if (authPhrase != null) {
+				byte[] bb = new byte[HEAD_SIZE + authPhrase.length];
+				System.arraycopy(authPhrase, 0, bb, HEAD_SIZE, authPhrase.length);
+				AiOPacket.send(handler, bb, AiOPacket.CLIENT_AUTH, 0);
+			}
 			return;
 		case AiOPacket.HANDLER_MULTICAST:
 			int numConns = packet.cid;
@@ -205,5 +212,9 @@ public class EdgeServer implements ServerConnection {
 	/** @return The connection to the {@link OriginServer}. */
 	public Connection getOriginConnection() {
 		return origin.appendFilter(new PacketFilter(AiOPacket.PARSER));
+	}
+
+	public void setAuthPhrase(byte[] authPhrase) {
+		origin.authPhrase = authPhrase;
 	}
 }
