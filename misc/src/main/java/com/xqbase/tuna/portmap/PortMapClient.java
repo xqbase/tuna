@@ -58,8 +58,8 @@ public class PortMapClient extends ConnectionWrapper {
 	 * @param privatePort - The port of the mapped private server.
 	 * @see PortMapServer
 	 */
-	public PortMapClient(Connector connector, int publicPort,
-			String privateHost, int privatePort) {
+	public PortMapClient(Connector connector, TimerHandler timer,
+			int publicPort, String privateHost, int privatePort) {
 		setConnection(new Connection() {
 			private TimerHandler.Closeable closeable = null;
 
@@ -113,7 +113,7 @@ public class PortMapClient extends ConnectionWrapper {
 			public void onConnect() {
 				send(new PortMapPacket(0,
 						PortMapPacket.CLIENT_OPEN, publicPort, 0).getHead());
-				closeable = scheduleDelayed(() -> {
+				closeable = timer.scheduleDelayed(() -> {
 					send(new PortMapPacket(0, PortMapPacket.CLIENT_PING, 0, 0).getHead());
 				}, 45000, 45000);
 			}

@@ -15,7 +15,7 @@ import com.xqbase.tuna.util.Bytes;
  * For detailed usage, see {@link TestMulticast} from github.com
  */
 public class MulticastHandler extends ConnectionHandler.Adapter {
-	private static final int HEAD_SIZE = AllInOnePacket.HEAD_SIZE;
+	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
 
 	public static boolean isMulticast(ConnectionHandler handler) {
 		ConnectionHandler handler_ = handler;
@@ -43,7 +43,7 @@ public class MulticastHandler extends ConnectionHandler.Adapter {
 			return;
 		}
 		int maxNumConns = (65535 - HEAD_SIZE - len) / 2;
-		HashMap<EdgeConnection, ArrayList<Integer>> connListMap = new HashMap<>();
+		HashMap<ConnectionHandler, ArrayList<Integer>> connListMap = new HashMap<>();
 		// "connections.iterator()" is called
 		for (ConnectionHandler handler : handlers) {
 			while (!(handler instanceof VirtualHandler)) {
@@ -57,30 +57,27 @@ public class MulticastHandler extends ConnectionHandler.Adapter {
 				continue;
 			}
 			VirtualHandler virtual = ((VirtualHandler) handler);
-			EdgeConnection edge = virtual.edge;
-			ArrayList<Integer> connList = connListMap.get(edge);
+			ArrayList<Integer> connList = connListMap.get(virtual.getAiOHandler());
 			if (connList == null) {
 				connList = new ArrayList<>();
-				connListMap.put(edge, connList);
+				connListMap.put(virtual.getAiOHandler(), connList);
 			}
-			connList.add(Integer.valueOf(virtual.connId));
+			connList.add(Integer.valueOf(virtual.getConnectionID()));
 		}
-		for (Entry<EdgeConnection, ArrayList<Integer>> entry : connListMap.entrySet()) {
-			EdgeConnection edge = entry.getKey();
+		for (Entry<ConnectionHandler, ArrayList<Integer>> entry : connListMap.entrySet()) {
+			ConnectionHandler aioHandler = entry.getKey();
 			ArrayList<Integer> connList = entry.getValue();
 			int numConnsToSend = connList.size();
 			int numConnsSent = 0;
 			while (numConnsToSend > 0) {
 				int numConns = Math.min(numConnsToSend, maxNumConns);
 				byte[] bb = new byte[HEAD_SIZE + numConns * 2 + len];
-				new AllInOnePacket(numConns * 2 + len,
-						AllInOnePacket.HANDLER_MULTICAST, numConns).fillHead(bb, 0);
 				for (int i = 0; i < numConns; i ++) {
 					Bytes.setShort(connList.get(numConnsSent + i).intValue(),
 							bb, HEAD_SIZE + i * 2);
 				}
 				System.arraycopy(b, off, bb, HEAD_SIZE + numConns * 2, len);
-				edge.handler.send(bb);
+				AiOPacket.send(aioHandler, bb, AiOPacket.HANDLER_MULTICAST, numConns);
 				numConnsToSend -= numConns;
 				numConnsSent += numConns;
 			}

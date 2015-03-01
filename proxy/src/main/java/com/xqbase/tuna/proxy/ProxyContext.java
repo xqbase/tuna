@@ -9,11 +9,13 @@ import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.Connector;
+import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.ServerConnection;
 
-public class ProxyContext implements Connector, Executor,
+public class ProxyContext implements Connector, EventQueue, Executor,
 		UnaryOperator<String>, BiPredicate<String, String> {
 	private Connector connector;
+	private EventQueue eventQueue;
 	private Executor executor;
 	private SSLContext sslc;
 	private UnaryOperator<String> lookup;
@@ -21,10 +23,11 @@ public class ProxyContext implements Connector, Executor,
 	private String realm;
 	private int logLevel;
 
-	public ProxyContext(Connector connector, Executor executor, SSLContext sslc,
-			UnaryOperator<String> lookup, BiPredicate<String, String> auth,
-			String realm, int logLevel) {
+	public ProxyContext(Connector connector, EventQueue eventQueue,
+			Executor executor, SSLContext sslc, UnaryOperator<String> lookup,
+			BiPredicate<String, String> auth, String realm, int logLevel) {
 		this.connector = connector;
+		this.eventQueue = eventQueue;
 		this.executor = executor;
 		this.sslc = sslc;
 		this.lookup = lookup;
@@ -43,6 +46,11 @@ public class ProxyContext implements Connector, Executor,
 	public void connect(Connection connection, String host, int port)
 			throws IOException {
 		connector.connect(connection, host, port);
+	}
+
+	@Override
+	public void invokeLater(Runnable runnable) {
+		eventQueue.invokeLater(runnable);
 	}
 
 	@Override

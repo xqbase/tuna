@@ -14,11 +14,11 @@ public class IdPool {
 	public int borrowId() {
 		Integer i = returned.poll();
 		if (i == null) {
-			i = Integer.valueOf(nextId);
-			nextId ++;
 			if (nextId > MAX_ID) {
 				return -1;
 			}
+			i = Integer.valueOf(nextId);
+			nextId ++;
 		}
 		borrowed.add(i);
 		return i.intValue();

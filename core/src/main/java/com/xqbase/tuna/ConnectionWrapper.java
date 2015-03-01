@@ -90,21 +90,6 @@ public class ConnectionWrapper implements Connection, ConnectionHandler {
 		return handler.getRemotePort();
 	}
 
-	@Override
-	public Closeable postAtTime(Runnable runnable, long uptime) {
-		return handler.postAtTime(runnable, uptime);
-	}
-
-	@Override
-	public void invokeLater(Runnable runnable) {
-		handler.invokeLater(runnable);
-	}
-
-	@Override
-	public void execute(Runnable runnable) {
-		handler.execute(runnable);
-	}
-
 	/** Only for debug. */
 	@Override
 	public String toString() {

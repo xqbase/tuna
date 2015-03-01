@@ -53,13 +53,13 @@ public class SSLForward {
 			ForwardServer server = new ForwardServer(connector, remoteHost, remotePort);
 			if (localHost == null) {
 				SSLContext sslc = SSLContexts.get(null, 0);
-				server.appendRemoteFilter(() ->
-						new SSLFilter(connector, sslc, SSLFilter.CLIENT));
+				server.appendRemoteFilter(() -> new SSLFilter(connector,
+						connector, sslc, SSLFilter.CLIENT));
 				connector.add(server, localPort);
 			} else {
 				SSLContext sslc = SSLContexts.get("CN=" + localHost, Time.WEEK * 520);
-				connector.add(server.appendFilter(() ->
-						new SSLFilter(connector, sslc, SSLFilter.SERVER_NO_AUTH)), localPort);
+				connector.add(server.appendFilter(() -> new SSLFilter(connector,
+						connector, sslc, SSLFilter.SERVER_NO_AUTH)), localPort);
 			}
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {

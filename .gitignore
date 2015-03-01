@@ -14,6 +14,7 @@ hs_err_pid*
 /util/target
 /core/target
 /misc/target
+/allinone/target
 /tools/target
 /http/target
 /proxy/target

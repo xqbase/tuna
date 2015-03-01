@@ -135,13 +135,13 @@ public class TunaProxy {
 			}
 
 			SSLContext sslcClient = getSSLContext(null, 0);
-			ProxyContext context = new ProxyContext(connector, connector, sslcClient,
-					lookup, auth, p.getProperty("realm"), logLevel);
+			ProxyContext context = new ProxyContext(connector, connector, connector,
+					sslcClient, lookup, auth, p.getProperty("realm"), logLevel);
 			ServerConnection server = () -> new ProxyConnection(context);
 			if (Conf.getBoolean(p.getProperty("ssl"), false)) {
 				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
 				connector.add(server.appendFilter(() -> new SSLFilter(connector,
-						sslcServer, SSLFilter.SERVER_NO_AUTH)), host, port);
+						connector, sslcServer, SSLFilter.SERVER_NO_AUTH)), host, port);
 			} else {
 				connector.add(server, host, port);
 			}

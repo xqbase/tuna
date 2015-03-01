@@ -43,7 +43,7 @@ public class ForwardFrame extends ConnectorFrame {
 	long limit = 0;
 
 	private Supplier<BandwidthFilter> bandwidth = () -> {
-		BandwidthFilter filter = new BandwidthFilter() {
+		BandwidthFilter filter = new BandwidthFilter(connector) {
 			@Override
 			public long getLimit() {
 				return limit;

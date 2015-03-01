@@ -15,10 +15,10 @@ public class TestSSLClient {
 	public static void main(String[] args) throws Exception {
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			SSLContext sslc = SSLUtil.getSSLContext(null, null);
-			SSLFilter sslf1 = new SSLFilter(connector, sslc,
-					SSLFilter.CLIENT, "localhost", 2323);
-			SSLFilter sslf2 = new SSLFilter(connector, sslc,
-					SSLFilter.CLIENT, "localhost", 2323);
+			SSLFilter sslf1 = new SSLFilter(connector, connector,
+					sslc, SSLFilter.CLIENT, "localhost", 2323);
+			SSLFilter sslf2 = new SSLFilter(connector, connector,
+					sslc, SSLFilter.CLIENT, "localhost", 2323);
 			Connection connection1 = new Connection() {
 				@Override
 				public void onConnect() {
