@@ -5,12 +5,11 @@ import java.security.KeyStore;
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.misc.BroadcastServer;
 import com.xqbase.tuna.misc.DumpFilter;
 import com.xqbase.tuna.misc.ForwardServer;
-import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.Bytes;
 
 public class TestSSLForward {
@@ -30,10 +29,11 @@ public class TestSSLForward {
 					SSLFilter sslf = new SSLFilter(connector, connector,
 							sslc, SSLFilter.SERVER_WANT_AUTH);
 					Connection connection = super.get().
-							appendFilter(new ConnectionWrapper() {
+							appendFilter(new ConnectionFilter() {
 						@Override
-						public void onConnect() {
-							super.onConnect();
+						public void onConnect(String localAddr, int localPort,
+								String remoteAddr, int remotePort) {
+							super.onConnect(localAddr, localPort, remoteAddr, remotePort);
 							System.out.println("ssl_session_id=" +
 									Bytes.toHexLower(sslf.getSession().getId()));
 						}

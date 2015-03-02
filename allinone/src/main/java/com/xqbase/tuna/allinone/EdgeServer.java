@@ -36,15 +36,15 @@ class ClientConnection implements Connection {
 	}
 
 	@Override
-	public void onQueue(int delta, int total) {
-		byte[] bb = new byte[HEAD_SIZE + 8];
-		Bytes.setInt(delta, bb, HEAD_SIZE);
-		Bytes.setInt(total, bb, HEAD_SIZE + 4);
+	public void onQueue(int size) {
+		byte[] bb = new byte[HEAD_SIZE + 4];
+		Bytes.setInt(size, bb, HEAD_SIZE);
 		AiOPacket.send(origin.handler, bb, AiOPacket.CONNECTION_QUEUE, cid);
 	}
 
 	@Override
-	public void onConnect() {
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
 		cid = origin.idPool.borrowId();
 		if (cid < 0) {
 			handler.disconnect();
@@ -52,17 +52,17 @@ class ClientConnection implements Connection {
 		}
 		byte[] localAddrBytes, remoteAddrBytes;
 		try {
-			localAddrBytes = InetAddress.getByName(handler.getLocalAddr()).getAddress();
-			remoteAddrBytes = InetAddress.getByName(handler.getRemoteAddr()).getAddress();
+			localAddrBytes = InetAddress.getByName(localAddr).getAddress();
+			remoteAddrBytes = InetAddress.getByName(remoteAddr).getAddress();
 		} catch (UnknownHostException e) {
 			throw new RuntimeException(e);
 		}
 		byte[] b = new byte[HEAD_SIZE + localAddrBytes.length + remoteAddrBytes.length + 4];
 		System.arraycopy(localAddrBytes, 0, b, HEAD_SIZE, localAddrBytes.length);
-		Bytes.setShort(handler.getLocalPort(), b, HEAD_SIZE + localAddrBytes.length);
+		Bytes.setShort(localPort, b, HEAD_SIZE + localAddrBytes.length);
 		System.arraycopy(remoteAddrBytes, 0, b,
 				HEAD_SIZE + localAddrBytes.length + 2, localAddrBytes.length);
-		Bytes.setShort(handler.getRemotePort(), b, HEAD_SIZE +
+		Bytes.setShort(remotePort, b, HEAD_SIZE +
 				localAddrBytes.length + 2 + remoteAddrBytes.length);
 		AiOPacket.send(origin.handler, b, AiOPacket.CONNECTION_CONNECT, cid);
 		origin.connMap.put(Integer.valueOf(cid), this);
@@ -164,7 +164,13 @@ class OriginConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect() {
+	public void onQueue(int size) {
+		// TODO if (size > 1048576): block all "ClientConnection"s ? 
+	}
+
+	@Override
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
 		closeable = timer.scheduleDelayed(() -> {
 			AiOPacket.send(handler, AiOPacket.CLIENT_PING, 0);
 		}, 45000, 45000);

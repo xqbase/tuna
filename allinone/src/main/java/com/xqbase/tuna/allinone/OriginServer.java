@@ -19,17 +19,11 @@ class DirectVirtualHandler implements VirtualHandler {
 	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
 
 	private EdgeConnection edge;
-	private String localAddr, remoteAddr;
-	private int cid, localPort, remotePort;
+	private int cid;
 
-	DirectVirtualHandler(EdgeConnection edge, int cid, String localAddr,
-			int localPort, String remoteAdd, int remotePort) {
+	DirectVirtualHandler(EdgeConnection edge, int cid) {
 		this.edge = edge;
 		this.cid = cid;
-		this.localAddr = localAddr;
-		this.localPort = localPort;
-		this.remoteAddr = remoteAdd;
-		this.remotePort = remotePort;
 	}
 
 	@Override
@@ -40,12 +34,6 @@ class DirectVirtualHandler implements VirtualHandler {
 	}
 
 	@Override
-	public void disconnect() {
-		edge.connMap.remove(Integer.valueOf(cid));
-		AiOPacket.send(edge.handler, AiOPacket.HANDLER_DISCONNECT, cid);
-	}
-
-	@Override
 	public void setBufferSize(int bufferSize) {
 		byte[] b = new byte[HEAD_SIZE + 2];
 		Bytes.setShort(bufferSize, b, HEAD_SIZE);
@@ -53,23 +41,9 @@ class DirectVirtualHandler implements VirtualHandler {
 	}
 
 	@Override
-	public String getLocalAddr() {
-		return localAddr;
-	}
-
-	@Override
-	public int getLocalPort() {
-		return localPort;
-	}
-
-	@Override
-	public String getRemoteAddr() {
-		return remoteAddr;
-	}
-
-	@Override
-	public int getRemotePort() {
-		return remotePort;
+	public void disconnect() {
+		edge.connMap.remove(Integer.valueOf(cid));
+		AiOPacket.send(edge.handler, AiOPacket.HANDLER_DISCONNECT, cid);
 	}
 
 	@Override
@@ -151,11 +125,10 @@ class EdgeConnection implements Connection {
 				localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
 				localPort = remotePort = 0;
 			}
-			DirectVirtualHandler virtualHandler = new DirectVirtualHandler(this,
-					cid, localAddr, localPort, remoteAddr, remotePort);
+			DirectVirtualHandler virtualHandler = new DirectVirtualHandler(this, cid);
 			connection.setHandler(virtualHandler);
 			connMap.put(Integer.valueOf(cid), connection);
-			connection.onConnect();
+			connection.onConnect(localAddr, localPort, remoteAddr, remotePort);
 			break;
 		default:
 			connection = connMap.get(Integer.valueOf(cid));
@@ -169,9 +142,8 @@ class EdgeConnection implements Connection {
 				}
 				break;
 			case AiOPacket.CONNECTION_QUEUE:
-				if (packet.size >= 8) {
-					connection.onQueue(Bytes.toInt(b, off + HEAD_SIZE),
-							Bytes.toInt(b, off + HEAD_SIZE + 4));
+				if (packet.size >= 4) {
+					connection.onQueue(Bytes.toInt(b, off + HEAD_SIZE));
 				}
 				break;
 			case AiOPacket.CONNECTION_DISCONNECT:
@@ -183,7 +155,13 @@ class EdgeConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect() {
+	public void onQueue(int size) {
+		// TODO if (size > 1048576): send onQueue to all Virtual Connections ?
+	}
+
+	@Override
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
 		if (!authed) {
 			AiOPacket.send(handler, AiOPacket.SERVER_AUTH_NEED, 0);
 		}

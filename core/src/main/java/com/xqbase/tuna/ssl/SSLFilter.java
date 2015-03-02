@@ -11,13 +11,13 @@ import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 import javax.net.ssl.SSLEngineResult.Status;
 import javax.net.ssl.SSLSession;
 
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.tuna.util.Bytes;
 
 /** An SSL filter which makes a connection secure */
-public class SSLFilter extends ConnectionWrapper {
+public class SSLFilter extends ConnectionFilter {
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * NO client authentication desired.
@@ -59,6 +59,8 @@ public class SSLFilter extends ConnectionWrapper {
 	private HandshakeStatus hs = HandshakeStatus.NEED_UNWRAP;
 	private ByteArrayQueue baqRecv = new ByteArrayQueue();
 	private ByteArrayQueue baqToSend = new ByteArrayQueue();
+	private String localAddr, remoteAddr;
+	private int localPort, remotePort;
 
 	/**
 	 * Creates an SSLFilter with the given {@link Executor},
@@ -154,7 +156,12 @@ public class SSLFilter extends ConnectionWrapper {
 	}
 
 	@Override
-	public void onConnect() {
+	public void onConnect(String localAddr_, int localPort_,
+			String remoteAddr_, int remotePort_) {
+		localAddr = localAddr_;
+		localPort = localPort_;
+		remoteAddr = remoteAddr_;
+		remotePort = remotePort_;
 		try {
 			doHandshake();
 		} catch (IOException e) {
@@ -258,7 +265,7 @@ public class SSLFilter extends ConnectionWrapper {
 			}
 		}
 		// hs == HandshakeStatus.FINISHED
-		super.onConnect();
+		super.onConnect(localAddr, localPort, remoteAddr, remotePort);
 		recv();
 		if (baqRecv.length() > 0) {
 			onRecv(baqRecv.array(), baqRecv.offset(), baqRecv.length());

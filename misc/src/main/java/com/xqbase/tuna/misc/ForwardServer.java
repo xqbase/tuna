@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import java.util.function.Supplier;
 
 import com.xqbase.tuna.Connection;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectionHandler;
-import com.xqbase.tuna.ConnectionWrapper;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ServerConnection;
 
@@ -31,9 +31,9 @@ class PeerConnection implements Connection {
 	}
 
 	@Override
-	public void onQueue(int delta, int total) {
+	public void onQueue(int size) {
 		if (peer != null) {
-			peer.handler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+			peer.handler.setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 		}
 	}
 
@@ -55,10 +55,11 @@ class ForwardConnection extends PeerConnection {
 	}
 
 	@Override
-	public void onConnect() {
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
 		peer = new PeerConnection(this);
 		Connection connection = peer;
-		for (Supplier<? extends ConnectionWrapper> serverFilter : forward.serverFilters) {
+		for (Supplier<? extends ConnectionFilter> serverFilter : forward.serverFilters) {
 			connection = connection.appendFilter(serverFilter.get());
 		}
 		try {
@@ -75,7 +76,7 @@ public class ForwardServer implements ServerConnection {
 	Connector connector;
 	String host;
 	int port;
-	ArrayList<Supplier<? extends ConnectionWrapper>> serverFilters = new ArrayList<>();
+	ArrayList<Supplier<? extends ConnectionFilter>> serverFilters = new ArrayList<>();
 
 	@Override
 	public Connection get() {
@@ -96,7 +97,7 @@ public class ForwardServer implements ServerConnection {
 	}
 
 	/** @return A list of "ServerFilter"s applied to remote connections. */
-	public void appendRemoteFilter(Supplier<? extends ConnectionWrapper> serverFilter) {
+	public void appendRemoteFilter(Supplier<? extends ConnectionFilter> serverFilter) {
 		serverFilters.add(serverFilter);
 	}
 }

@@ -1,9 +1,9 @@
 package com.xqbase.tuna.misc;
 
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.TimerHandler;
 
-public class BandwidthFilter extends ConnectionWrapper {
+public class BandwidthFilter extends ConnectionFilter {
 	private long period = 0, limit = 0;
 	private long next = System.currentTimeMillis(), bytesRecv = 0;
 	private TimerHandler timer;

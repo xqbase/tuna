@@ -101,7 +101,8 @@ public class TerminalFrame extends ConnectorFrame {
 			}
 
 			@Override
-			public void onConnect() {
+			public void onConnect(String localAddr, int localPort,
+					String remoteAddr, int remotePort) {
 				status = STATUS_CONNECTED;
 				btnConnect.setEnabled(true);
 				btnSend.setEnabled(true);

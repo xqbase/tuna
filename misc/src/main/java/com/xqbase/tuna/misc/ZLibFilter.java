@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
-import com.xqbase.tuna.ConnectionWrapper;
 import com.xqbase.tuna.packet.PacketConsumer;
 import com.xqbase.tuna.packet.PacketException;
 import com.xqbase.tuna.packet.PacketFilter;
@@ -13,7 +12,7 @@ import com.xqbase.tuna.packet.PacketParser;
 import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.tuna.util.Bytes;
 
-/** A {@link ConnectionWrapper} which compresses application data and uncompresses network data. */
+/** A {@link PacketFilter} which compresses application data and uncompresses network data. */
 public class ZLibFilter extends PacketFilter {
 	private static PacketParser parser = (b, off, len) -> {
 		if (len < 4) {

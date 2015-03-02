@@ -21,14 +21,16 @@ public class TestSSLClient {
 					sslc, SSLFilter.CLIENT, "localhost", 2323);
 			Connection connection1 = new Connection() {
 				@Override
-				public void onConnect() {
+				public void onConnect(String localAddr, int localPort,
+						String remoteAddr, int remotePort) {
 					System.out.println(Bytes.toHexLower(sslf1.getSession().getId()));
 					connected = true;
 				}
 			};
 			Connection connection2 = new Connection() {
 				@Override
-				public void onConnect() {
+				public void onConnect(String localAddr, int localPort,
+						String remoteAddr, int remotePort) {
 					System.out.println(Bytes.toHexLower(sslf2.getSession().getId()));
 					try {
 						connector.connect(connection1.appendFilter(sslf1), "localhost", 2323);

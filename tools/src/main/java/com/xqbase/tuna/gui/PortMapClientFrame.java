@@ -7,6 +7,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 
+import com.xqbase.tuna.ConnectionWrapper;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.portmap.PortMapClient;
 import com.xqbase.util.Numbers;
@@ -52,10 +53,11 @@ public class PortMapClientFrame extends ConnectorFrame {
 
 		connector = new ConnectorImpl();
 		try {
-			PortMapClient client = new PortMapClient(connector, connector,
+			ConnectionWrapper client = new ConnectionWrapper(PortMapClient.
+					getConnection(connector, connector,
 					Numbers.parseInt(txtPublicPort.getText(), 1, 65535),
 					txtPrivateHost.getText(),
-					Numbers.parseInt(txtPrivatePort.getText(), 1, 65535)) {
+					Numbers.parseInt(txtPrivatePort.getText(), 1, 65535))) {
 				@Override
 				public void onDisconnect() {
 					super.onDisconnect();

@@ -6,11 +6,11 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Calendar;
 
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.util.Bytes;
 
-/** A {@link ConnectionWrapper} which dumps sent and received data into console or files. */
-public class DumpFilter extends ConnectionWrapper {
+/** A {@link ConnectionFilter} which dumps sent and received data into console or files. */
+public class DumpFilter extends ConnectionFilter {
 	private static String now() {
 		Calendar cal = Calendar.getInstance();
 		int hour = cal.get(Calendar.HOUR_OF_DAY);
@@ -138,14 +138,15 @@ public class DumpFilter extends ConnectionWrapper {
 	}
 
 	@Override
-	public void onConnect() {
-		super.onConnect();
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
+		super.onConnect(localAddr, localPort, remoteAddr, remotePort);
 		if (useClientMode) {
-			host = getLocalAddr();
-			port = getLocalPort();
+			host = localAddr;
+			port = localPort;
 		} else {
-			host = getRemoteAddr();
-			port = getRemotePort();
+			host = remoteAddr;
+			port = remotePort;
 		}
 		if (dumpFolder != null) {
 			try {

@@ -1,12 +1,12 @@
 package com.xqbase.tuna.packet;
 
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 
 /**
  * A filter that makes Connection.onRecv() get complete packets.<p>
  * Note that this filter will close a connection when {@link PacketException} is thrown
  */
-public class PacketFilter extends ConnectionWrapper {
+public class PacketFilter extends ConnectionFilter {
 	private PacketOutputStream out;
 
 	/** Creates a PacketFilter with a given parser. */
