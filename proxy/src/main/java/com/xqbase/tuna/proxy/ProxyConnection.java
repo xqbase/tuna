@@ -100,7 +100,7 @@ class ClientConnection implements Connection {
 	private boolean secure, established = false, begun = false, chunked = false,
 			requestClose = false, responseClose = false;
 	private int logLevel;
-	private String host, local = null;
+	private String host, local = " (0.0.0.0:0)";
 
 	ClientConnection(ProxyConnection proxy, ConnectionHandler proxyHandler,
 			int logLevel, HttpPacket request, boolean secure, String host) {
