@@ -21,27 +21,32 @@ public interface Connection {
 	/**
 	 * Consumes queue (queued or completed sending) events in the APPLICATION end of the connection.
 	 *
-	 * @param delta change of queue size
-	 * @param total queue size after change, 0 for complete sending
+	 * @param size total queue size, 0 for complete sending
 	 */
-	public default void onQueue(int delta, int total) {/**/}
-	/** Consumes connecting events in the APPLICATION end of the connection. */
-	public default void onConnect() {/**/}
+	public default void onQueue(int size) {/**/}
+	/**
+	 * Consumes connecting events in the APPLICATION end of the connection.
+	 *
+	 * @param localAddr Local IP Address
+	 * @param localPort Local Port
+	 * @param remoteAddr Remote IP Address
+	 * @param remotePort Remote Port
+	 */
+	public default void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {/**/}
 	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
 	public default void onDisconnect() {/**/}
 
 	// TODO append filter after onConnect ?
-	/** Adds a {@link ConnectionWrapper} as a filter into the network end of the connection. */
-	public default Connection appendFilter(ConnectionWrapper filter) {
-		filter.setConnection(this);
-		ConnectionWrapper appended = new ConnectionWrapper() {
+	/** Adds a {@link ConnectionFilter} as a filter into the network end of the connection. */
+	public default Connection appendFilter(ConnectionFilter filter) {
+		filter.connection = this;
+		return new ConnectionWrapper(filter) {
 			@Override
 			public void setHandler(ConnectionHandler handler) {
-				filter.setHandler(handler);
+				super.setHandler(handler); // identical to "filter.setHandler(handler)"
 				Connection.this.setHandler(filter);
 			}
 		};
-		appended.setConnection(filter);
-		return appended;
 	}
 }

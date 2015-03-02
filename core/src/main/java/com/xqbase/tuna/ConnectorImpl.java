@@ -35,8 +35,6 @@ class Client {
 	int bufferSize = Connection.MAX_BUFFER_SIZE;
 	int status = STATUS_IDLE;
 	ByteArrayQueue queue = new ByteArrayQueue();
-	InetSocketAddress local = new InetSocketAddress(0),
-			remote = new InetSocketAddress(0);
 	SocketChannel socketChannel;
 	SelectionKey selectionKey;
 	Connection connection;
@@ -52,15 +50,6 @@ class Client {
 			}
 
 			@Override
-			public void disconnect() {
-				if (status == STATUS_IDLE) {
-					finishClose();
-				} else if (status == STATUS_BUSY) {
-					status = STATUS_DISCONNECTING;
-				}
-			}
-
-			@Override
 			public void setBufferSize(int bufferSize) {
 				boolean blocked = Client.this.bufferSize == 0;
 				boolean toBlock = bufferSize <= 0;
@@ -72,34 +61,23 @@ class Client {
 			}
 
 			@Override
-			public String getLocalAddr() {
-				return local.getAddress().getHostAddress();
-			}
-
-			@Override
-			public int getLocalPort() {
-				return local.getPort();
-			}
-
-			@Override
-			public String getRemoteAddr() {
-				return remote.getAddress().getHostAddress();
-			}
-
-			@Override
-			public int getRemotePort() {
-				return remote.getPort();
+			public void disconnect() {
+				if (status == STATUS_IDLE) {
+					finishClose();
+				} else if (status == STATUS_BUSY) {
+					status = STATUS_DISCONNECTING;
+				}
 			}
 		});
 	}
 
 	void interestOps() {
+		// FIXME selectionKey may be null ?
 		selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
 				(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
 	}
 
 	void write() throws IOException {
-		int delta = 0;
 		while (queue.length() > 0) {
 			int bytesWritten = socketChannel.write(ByteBuffer.wrap(queue.array(),
 					queue.offset(), queue.length()));
@@ -108,9 +86,8 @@ class Client {
 				return;
 			}
 			queue.remove(bytesWritten);
-			delta -= bytesWritten;
 		}
-		connection.onQueue(delta, queue.length());
+		connection.onQueue(queue.length());
 		if (status == STATUS_DISCONNECTING) {
 			finishClose();
 		} else {
@@ -122,7 +99,7 @@ class Client {
 	void write(byte[] b, int off, int len) {
 		if (status != STATUS_IDLE) {
 			queue.add(b, off, len);
-			connection.onQueue(len, queue.length());
+			connection.onQueue(queue.length());
 			return;
 		}
 		int bytesWritten;
@@ -132,10 +109,9 @@ class Client {
 			startClose();
 			return;
 		}
-		int delta = len - bytesWritten;
-		if (delta > 0) {
-			queue.add(b, off + bytesWritten, delta);
-			connection.onQueue(delta, queue.length());
+		if (len > bytesWritten) {
+			queue.add(b, off + bytesWritten, len - bytesWritten);
+			connection.onQueue(queue.length());
 			status = STATUS_BUSY;
 			interestOps();
 		}
@@ -146,11 +122,12 @@ class Client {
 	}
 
 	void finishConnect() {
-		local = ((InetSocketAddress) socketChannel.
+		InetSocketAddress local = ((InetSocketAddress) socketChannel.
 				socket().getLocalSocketAddress());
-		remote = ((InetSocketAddress) socketChannel.
+		InetSocketAddress remote = ((InetSocketAddress) socketChannel.
 				socket().getRemoteSocketAddress());
-		connection.onConnect();
+		connection.onConnect(local.getAddress().getHostAddress(), local.getPort(),
+				remote.getAddress().getHostAddress(), remote.getPort());
 	}
 
 	void startClose() {

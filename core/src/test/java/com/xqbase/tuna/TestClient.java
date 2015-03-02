@@ -52,7 +52,8 @@ public class TestClient {
 					}
 
 					@Override
-					public void onConnect() {
+					public void onConnect(String localAddr, int localPort,
+							String remoteAddr, int remotePort) {
 						connected = true;
 						handlerSet.add(handler);
 						connections ++;

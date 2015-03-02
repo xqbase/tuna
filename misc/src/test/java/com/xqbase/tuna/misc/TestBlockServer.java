@@ -1,26 +1,25 @@
 package com.xqbase.tuna.misc;
 import java.io.IOException;
 
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectorImpl;
-import com.xqbase.tuna.misc.ForwardServer;
 
 public class TestBlockServer {
 	public static void main(String[] args) throws IOException {
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			ForwardServer forward = new ForwardServer(connector, "ns2.xqbase.com", 23);
-			connector.add(forward.appendFilter(() -> new ConnectionWrapper() {
+			connector.add(forward.appendFilter(() -> new ConnectionFilter() {
 				@Override
-				public void onQueue(int delta, int total) {
-					super.onQueue(delta, total);
-					System.out.println("Local.onQueue(" + delta + ", " + total + "): " + this);
+				public void onQueue(int size) {
+					super.onQueue(size);
+					System.out.println("Local.onQueue(" + size + "): " + this);
 				}
 			}), 23);
-			forward.appendRemoteFilter(() -> new ConnectionWrapper() {
+			forward.appendRemoteFilter(() -> new ConnectionFilter() {
 				@Override
-				public void onQueue(int delta, int total) {
-					super.onQueue(delta, total);
-					System.out.println("Remote.onQueue(" + delta + ", " + total + "): " + this);
+				public void onQueue(int size) {
+					super.onQueue(size);
+					System.out.println("Remote.onQueue(" + size + "): " + this);
 				}
 			});
 			connector.doEvents();

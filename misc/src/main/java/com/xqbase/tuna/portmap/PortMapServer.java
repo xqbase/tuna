@@ -63,7 +63,8 @@ class PublicConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect() {
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
 		map.handler.send(new PortMapPacket(connId,
 				PortMapPacket.SERVER_CONNECT, 0, 0).getHead());
 	}

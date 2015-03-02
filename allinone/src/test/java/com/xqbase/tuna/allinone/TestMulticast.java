@@ -37,7 +37,8 @@ class BroadcastConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect() {
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
 		handlers.add(handler);
 	}
 

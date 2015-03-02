@@ -2,9 +2,8 @@ package com.xqbase.tuna.allinone;
 
 import java.io.IOException;
 
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectorImpl;
-import com.xqbase.tuna.allinone.EdgeServer;
 import com.xqbase.tuna.misc.DumpFilter;
 
 public class TestEdge {
@@ -14,7 +13,7 @@ public class TestEdge {
 			edge.setAuthPhrase("guest".getBytes());
 			connector.add(edge, 2626);
 			connector.connect(edge.getOriginConnection().
-					appendFilter(new DumpFilter()).appendFilter(new ConnectionWrapper() {
+					appendFilter(new DumpFilter()).appendFilter(new ConnectionFilter() {
 				@Override
 				public void onDisconnect() {
 					super.onDisconnect();

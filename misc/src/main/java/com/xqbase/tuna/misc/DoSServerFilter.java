@@ -4,25 +4,27 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.function.Supplier;
 
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 
 /** A "ServerFilter" to limit bytes, requests and connections from the same IP. */
-public class DoSServerFilter implements Supplier<ConnectionWrapper> {
-	static int[] getData(String ip, HashMap<String, int[]> map, int length) {
-		int[] data = map.get(ip);
-		if (data == null) {
-			data = new int[length];
-			Arrays.fill(data, 0);
-			map.put(ip, data);
-		}
-		return data;
-	}
+public class DoSServerFilter implements Supplier<ConnectionFilter> {
+	class DoSFilter extends ConnectionFilter {
+		private String remoteAddr;
 
-	class DoSFilter extends ConnectionWrapper {
+		private int[] getData(HashMap<String, int[]> map, int length) {
+			int[] data = map.get(remoteAddr);
+			if (data == null) {
+				data = new int[length];
+				Arrays.fill(data, 0);
+				map.put(remoteAddr, data);
+			}
+			return data;
+		}
+
 		@Override
 		public void onRecv(byte[] b, int off, int len) {
 			checkTimeout();
-			int[] requests_ = getData(getRemoteAddr(), requestsMap, 2);
+			int[] requests_ = getData(requestsMap, 2);
 			requests_[1] += len;
 			if (bytes > 0 && requests_[1] > bytes) {
 				onBlock(this, requests_[0], requests_[1], 0);
@@ -36,24 +38,25 @@ public class DoSServerFilter implements Supplier<ConnectionWrapper> {
 		private void disconnect_() {
 			if (connected) {
 				connected = false;
-				getData(getRemoteAddr(), connectionsMap, 1)[0] --;
+				getData(connectionsMap, 1)[0] --;
 			}
 		}
 
 		@Override
-		public void onConnect() {
+		public void onConnect(String localAddr, int localPort,
+				String remoteAddr_, int remotePort) {
+			remoteAddr = remoteAddr_;
 			connected = true;
-			String ip = getRemoteAddr();
-			int[] connections_ = getData(ip, connectionsMap, 1);
+			int[] connections_ = getData(connectionsMap, 1);
 			connections_[0] ++;
 			checkTimeout();
-			int[] requests_ = getData(ip, requestsMap, 2);
+			int[] requests_ = getData(requestsMap, 2);
 			requests_[0] ++;
 			if ((connections > 0 && connections_[0] > connections) ||
 					(requests > 0 && requests_[0] > requests)) {
 				onBlock(this, connections_[0], requests_[0], 0);
 			} else {
-				super.onConnect();
+				super.onConnect(localAddr, localPort, remoteAddr_, remotePort);
 			}
 		}
 
@@ -90,7 +93,7 @@ public class DoSServerFilter implements Supplier<ConnectionWrapper> {
 	 * @param requests_
 	 * @param bytes_
 	 */
-	protected void onBlock(ConnectionWrapper filter, int connections_, int requests_, int bytes_) {
+	protected void onBlock(ConnectionFilter filter, int connections_, int requests_, int bytes_) {
 		filter.disconnect();
 		filter.onDisconnect();
 	}
@@ -126,7 +129,7 @@ public class DoSServerFilter implements Supplier<ConnectionWrapper> {
 	}
 
 	@Override
-	public ConnectionWrapper get() {
+	public ConnectionFilter get() {
 		return new DoSFilter();
 	}
 }

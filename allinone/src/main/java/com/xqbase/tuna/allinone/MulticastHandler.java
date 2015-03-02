@@ -5,8 +5,8 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map.Entry;
 
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectionHandler;
-import com.xqbase.tuna.ConnectionWrapper;
 import com.xqbase.tuna.util.Bytes;
 
 /**
@@ -14,16 +14,16 @@ import com.xqbase.tuna.util.Bytes;
  * connection, which can save the network bandwidth by the multicast approach.<p>
  * For detailed usage, see {@link TestMulticast} from github.com
  */
-public class MulticastHandler extends ConnectionHandler.Adapter {
+public class MulticastHandler implements ConnectionHandler {
 	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
 
 	public static boolean isMulticast(ConnectionHandler handler) {
 		ConnectionHandler handler_ = handler;
 		while (!(handler_ instanceof MulticastHandler)) {
-			if (!(handler_ instanceof ConnectionWrapper)) {
+			if (!(handler_ instanceof ConnectionFilter)) {
 				return false;
 			}
-			handler_ = ((ConnectionWrapper) handler_).getHandler();
+			handler_ = ((ConnectionFilter) handler_).getHandler();
 		}
 		return true;
 	}
@@ -47,11 +47,11 @@ public class MulticastHandler extends ConnectionHandler.Adapter {
 		// "connections.iterator()" is called
 		for (ConnectionHandler handler : handlers) {
 			while (!(handler instanceof VirtualHandler)) {
-				if (!(handler instanceof ConnectionWrapper)) {
+				if (!(handler instanceof ConnectionFilter)) {
 					handler = null;
 					break;
 				}
-				handler = ((ConnectionWrapper) handler).getHandler();
+				handler = ((ConnectionFilter) handler).getHandler();
 			}
 			if (handler == null) {
 				continue;
@@ -82,5 +82,16 @@ public class MulticastHandler extends ConnectionHandler.Adapter {
 				numConnsSent += numConns;
 			}
 		}
+	}
+
+	// TODO multicast "setBufferSize" and "disconnect" ? 
+	@Override
+	public void setBufferSize(int bufferSize) {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public void disconnect() {
+		throw new UnsupportedOperationException();
 	}
 }

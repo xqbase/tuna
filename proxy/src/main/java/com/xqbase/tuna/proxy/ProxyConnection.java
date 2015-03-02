@@ -26,7 +26,7 @@ class PeerConnection implements Connection {
 	private boolean established = false;
 	// For DEBUG only
 	private int logLevel, port;
-	private String host;
+	private String host, local = " (0.0.0.0:0)";
 
 	PeerConnection(ProxyConnection peer, ConnectionHandler peerHandler,
 			int logLevel, String host, int port) {
@@ -38,8 +38,7 @@ class PeerConnection implements Connection {
 	}
 
 	String toString(boolean resp) {
-		return peer.getRemote() + (resp ? " <= " : " => ") + host + ":" + port +
-				" (" + handler.getLocalAddr() + ":" + handler.getLocalPort() + ")";
+		return peer.getRemote() + (resp ? " <= " : " => ") + host + ":" + port + local;
 	}
 
 	ConnectionHandler getHandler() {
@@ -57,18 +56,20 @@ class PeerConnection implements Connection {
 	}
 
 	@Override
-	public void onQueue(int delta, int total) {
-		peerHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+	public void onQueue(int size) {
+		peerHandler.setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 		if (logLevel >= LOG_VERBOSE) {
-			Log.v((total == 0 ? "Connection Unblocked, " :
+			Log.v((size == 0 ? "Connection Unblocked, " :
 					"Connection Blocked, ") + toString(false));
 		}
 	}
 
 	@Override
-	public void onConnect() {
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
 		peerHandler.send(CONNECTION_ESTABLISHED);
 		established = true;
+		local = " (" + localAddr + ":" + localPort + ")";
 		if (logLevel >= LOG_VERBOSE) {
 			Log.v("Connection Established, " + toString(false));
 		}
@@ -99,7 +100,7 @@ class ClientConnection implements Connection {
 	private boolean secure, established = false, begun = false, chunked = false,
 			requestClose = false, responseClose = false;
 	private int logLevel;
-	private String host;
+	private String host, local = null;
 
 	ClientConnection(ProxyConnection proxy, ConnectionHandler proxyHandler,
 			int logLevel, HttpPacket request, boolean secure, String host) {
@@ -114,8 +115,7 @@ class ClientConnection implements Connection {
 	String toString(boolean resp) {
 		String uri = request.getUri();
 		return proxy.getRemote() + (resp ? " <= " : " => ") +
-				(secure ? "https://" : "http://") + host + (uri == null ? "" : uri) +
-				" (" + handler.getLocalAddr() + ":" + handler.getLocalPort() + ")";
+				(secure ? "https://" : "http://") + host + (uri == null ? "" : uri) + local;
 	}
 
 	boolean isBegun() {
@@ -215,20 +215,22 @@ class ClientConnection implements Connection {
 	}
 
 	@Override
-	public void onQueue(int delta, int total) {
+	public void onQueue(int size) {
 		if (!proxy.isCurrentClient(this)) {
 			return;
 		}
-		proxyHandler.setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+		proxyHandler.setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 		if (logLevel >= LOG_VERBOSE) {
-			Log.v((total == 0 ? "Request Unblocked, " :
+			Log.v((size == 0 ? "Request Unblocked, " :
 					"Request Blocked, ") + toString(false));
 		}
 	}
 
 	@Override
-	public void onConnect() {
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
 		established = true;
+		local = " (" + localAddr + ":" + localPort + ")";
 		if (logLevel >= LOG_VERBOSE) {
 			Log.v("Client Connection Established, " + toString(false));
 		}
@@ -261,7 +263,7 @@ class ClientConnection implements Connection {
 				Log.v("Client Lost in Response, " + toString(true));
 			}
 		}
-		// TODO if (!begun) retry request 
+		// TODO if (!begun): retry request 
 		if (!established) {
 			proxy.gatewayTimeout();
 		}
@@ -352,6 +354,7 @@ public class ProxyConnection implements Connection {
 	private int logLevel; 
 	private ProxyContext context;
 	private ConnectionHandler handler;
+	private String remote = null;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket request = new HttpPacket();
 	private PeerConnection peer = null;
@@ -372,7 +375,7 @@ public class ProxyConnection implements Connection {
 	}
 
 	String getRemote() {
-		return handler.getRemoteAddr() + ":" + handler.getRemotePort();
+		return remote;
 	}
 
 	void badGateway() {
@@ -638,20 +641,26 @@ public class ProxyConnection implements Connection {
 	}
 
 	@Override
-	public void onQueue(int delta, int total) {
+	public void onQueue(int size) {
 		if (peer != null) {
-			peer.getHandler().setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+			peer.getHandler().setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 			if (logLevel >= LOG_VERBOSE) {
-				Log.v((total == 0 ? "Connection Unblocked, " :
+				Log.v((size == 0 ? "Connection Unblocked, " :
 						"Connection Blocked, ") + peer.toString(true));
 			}
 		} else if (client != null) {
-			client.getHandler().setBufferSize(total == 0 ? MAX_BUFFER_SIZE : 0);
+			client.getHandler().setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 			if (logLevel >= LOG_VERBOSE) {
-				Log.v((total == 0 ? "Response Unblocked, " :
+				Log.v((size == 0 ? "Response Unblocked, " :
 						"Response Blocked, ") + client.toString(true));
 			}
 		}
+	}
+
+	@Override
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
+		remote = remoteAddr + ":" + remotePort;
 	}
 
 	@Override
