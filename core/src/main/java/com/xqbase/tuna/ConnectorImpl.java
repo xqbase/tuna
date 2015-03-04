@@ -72,7 +72,6 @@ class Client {
 	}
 
 	void interestOps() {
-		// FIXME selectionKey may be null ?
 		selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
 				(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
 	}
@@ -232,15 +231,6 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 	}
 
-	private void add(Client client, int ops) {
-		try {
-			client.selectionKey = client.socketChannel.
-					register(selector, ops, client);
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
-	}
-
 	@Override
 	public void connect(Connection connection, String host, int port) throws IOException {
 		Client client = new Client(this, connection);
@@ -269,12 +259,21 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		try {
 			socketChannel = SocketChannel.open();
 			socketChannel.configureBlocking(false);
-			socketChannel.connect(remote);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
-		client.socketChannel = socketChannel;
-		add(client, SelectionKey.OP_CONNECT);
+		try {
+			socketChannel.connect(remote);
+			client.socketChannel = socketChannel;
+			client.selectionKey = client.socketChannel.
+					register(selector, SelectionKey.OP_CONNECT, client);
+		} catch (IOException e) {
+			// May throw "Network is unreachable"
+			try {
+				socketChannel.close();
+			} catch (IOException e_) {/**/}
+			client.connection.onDisconnect();
+		}
 	}
 
 	@Override
@@ -282,12 +281,8 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 			String host, int port) throws IOException {
 		Server server = new Server(this, serverConnection,
 				new InetSocketAddress(host, port));
-		try {
-			server.selectionKey = server.serverSocketChannel.
-					register(selector, SelectionKey.OP_ACCEPT, server);
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
+		server.selectionKey = server.serverSocketChannel.
+				register(selector, SelectionKey.OP_ACCEPT, server);
 		return () -> {
 			if (server.selectionKey.isValid()) {
 				server.close();
@@ -367,11 +362,21 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 					}
 					socketChannel.configureBlocking(false);
 				} catch (IOException e) {
-					throw new RuntimeException(e);
+					continue;
+				}
+				SelectionKey selectionKey;
+				try {
+					selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
+				} catch (IOException e) {
+					try {
+						socketChannel.close();
+					} catch (IOException e_) {/**/}
+					continue;
 				}
 				Client client = new Client(this, server.serverConnection.get());
 				client.socketChannel = socketChannel;
-				add(client, SelectionKey.OP_READ);
+				client.selectionKey = selectionKey;
+				selectionKey.attach(client);
 				client.finishConnect();
 				continue;
 			}

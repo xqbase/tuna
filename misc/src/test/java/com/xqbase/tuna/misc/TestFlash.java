@@ -14,7 +14,6 @@ public class TestFlash {
 	public static void main(String[] args) throws Exception {
 		DoSServerFilter dossf = new DoSServerFilter(60000, 10, 60, 65536);
 		IPTrustSet ipts = new IPTrustSet("127.0.0.1", "0:0:0:0:0:0:0:1");
-		// Evade resource leak warning
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			connector.add(new CrossDomainServer(new File(TestFlash.class.
 					getResource("/crossdomain.xml").toURI())).
