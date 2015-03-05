@@ -3,6 +3,7 @@ package com.xqbase.tuna.portmap;
 import java.io.IOException;
 import java.util.HashMap;
 
+import com.sun.security.ntlm.Client;
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.Connector;

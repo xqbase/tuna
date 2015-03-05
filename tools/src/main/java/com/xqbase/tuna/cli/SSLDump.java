@@ -29,13 +29,13 @@ public class SSLDump {
 			service.shutdown();
 			return;
 		}
+		System.setProperty("java.util.logging.SimpleFormatter.format",
+				"%1$tY-%1$tm-%1$td %1$tk:%1$tM:%1$tS.%1$tL %2$s%n%4$s: %5$s%6$s%n");
+		Logger logger = Log.getAndSet(Conf.openLogger("SSLDump.", 16777216, 10));
 
 		String hostName = args[0];
 		String hostAddr = args[1];
 		int port = args.length < 3 ? 443 : Numbers.parseInt(args[2], 443, 1, 65535);
-		Logger logger = Log.getAndSet(Conf.openLogger("SSLDump.", 16777216, 10));
-		Log.i(String.format("SSLDump Started (%s:%s->%s:%s)",
-				hostName, "" + port, hostAddr, "" + port));
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
 			SSLContext sslcServer = SSLContexts.get("CN=" + hostName, Time.WEEK * 520);
@@ -46,6 +46,8 @@ public class SSLDump {
 			connector.add(server.appendFilter(() -> new DumpFilter().setDumpText(true)).
 					appendFilter(() -> new SSLFilter(connector,
 					connector, sslcServer, SSLFilter.SERVER_NO_AUTH)), 443);
+			Log.i(String.format("SSLDump Started (%s:%s->%s:%s)",
+					hostName, "" + port, hostAddr, "" + port));
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());

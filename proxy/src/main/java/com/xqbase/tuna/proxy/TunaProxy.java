@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.function.BiPredicate;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.logging.Logger;
 
@@ -30,10 +31,14 @@ import sun.security.x509.X500Name;
 import sun.security.x509.X509CertImpl;
 import sun.security.x509.X509CertInfo;
 
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.ServerConnection;
+import com.xqbase.tuna.mux.MuxContext;
+import com.xqbase.tuna.mux.OriginServer;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.ssl.SSLManagers;
+import com.xqbase.tuna.util.Bytes;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -138,6 +143,49 @@ public class TunaProxy {
 			ProxyContext context = new ProxyContext(connector, connector, connector,
 					sslcClient, lookup, auth, p.getProperty("realm"), logLevel);
 			ServerConnection server = () -> new ProxyConnection(context);
+
+			if (Conf.getBoolean(p.getProperty("mux"), false)) {
+				String authPhrase = p.getProperty("mux.auth_phrase");
+				Predicate<byte[]> muxAuth;
+				if (authPhrase == null || authPhrase.isEmpty()) {
+					muxAuth = t -> true;
+				} else {
+					byte[] authPhrase_ = authPhrase.getBytes();
+					muxAuth = t -> t != null && Bytes.equals(t, authPhrase_);
+				}
+				int queueLimit = Numbers.parseInt(p.getProperty("mux.queue_limit"), 1048576);
+				server = new OriginServer(server, new MuxContext(connector, muxAuth, queueLimit));
+				if (logLevel >= ProxyConnection.LOG_DEBUG) {
+					server = server.appendFilter(() -> new ConnectionFilter() {
+						private String recv, send;
+
+						@Override
+						public void onConnect(String localAddr, int localPort,
+								String remoteAddr, int remotePort) {
+							String remote = remoteAddr + ":" + remotePort;
+							String local = localAddr + ":" + localPort;
+							recv = ", " + remote + " => " + local;
+							send = ", " + remote + " <= " + local;
+							Log.d("Edge Connected" + recv);
+						}
+
+						@Override
+						public void onQueue(int size) {
+							super.onQueue(size);
+							if (queueLimit >= 0) {
+								Log.d((size == 0 ? "Edge Connection Unblocked" :
+										"Edge Connection Blocked") + send);
+							}
+						}
+
+						@Override
+						public void onDisconnect() {
+							Log.d("Edge Disconnected" + recv);
+						}
+					});
+				}
+			}
+
 			if (Conf.getBoolean(p.getProperty("ssl"), false)) {
 				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
 				connector.add(server.appendFilter(() -> new SSLFilter(connector,

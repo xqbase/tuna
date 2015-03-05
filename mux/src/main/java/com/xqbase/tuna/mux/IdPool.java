@@ -1,4 +1,4 @@
-package com.xqbase.tuna.allinone;
+package com.xqbase.tuna.mux;
 
 import java.util.ArrayDeque;
 import java.util.HashSet;
@@ -7,7 +7,6 @@ public class IdPool {
 	private static final int MAX_ID = 65535;
 
 	private int nextId = 0;
-
 	private ArrayDeque<Integer> returned = new ArrayDeque<>();
 	private HashSet<Integer> borrowed = new HashSet<>();
 

@@ -3,11 +3,11 @@
 		xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.xqbase</groupId>
-	<artifactId>tuna-allinone</artifactId>
+	<artifactId>tuna-mux</artifactId>
 	<version>0.1.0</version>
 	<packaging>jar</packaging>
-	<name>Tuna All-in-One</name>
-	<description>a Lightweight and High Performance Java Network Framework - All-in-One Part</description>
+	<name>Tuna Mux</name>
+	<description>a Lightweight and High Performance Java Network Framework - Multiplexing Part</description>
 	<url>https://github.com/xqbase/tuna</url>
 
 	<licenses>

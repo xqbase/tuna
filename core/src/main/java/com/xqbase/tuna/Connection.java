@@ -39,7 +39,7 @@ public interface Connection {
 
 	// TODO append filter after onConnect ?
 	/** Adds a {@link ConnectionFilter} as a filter into the network end of the connection. */
-	public default Connection appendFilter(ConnectionFilter filter) {
+	public default ConnectionWrapper appendFilter(ConnectionFilter filter) {
 		filter.connection = this;
 		return new ConnectionWrapper(filter) {
 			@Override
