@@ -1,4 +1,4 @@
-package com.xqbase.tuna.allinone;
+package com.xqbase.tuna.mux;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -12,7 +12,7 @@ import com.xqbase.tuna.packet.PacketFilter;
 import com.xqbase.tuna.util.Bytes;
 
 class ClientConnection implements Connection {
-	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
+	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
 	private OriginConnection origin;
 	private int cid;
@@ -32,14 +32,14 @@ class ClientConnection implements Connection {
 	public void onRecv(byte[] b, int off, int len) {
 		byte[] bb = new byte[HEAD_SIZE + len];
 		System.arraycopy(b, off, bb, HEAD_SIZE, len);
-		AiOPacket.send(origin.handler, bb, AiOPacket.CONNECTION_RECV, cid);
+		MuxPacket.send(origin.handler, bb, MuxPacket.CONNECTION_RECV, cid);
 	}
 
 	@Override
 	public void onQueue(int size) {
 		byte[] bb = new byte[HEAD_SIZE + 4];
 		Bytes.setInt(size, bb, HEAD_SIZE);
-		AiOPacket.send(origin.handler, bb, AiOPacket.CONNECTION_QUEUE, cid);
+		MuxPacket.send(origin.handler, bb, MuxPacket.CONNECTION_QUEUE, cid);
 	}
 
 	@Override
@@ -64,8 +64,8 @@ class ClientConnection implements Connection {
 				HEAD_SIZE + localAddrBytes.length + 2, localAddrBytes.length);
 		Bytes.setShort(remotePort, b, HEAD_SIZE +
 				localAddrBytes.length + 2 + remoteAddrBytes.length);
-		AiOPacket.send(origin.handler, b, AiOPacket.CONNECTION_CONNECT, cid);
-		origin.connMap.put(Integer.valueOf(cid), this);
+		MuxPacket.send(origin.handler, b, MuxPacket.CONNECTION_CONNECT, cid);
+		origin.connectionMap.put(Integer.valueOf(cid), this);
 	}
 
 	boolean activeClose = false;
@@ -75,26 +75,32 @@ class ClientConnection implements Connection {
 		if (activeClose) {
 			return;
 		}
-		origin.connMap.remove(Integer.valueOf(cid));
+		origin.connectionMap.remove(Integer.valueOf(cid));
 		// Do not return cid until ORIGIN_CLOSE received
 		// origin.idPool.returnId(cid);
-		AiOPacket.send(origin.handler,
-				AiOPacket.CONNECTION_DISCONNECT, cid);
+		MuxPacket.send(origin.handler,
+				MuxPacket.CONNECTION_DISCONNECT, cid);
 	}
 }
 
 class OriginConnection implements Connection {
-	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
+	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 	private static final ClientConnection[]
 			EMPTY_CONNECTIONS = new ClientConnection[0];
 
 	private TimerHandler.Closeable closeable = null;
+	private MuxContext context;
+	private int queueLimit;
 
-	HashMap<Integer, ClientConnection> connMap = new HashMap<>();
+	HashMap<Integer, ClientConnection> connectionMap = new HashMap<>();
 	byte[] authPhrase = null;
 	IdPool idPool = new IdPool();
-	TimerHandler timer;
 	ConnectionHandler handler;
+
+	OriginConnection(MuxContext context) {
+		this.context = context;
+		queueLimit = context.getQueueLimit();
+	}
 
 	@Override
 	public void setHandler(ConnectionHandler handler) {
@@ -103,21 +109,21 @@ class OriginConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		AiOPacket packet = new AiOPacket(b, off);
+		MuxPacket packet = new MuxPacket(b, off);
 		switch (packet.cmd) {
-		case AiOPacket.SERVER_PONG:
-		case AiOPacket.SERVER_AUTH_OK:
-		case AiOPacket.SERVER_AUTH_ERROR:
+		case MuxPacket.SERVER_PONG:
+		case MuxPacket.SERVER_AUTH_OK:
+		case MuxPacket.SERVER_AUTH_ERROR:
 			// TODO Handle Auth Failure
 			return;
-		case AiOPacket.SERVER_AUTH_NEED:
+		case MuxPacket.SERVER_AUTH_NEED:
 			if (authPhrase != null) {
 				byte[] bb = new byte[HEAD_SIZE + authPhrase.length];
 				System.arraycopy(authPhrase, 0, bb, HEAD_SIZE, authPhrase.length);
-				AiOPacket.send(handler, bb, AiOPacket.CLIENT_AUTH, 0);
+				MuxPacket.send(handler, bb, MuxPacket.CLIENT_AUTH, 0);
 			}
 			return;
-		case AiOPacket.HANDLER_MULTICAST:
+		case MuxPacket.HANDLER_MULTICAST:
 			int numConns = packet.cid;
 			int dataOff = off + HEAD_SIZE + numConns * 2;
 			int dataLen = packet.size - numConns * 2;
@@ -126,35 +132,35 @@ class OriginConnection implements Connection {
 			}
 			for (int i = 0; i < numConns; i ++) {
 				int cid = Bytes.toShort(b, off + HEAD_SIZE + i * 2) & 0xFFFF;
-				ClientConnection conn = connMap.get(Integer.valueOf(cid));
-				if (conn != null) {
-					conn.handler.send(b, dataOff, dataLen);
+				ClientConnection connection = connectionMap.get(Integer.valueOf(cid));
+				if (connection != null) {
+					connection.handler.send(b, dataOff, dataLen);
 				}
 			}
 			return;
-		case AiOPacket.HANDLER_CLOSE:
+		case MuxPacket.HANDLER_CLOSE:
 			idPool.returnId(packet.cid);
 			return;
 		default:
 			int cid = packet.cid;
-			ClientConnection connection = connMap.get(Integer.valueOf(cid));
+			ClientConnection connection = connectionMap.get(Integer.valueOf(cid));
 			if (connection == null) {
 				return;
 			}
 			switch (packet.cmd) {
-			case AiOPacket.HANDLER_SEND:
+			case MuxPacket.HANDLER_SEND:
 				if (packet.size > 0) {
 					connection.handler.send(b, off + HEAD_SIZE, packet.size);
 				}
 				return;
-			case AiOPacket.HANDLER_BUFFER:
+			case MuxPacket.HANDLER_BUFFER:
 				if (packet.size >= 2) {
 					connection.handler.setBufferSize(Bytes.
 							toShort(b, off + HEAD_SIZE) & 0xFFFF);
 				}
 				return;
-			case AiOPacket.HANDLER_DISCONNECT:
-				connMap.remove(Integer.valueOf(cid));
+			case MuxPacket.HANDLER_DISCONNECT:
+				connectionMap.remove(Integer.valueOf(cid));
 				idPool.returnId(cid);
 				connection.activeClose = true;
 				connection.handler.disconnect();
@@ -165,20 +171,32 @@ class OriginConnection implements Connection {
 
 	@Override
 	public void onQueue(int size) {
-		// TODO if (size > 1048576): block all "ClientConnection"s ? 
+		if (queueLimit < 0) {
+			return;
+		}
+		int bufferSize = size > queueLimit ?
+				Connection.MAX_BUFFER_SIZE : size == 0 ? 0 : -1;
+		if (bufferSize >= 0) {
+			// block or unblock all "ClientConnection"s when origin is conjest or smooth
+			for (ClientConnection connection : connectionMap.
+					values().toArray(EMPTY_CONNECTIONS)) {
+				// "setBuferSize" might change "connectionMap"
+				connection.handler.setBufferSize(bufferSize);
+			}
+		}
 	}
 
 	@Override
 	public void onConnect(String localAddr, int localPort,
 			String remoteAddr, int remotePort) {
-		closeable = timer.scheduleDelayed(() -> {
-			AiOPacket.send(handler, AiOPacket.CLIENT_PING, 0);
+		closeable = context.scheduleDelayed(() -> {
+			MuxPacket.send(handler, MuxPacket.CLIENT_PING, 0);
 		}, 45000, 45000);
 	}
 
 	@Override
 	public void onDisconnect() {
-		for (ClientConnection conn : connMap.
+		for (ClientConnection conn : connectionMap.
 				values().toArray(EMPTY_CONNECTIONS)) {
 			// "conn.onDisconnect()" might change "connMap"
 			conn.activeClose = true;
@@ -204,10 +222,10 @@ class OriginConnection implements Connection {
  * }</code>
  */
 public class EdgeServer implements ServerConnection {
-	private OriginConnection origin = new OriginConnection();
+	private OriginConnection origin;
 
-	public EdgeServer(TimerHandler timer) {
-		origin.timer = timer;
+	public EdgeServer(MuxContext context) {
+		origin = new OriginConnection(context);
 	}
 
 	@Override
@@ -217,7 +235,7 @@ public class EdgeServer implements ServerConnection {
 
 	/** @return The connection to the {@link OriginServer}. */
 	public Connection getOriginConnection() {
-		return origin.appendFilter(new PacketFilter(AiOPacket.PARSER));
+		return origin.appendFilter(new PacketFilter(MuxPacket.PARSER));
 	}
 
 	public void setAuthPhrase(byte[] authPhrase) {

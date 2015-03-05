@@ -263,10 +263,11 @@ class ClientConnection implements Connection {
 				Log.v("Client Lost in Response, " + toString(true));
 			}
 		}
-		// TODO if (!begun): retry request 
 		if (!established) {
 			proxy.gatewayTimeout();
 		}
+		// Just disconnect because request is not saved.
+		// Most browsers will retry request. 
 		proxy.disconnect();
 	}
 

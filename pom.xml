@@ -39,7 +39,7 @@
 	<modules>
 		<module>core</module>
 		<module>misc</module>
-		<module>all-in-one</module>
+		<module>mux</module>
 		<module>tools</module>
 		<module>http</module>
 		<module>proxy</module>

@@ -24,17 +24,19 @@ public class Forward {
 			service.shutdown();
 			return;
 		}
-
+		System.setProperty("java.util.logging.SimpleFormatter.format",
+				"%1$tY-%1$tm-%1$td %1$tk:%1$tM:%1$tS.%1$tL %2$s%n%4$s: %5$s%6$s%n");
 		Logger logger = Log.getAndSet(Conf.openLogger("Forward.", 16777216, 10));
+
 		int port = Numbers.parseInt(args[0], 443, 1, 65535);
 		String remoteHost = args[1];
 		int remotePort = Numbers.parseInt(args[2], 443, 1, 65535);
-		Log.i(String.format("Forward Started (%s->%s:%s)",
-				"" + port, remoteHost, "" + remotePort));
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
 			ForwardServer server = new ForwardServer(connector, remoteHost, remotePort);
 			connector.add(server, port);
+			Log.i(String.format("Forward Started (%s->%s:%s)",
+					"" + port, remoteHost, "" + remotePort));
 			connector.doEvents();
 		} catch (IOException e) {
 			Log.w(e.getMessage());

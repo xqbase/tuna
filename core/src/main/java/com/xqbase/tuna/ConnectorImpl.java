@@ -231,6 +231,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 	}
 
+	/** @throws IOException if no IP address for the <code>host</code> could be found*/
 	@Override
 	public void connect(Connection connection, String host, int port) throws IOException {
 		Client client = new Client(this, connection);

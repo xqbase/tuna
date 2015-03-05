@@ -1,4 +1,4 @@
-package com.xqbase.tuna.allinone;
+package com.xqbase.tuna.mux;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -7,6 +7,7 @@ import java.util.Map.Entry;
 
 import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectionHandler;
+import com.xqbase.tuna.mux.TestMulticast;
 import com.xqbase.tuna.util.Bytes;
 
 /**
@@ -15,7 +16,7 @@ import com.xqbase.tuna.util.Bytes;
  * For detailed usage, see {@link TestMulticast} from github.com
  */
 public class MulticastHandler implements ConnectionHandler {
-	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
+	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
 	public static boolean isMulticast(ConnectionHandler handler) {
 		ConnectionHandler handler_ = handler;
@@ -57,15 +58,16 @@ public class MulticastHandler implements ConnectionHandler {
 				continue;
 			}
 			VirtualHandler virtual = ((VirtualHandler) handler);
-			ArrayList<Integer> connList = connListMap.get(virtual.getAiOHandler());
+			ConnectionHandler muxHandler = virtual.getMuxHandler();
+			ArrayList<Integer> connList = connListMap.get(muxHandler);
 			if (connList == null) {
 				connList = new ArrayList<>();
-				connListMap.put(virtual.getAiOHandler(), connList);
+				connListMap.put(muxHandler, connList);
 			}
 			connList.add(Integer.valueOf(virtual.getConnectionID()));
 		}
 		for (Entry<ConnectionHandler, ArrayList<Integer>> entry : connListMap.entrySet()) {
-			ConnectionHandler aioHandler = entry.getKey();
+			ConnectionHandler muxHandler = entry.getKey();
 			ArrayList<Integer> connList = entry.getValue();
 			int numConnsToSend = connList.size();
 			int numConnsSent = 0;
@@ -77,7 +79,7 @@ public class MulticastHandler implements ConnectionHandler {
 							bb, HEAD_SIZE + i * 2);
 				}
 				System.arraycopy(b, off, bb, HEAD_SIZE + numConns * 2, len);
-				AiOPacket.send(aioHandler, bb, AiOPacket.HANDLER_MULTICAST, numConns);
+				MuxPacket.send(muxHandler, bb, MuxPacket.HANDLER_MULTICAST, numConns);
 				numConnsToSend -= numConns;
 				numConnsSent += numConns;
 			}

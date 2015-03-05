@@ -1,11 +1,11 @@
-package com.xqbase.tuna.allinone;
+package com.xqbase.tuna.mux;
 
 import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.packet.PacketException;
 import com.xqbase.tuna.packet.PacketParser;
 import com.xqbase.tuna.util.Bytes;
 
-class AiOPacket {
+class MuxPacket {
 	private static final int HEAD_TAG	= 0x2095;
 
 	// Client Commands
@@ -45,7 +45,7 @@ class AiOPacket {
 
 	int size, cmd, cid;
 
-	AiOPacket(byte[] b, int off) {
+	MuxPacket(byte[] b, int off) {
 		size = Bytes.toShort(b, off + 2) & 0xFFFF;
 		cmd = Bytes.toShort(b, off + 4);
 		cid = Bytes.toShort(b, off + 6) & 0xFFFF;

@@ -29,24 +29,22 @@ public class SSLForward {
 			service.shutdown();
 			return;
 		}
+		System.setProperty("java.util.logging.SimpleFormatter.format",
+				"%1$tY-%1$tm-%1$td %1$tk:%1$tM:%1$tS.%1$tL %2$s%n%4$s: %5$s%6$s%n");
+		Logger logger = Log.getAndSet(Conf.openLogger("SSLForward.", 16777216, 10));
 
 		String localHost, remoteHost;
 		int localPort, remotePort;
-		Logger logger = Log.getAndSet(Conf.openLogger("SSLForward.", 16777216, 10));
 		if (args.length < 4) {
 			localHost = null;
 			localPort = Numbers.parseInt(args[0], 443, 1, 65535);
 			remoteHost = args[1];
 			remotePort = Numbers.parseInt(args[2], 443, 1, 65535);
-			Log.i(String.format("SSLForward Started in Client mode (%s->%s:%s)",
-					"" + localPort, remoteHost, "" + remotePort));
 		} else {
 			localHost = args[0];
 			localPort = Numbers.parseInt(args[1], 443, 1, 65535);
 			remoteHost = args[2];
 			remotePort = Numbers.parseInt(args[3], 443, 1, 65535);
-			Log.i(String.format("SSLForward Started in Server mode (%s:%s->%s:%s)",
-					localHost, "" + localPort, remoteHost, "" + remotePort));
 		}
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
@@ -56,10 +54,14 @@ public class SSLForward {
 				server.appendRemoteFilter(() -> new SSLFilter(connector,
 						connector, sslc, SSLFilter.CLIENT));
 				connector.add(server, localPort);
+				Log.i(String.format("SSLForward Started in Client mode (%s->%s:%s)",
+						"" + localPort, remoteHost, "" + remotePort));
 			} else {
 				SSLContext sslc = SSLContexts.get("CN=" + localHost, Time.WEEK * 520);
 				connector.add(server.appendFilter(() -> new SSLFilter(connector,
 						connector, sslc, SSLFilter.SERVER_NO_AUTH)), localPort);
+				Log.i(String.format("SSLForward Started in Server mode (%s:%s->%s:%s)",
+						localHost, "" + localPort, remoteHost, "" + remotePort));
 			}
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {

@@ -1,11 +1,10 @@
-package com.xqbase.tuna.allinone;
+package com.xqbase.tuna.mux;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
-import java.util.function.Predicate;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
@@ -16,7 +15,7 @@ import com.xqbase.tuna.packet.PacketFilter;
 import com.xqbase.tuna.util.Bytes;
 
 class DirectVirtualHandler implements VirtualHandler {
-	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
+	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
 	private EdgeConnection edge;
 	private int cid;
@@ -30,20 +29,20 @@ class DirectVirtualHandler implements VirtualHandler {
 	public void send(byte[] b, int off, int len) {
 		byte[] bb = new byte[HEAD_SIZE + len];
 		System.arraycopy(b, off, bb, HEAD_SIZE, len);
-		AiOPacket.send(edge.handler, bb, AiOPacket.HANDLER_SEND, cid);
+		MuxPacket.send(edge.handler, bb, MuxPacket.HANDLER_SEND, cid);
 	}
 
 	@Override
 	public void setBufferSize(int bufferSize) {
 		byte[] b = new byte[HEAD_SIZE + 2];
 		Bytes.setShort(bufferSize, b, HEAD_SIZE);
-		AiOPacket.send(edge.handler, b, AiOPacket.HANDLER_BUFFER, cid);
+		MuxPacket.send(edge.handler, b, MuxPacket.HANDLER_BUFFER, cid);
 	}
 
 	@Override
 	public void disconnect() {
-		edge.connMap.remove(Integer.valueOf(cid));
-		AiOPacket.send(edge.handler, AiOPacket.HANDLER_DISCONNECT, cid);
+		edge.connectionMap.remove(Integer.valueOf(cid));
+		MuxPacket.send(edge.handler, MuxPacket.HANDLER_DISCONNECT, cid);
 	}
 
 	@Override
@@ -52,25 +51,27 @@ class DirectVirtualHandler implements VirtualHandler {
 	}
 
 	@Override
-	public ConnectionHandler getAiOHandler() {
+	public ConnectionHandler getMuxHandler() {
 		return edge.handler;
 	}
 }
 
 class EdgeConnection implements Connection {
-	private static final int HEAD_SIZE = AiOPacket.HEAD_SIZE;
+	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 	private static final Connection[] EMPTY_CONNECTIONS = new Connection[0];
 
-	HashMap<Integer, Connection> connMap = new HashMap<>();
+	HashMap<Integer, Connection> connectionMap = new HashMap<>();
 	ConnectionHandler handler;
 	long accessed = System.currentTimeMillis();
 
 	private OriginServer origin;
 	private boolean authed;
+	private int queueLimit;
 
 	EdgeConnection(OriginServer origin) {
 		this.origin = origin;
-		authed = origin.auth == null;
+		authed = origin.context.test(null);
+		queueLimit = origin.context.getQueueLimit();
 	}
 
 	@Override
@@ -83,25 +84,24 @@ class EdgeConnection implements Connection {
 		origin.timeoutSet.remove(this);
 		accessed = System.currentTimeMillis();
 		origin.timeoutSet.add(this);
-		AiOPacket packet = new AiOPacket(b, off);
+		MuxPacket packet = new MuxPacket(b, off);
 		int cid = packet.cid;
 		switch (packet.cmd) {
-		case AiOPacket.CLIENT_PING:
-			AiOPacket.send(handler, AiOPacket.SERVER_PONG, 0);
+		case MuxPacket.CLIENT_PING:
+			MuxPacket.send(handler, MuxPacket.SERVER_PONG, 0);
 			break;
-		case AiOPacket.CLIENT_AUTH:
-			authed = origin.auth == null ||
-					origin.auth.test(Bytes.sub(b, HEAD_SIZE, packet.size));
-			AiOPacket.send(handler, authed ? AiOPacket.SERVER_AUTH_OK :
-					AiOPacket.SERVER_AUTH_ERROR, 0);
+		case MuxPacket.CLIENT_AUTH:
+			authed = origin.context.test(Bytes.sub(b, HEAD_SIZE, packet.size));
+			MuxPacket.send(handler, authed ? MuxPacket.SERVER_AUTH_OK :
+					MuxPacket.SERVER_AUTH_ERROR, 0);
 			return;
-		case AiOPacket.CONNECTION_CONNECT:
+		case MuxPacket.CONNECTION_CONNECT:
 			if (!authed) {
-				AiOPacket.send(handler, AiOPacket.SERVER_AUTH_NEED, 0);
-				AiOPacket.send(handler, AiOPacket.HANDLER_DISCONNECT, cid);
+				MuxPacket.send(handler, MuxPacket.SERVER_AUTH_NEED, 0);
+				MuxPacket.send(handler, MuxPacket.HANDLER_DISCONNECT, cid);
 				return;
 			}
-			if (connMap.containsKey(Integer.valueOf(cid))) {
+			if (connectionMap.containsKey(Integer.valueOf(cid))) {
 				// throw new PacketException("#" + cid + " Already Exists");
 				disconnect();
 				return;
@@ -127,28 +127,28 @@ class EdgeConnection implements Connection {
 			}
 			DirectVirtualHandler virtualHandler = new DirectVirtualHandler(this, cid);
 			connection.setHandler(virtualHandler);
-			connMap.put(Integer.valueOf(cid), connection);
+			connectionMap.put(Integer.valueOf(cid), connection);
 			connection.onConnect(localAddr, localPort, remoteAddr, remotePort);
 			break;
 		default:
-			connection = connMap.get(Integer.valueOf(cid));
+			connection = connectionMap.get(Integer.valueOf(cid));
 			if (connection == null) {
 				return;
 			}
 			switch (packet.cmd) {
-			case AiOPacket.CONNECTION_RECV:
+			case MuxPacket.CONNECTION_RECV:
 				if (packet.size > 0) {
 					connection.onRecv(b, off + HEAD_SIZE, packet.size);
 				}
 				break;
-			case AiOPacket.CONNECTION_QUEUE:
+			case MuxPacket.CONNECTION_QUEUE:
 				if (packet.size >= 4) {
 					connection.onQueue(Bytes.toInt(b, off + HEAD_SIZE));
 				}
 				break;
-			case AiOPacket.CONNECTION_DISCONNECT:
-				connMap.remove(Integer.valueOf(cid));
-				AiOPacket.send(handler, AiOPacket.HANDLER_CLOSE, cid);
+			case MuxPacket.CONNECTION_DISCONNECT:
+				connectionMap.remove(Integer.valueOf(cid));
+				MuxPacket.send(handler, MuxPacket.HANDLER_CLOSE, cid);
 				connection.onDisconnect();
 			}
 		}
@@ -156,23 +156,33 @@ class EdgeConnection implements Connection {
 
 	@Override
 	public void onQueue(int size) {
-		// TODO if (size > 1048576): send onQueue to all Virtual Connections ?
+		if (queueLimit < 0) {
+			return;
+		}
+		if (size == 0 || size > queueLimit) {
+			// Tell all virtual connections that edge is smooth or congested 
+			for (Connection connection : connectionMap.
+					values().toArray(EMPTY_CONNECTIONS)) {
+				// "connecton.onQueue()" might change "connectionMap"
+				connection.onQueue(size);
+			}
+		}
 	}
 
 	@Override
 	public void onConnect(String localAddr, int localPort,
 			String remoteAddr, int remotePort) {
 		if (!authed) {
-			AiOPacket.send(handler, AiOPacket.SERVER_AUTH_NEED, 0);
+			MuxPacket.send(handler, MuxPacket.SERVER_AUTH_NEED, 0);
 		}
 	}
 
 	@Override
 	public void onDisconnect() {
 		origin.timeoutSet.remove(this);
-		for (Connection connection : connMap.
+		for (Connection connection : connectionMap.
 				values().toArray(EMPTY_CONNECTIONS)) {
-			// "conn.onDisconnect()" might change "connMap"
+			// "connecton.onDisconnect()" might change "connectionMap"
 			connection.onDisconnect();
 		}
 	}
@@ -191,15 +201,14 @@ class EdgeConnection implements Connection {
 public class OriginServer implements ServerConnection, AutoCloseable {
 	LinkedHashSet<EdgeConnection> timeoutSet = new LinkedHashSet<>();
 	ServerConnection server;
-	Predicate<byte[]> auth;
+	MuxContext context;
 
 	private TimerHandler.Closeable closeable;
 
-	public OriginServer(ServerConnection server,
-			Predicate<byte[]> auth, TimerHandler timer) {
+	public OriginServer(ServerConnection server, MuxContext context) {
 		this.server = server;
-		this.auth = auth;
-		closeable = timer.scheduleDelayed(() -> {
+		this.context = context;
+		closeable = context.scheduleDelayed(() -> {
 			long now = System.currentTimeMillis();
 			Iterator<EdgeConnection> i = timeoutSet.iterator();
 			EdgeConnection edge;
@@ -214,7 +223,7 @@ public class OriginServer implements ServerConnection, AutoCloseable {
 	public Connection get() {
 		EdgeConnection edgeConnection = new EdgeConnection(this);
 		timeoutSet.add(edgeConnection);
-		return edgeConnection.appendFilter(new PacketFilter(AiOPacket.PARSER));
+		return edgeConnection.appendFilter(new PacketFilter(MuxPacket.PARSER));
 	}
 
 	@Override
