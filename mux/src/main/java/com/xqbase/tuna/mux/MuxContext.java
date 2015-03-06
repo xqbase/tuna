@@ -26,7 +26,18 @@ public class MuxContext implements TimerHandler, Predicate<byte[]> {
 		return auth.test(t);
 	}
 
-	public int getQueueLimit() {
-		return queueLimit;
+	public boolean isQueueChanged(int size, boolean[] queued) {
+		if (queueLimit < 0) {
+			return false;
+		}
+		if (size > queueLimit) {
+			queued[0] = true;
+			return true;
+		}
+		if (size == 0 && queued[0]) {
+			queued[0] = false;
+			return true;
+		}
+		return false;
 	}
 }

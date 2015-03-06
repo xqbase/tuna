@@ -7,13 +7,12 @@ import java.util.Map.Entry;
 
 import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectionHandler;
-import com.xqbase.tuna.mux.TestMulticast;
 import com.xqbase.tuna.util.Bytes;
 
 /**
  * The broadcasting to a large number of virtual connections can be done via a multicast
  * connection, which can save the network bandwidth by the multicast approach.<p>
- * For detailed usage, see {@link TestMulticast} from github.com
+ * For detailed usage, see {@link com.xqbase.tuna.mux.TestMulticast} from github.com
  */
 public class MulticastHandler implements ConnectionHandler {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;

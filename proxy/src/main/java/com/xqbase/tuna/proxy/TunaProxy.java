@@ -154,14 +154,26 @@ public class TunaProxy {
 					muxAuth = t -> t != null && Bytes.equals(t, authPhrase_);
 				}
 				int queueLimit = Numbers.parseInt(p.getProperty("mux.queue_limit"), 1048576);
-				server = new OriginServer(server, new MuxContext(connector, muxAuth, queueLimit));
+				MuxContext muxContext = new MuxContext(connector, muxAuth, queueLimit);
+				server = new OriginServer(server, muxContext);
 				if (logLevel >= ProxyConnection.LOG_DEBUG) {
 					server = server.appendFilter(() -> new ConnectionFilter() {
+						private boolean[] queued = {false};
 						private String recv, send;
+
+						@Override
+						public void onQueue(int size) {
+							super.onQueue(size);
+							if (muxContext.isQueueChanged(size, queued)) {
+								Log.d((size == 0 ? "Edge Connection Unblocked" :
+									"Edge Connection Blocked (" + size + ")") + send);
+							}
+						}
 
 						@Override
 						public void onConnect(String localAddr, int localPort,
 								String remoteAddr, int remotePort) {
+							super.onConnect(localAddr, localPort, remoteAddr, remotePort);
 							String remote = remoteAddr + ":" + remotePort;
 							String local = localAddr + ":" + localPort;
 							recv = ", " + remote + " => " + local;
@@ -170,16 +182,8 @@ public class TunaProxy {
 						}
 
 						@Override
-						public void onQueue(int size) {
-							super.onQueue(size);
-							if (queueLimit >= 0) {
-								Log.d((size == 0 ? "Edge Connection Unblocked" :
-										"Edge Connection Blocked") + send);
-							}
-						}
-
-						@Override
 						public void onDisconnect() {
+							super.onDisconnect();
 							Log.d("Edge Disconnected" + recv);
 						}
 					});

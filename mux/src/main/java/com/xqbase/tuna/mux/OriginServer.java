@@ -61,17 +61,16 @@ class EdgeConnection implements Connection {
 	private static final Connection[] EMPTY_CONNECTIONS = new Connection[0];
 
 	HashMap<Integer, Connection> connectionMap = new HashMap<>();
-	ConnectionHandler handler;
 	long accessed = System.currentTimeMillis();
+	ConnectionHandler handler;
 
+	private boolean[] queued = {false};
 	private OriginServer origin;
 	private boolean authed;
-	private int queueLimit;
 
 	EdgeConnection(OriginServer origin) {
 		this.origin = origin;
 		authed = origin.context.test(null);
-		queueLimit = origin.context.getQueueLimit();
 	}
 
 	@Override
@@ -91,7 +90,7 @@ class EdgeConnection implements Connection {
 			MuxPacket.send(handler, MuxPacket.SERVER_PONG, 0);
 			break;
 		case MuxPacket.CLIENT_AUTH:
-			authed = origin.context.test(Bytes.sub(b, HEAD_SIZE, packet.size));
+			authed = origin.context.test(Bytes.sub(b, off + HEAD_SIZE, packet.size));
 			MuxPacket.send(handler, authed ? MuxPacket.SERVER_AUTH_OK :
 					MuxPacket.SERVER_AUTH_ERROR, 0);
 			return;
@@ -113,14 +112,16 @@ class EdgeConnection implements Connection {
 				int addrLen = packet.size / 2 - 2;
 				try {
 					localAddr = InetAddress.getByAddress(Bytes.
-							sub(b, HEAD_SIZE, addrLen)).getHostAddress();
+							sub(b, off + HEAD_SIZE, addrLen)).getHostAddress();
 					remoteAddr = InetAddress.getByAddress(Bytes.
-							sub(b, HEAD_SIZE + addrLen + 2, addrLen)).getHostAddress();
+							sub(b, off + HEAD_SIZE + addrLen + 2, addrLen)).getHostAddress();
 				} catch (IOException e) {
 					localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
 				}
-				localPort = Bytes.toShort(Bytes.sub(b, HEAD_SIZE + addrLen, 2)) & 0xFFFF;
-				remotePort = Bytes.toShort(Bytes.sub(b, HEAD_SIZE + addrLen * 2 + 2, 2)) & 0xFFFF;
+				localPort = Bytes.toShort(Bytes.
+						sub(b, off + HEAD_SIZE + addrLen, 2)) & 0xFFFF;
+				remotePort = Bytes.toShort(Bytes.
+						sub(b, off + HEAD_SIZE + addrLen * 2 + 2, 2)) & 0xFFFF;
 			} else {
 				localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
 				localPort = remotePort = 0;
@@ -156,16 +157,14 @@ class EdgeConnection implements Connection {
 
 	@Override
 	public void onQueue(int size) {
-		if (queueLimit < 0) {
+		if (!origin.context.isQueueChanged(size, queued)) {
 			return;
 		}
-		if (size == 0 || size > queueLimit) {
-			// Tell all virtual connections that edge is smooth or congested 
-			for (Connection connection : connectionMap.
-					values().toArray(EMPTY_CONNECTIONS)) {
-				// "connecton.onQueue()" might change "connectionMap"
-				connection.onQueue(size);
-			}
+		// Tell all virtual connections that edge is congested or smooth 
+		for (Connection connection : connectionMap.
+				values().toArray(EMPTY_CONNECTIONS)) {
+			// "connecton.onQueue()" might change "connectionMap"
+			connection.onQueue(size);
 		}
 	}
 

@@ -60,7 +60,7 @@ class PeerConnection implements Connection {
 		peerHandler.setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 		if (logLevel >= LOG_VERBOSE) {
 			Log.v((size == 0 ? "Connection Unblocked, " :
-					"Connection Blocked, ") + toString(false));
+					"Connection Blocked (" + size + "), ") + toString(false));
 		}
 	}
 
@@ -222,7 +222,7 @@ class ClientConnection implements Connection {
 		proxyHandler.setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 		if (logLevel >= LOG_VERBOSE) {
 			Log.v((size == 0 ? "Request Unblocked, " :
-					"Request Blocked, ") + toString(false));
+					"Request Blocked (" + size + "), ") + toString(false));
 		}
 	}
 
@@ -647,13 +647,13 @@ public class ProxyConnection implements Connection {
 			peer.getHandler().setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v((size == 0 ? "Connection Unblocked, " :
-						"Connection Blocked, ") + peer.toString(true));
+						"Connection Blocked (" + size + "), ") + peer.toString(true));
 			}
 		} else if (client != null) {
 			client.getHandler().setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v((size == 0 ? "Response Unblocked, " :
-						"Response Blocked, ") + client.toString(true));
+						"Response Blocked (" + size + "), ") + client.toString(true));
 			}
 		}
 	}
