@@ -14,7 +14,7 @@ public class TestEdge {
 			EdgeServer edge = new EdgeServer(new MuxContext(connector, null, 1048576));
 			edge.setAuthPhrase("guest".getBytes());
 			connector.add(edge, 2626);
-			connector.connect(edge.getOriginConnection().
+			connector.connect(edge.getMuxConnection().
 					appendFilter(new DumpFilter()).appendFilter(new ConnectionFilter() {
 				@Override
 				public void onDisconnect() {

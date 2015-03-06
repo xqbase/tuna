@@ -51,14 +51,6 @@ class MuxPacket {
 		cid = Bytes.toShort(b, off + 6) & 0xFFFF;
 	}
 
-	static void send(ConnectionHandler handler, byte[] b, int cmd, int cid) {
-		Bytes.setShort(HEAD_TAG, b, 0);
-		Bytes.setShort(b.length - HEAD_SIZE, b, 2);
-		Bytes.setShort(cmd, b, 4);
-		Bytes.setShort(cid, b, 6);
-		handler.send(b);
-	}
-
 	static void send(ConnectionHandler handler, int cmd, int cid) {
 		byte[] head = new byte[8];
 		Bytes.setShort(HEAD_TAG, head, 0);
@@ -66,5 +58,13 @@ class MuxPacket {
 		Bytes.setShort(cmd, head, 4);
 		Bytes.setShort(cid, head, 6);
 		handler.send(head);
+	}
+
+	static void send(ConnectionHandler handler, byte[] b, int cmd, int cid) {
+		Bytes.setShort(HEAD_TAG, b, 0);
+		Bytes.setShort(b.length - HEAD_SIZE, b, 2);
+		Bytes.setShort(cmd, b, 4);
+		Bytes.setShort(cid, b, 6);
+		handler.send(b);
 	}
 }

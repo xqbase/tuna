@@ -11,16 +11,16 @@ import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
 import com.xqbase.tuna.util.Bytes;
 
-class ClientConnection implements Connection {
+class TerminalConnection implements Connection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
-	private OriginConnection origin;
+	private EdgeMuxConnection mux;
 	private int cid;
 
 	ConnectionHandler handler;
 
-	ClientConnection(OriginConnection origin) {
-		this.origin = origin;
+	TerminalConnection(EdgeMuxConnection mux) {
+		this.mux = mux;
 	}
 
 	@Override
@@ -32,20 +32,20 @@ class ClientConnection implements Connection {
 	public void onRecv(byte[] b, int off, int len) {
 		byte[] bb = new byte[HEAD_SIZE + len];
 		System.arraycopy(b, off, bb, HEAD_SIZE, len);
-		MuxPacket.send(origin.handler, bb, MuxPacket.CONNECTION_RECV, cid);
+		MuxPacket.send(mux.handler, bb, MuxPacket.CONNECTION_RECV, cid);
 	}
 
 	@Override
 	public void onQueue(int size) {
 		byte[] bb = new byte[HEAD_SIZE + 4];
 		Bytes.setInt(size, bb, HEAD_SIZE);
-		MuxPacket.send(origin.handler, bb, MuxPacket.CONNECTION_QUEUE, cid);
+		MuxPacket.send(mux.handler, bb, MuxPacket.CONNECTION_QUEUE, cid);
 	}
 
 	@Override
 	public void onConnect(String localAddr, int localPort,
 			String remoteAddr, int remotePort) {
-		cid = origin.idPool.borrowId();
+		cid = mux.idPool.borrowId();
 		if (cid < 0) {
 			handler.disconnect();
 			return;
@@ -64,8 +64,8 @@ class ClientConnection implements Connection {
 				HEAD_SIZE + localAddrBytes.length + 2, localAddrBytes.length);
 		Bytes.setShort(remotePort, b, HEAD_SIZE +
 				localAddrBytes.length + 2 + remoteAddrBytes.length);
-		MuxPacket.send(origin.handler, b, MuxPacket.CONNECTION_CONNECT, cid);
-		origin.connectionMap.put(Integer.valueOf(cid), this);
+		MuxPacket.send(mux.handler, b, MuxPacket.CONNECTION_CONNECT, cid);
+		mux.connectionMap.put(Integer.valueOf(cid), this);
 	}
 
 	boolean activeClose = false;
@@ -75,29 +75,29 @@ class ClientConnection implements Connection {
 		if (activeClose) {
 			return;
 		}
-		origin.connectionMap.remove(Integer.valueOf(cid));
-		// Do not return cid until ORIGIN_CLOSE received
-		// origin.idPool.returnId(cid);
-		MuxPacket.send(origin.handler,
+		mux.connectionMap.remove(Integer.valueOf(cid));
+		// Do not return cid until HANDLER_CLOSE received
+		// mux.idPool.returnId(cid);
+		MuxPacket.send(mux.handler,
 				MuxPacket.CONNECTION_DISCONNECT, cid);
 	}
 }
 
-class OriginConnection implements Connection {
+class EdgeMuxConnection implements Connection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
-	private static final ClientConnection[]
-			EMPTY_CONNECTIONS = new ClientConnection[0];
+	private static final TerminalConnection[]
+			EMPTY_CONNECTIONS = new TerminalConnection[0];
 
 	private TimerHandler.Closeable closeable = null;
 	private boolean[] queued = {false};
 	private MuxContext context;
 
-	HashMap<Integer, ClientConnection> connectionMap = new HashMap<>();
+	HashMap<Integer, TerminalConnection> connectionMap = new HashMap<>();
 	byte[] authPhrase = null;
 	IdPool idPool = new IdPool();
 	ConnectionHandler handler;
 
-	OriginConnection(MuxContext context) {
+	EdgeMuxConnection(MuxContext context) {
 		this.context = context;
 	}
 
@@ -131,7 +131,7 @@ class OriginConnection implements Connection {
 			}
 			for (int i = 0; i < numConns; i ++) {
 				int cid = Bytes.toShort(b, off + HEAD_SIZE + i * 2) & 0xFFFF;
-				ClientConnection connection = connectionMap.get(Integer.valueOf(cid));
+				TerminalConnection connection = connectionMap.get(Integer.valueOf(cid));
 				if (connection != null) {
 					connection.handler.send(b, dataOff, dataLen);
 				}
@@ -142,7 +142,7 @@ class OriginConnection implements Connection {
 			return;
 		default:
 			int cid = packet.cid;
-			ClientConnection connection = connectionMap.get(Integer.valueOf(cid));
+			TerminalConnection connection = connectionMap.get(Integer.valueOf(cid));
 			if (connection == null) {
 				return;
 			}
@@ -174,8 +174,8 @@ class OriginConnection implements Connection {
 			return;
 		}
 		int bufferSize = size == 0 ? 0 : Connection.MAX_BUFFER_SIZE;
-		// block or unblock all "ClientConnection"s when origin is conjested or smooth
-		for (ClientConnection connection : connectionMap.
+		// block or unblock all "TerminateConnection"s when mux is congested or smooth
+		for (TerminalConnection connection : connectionMap.
 				values().toArray(EMPTY_CONNECTIONS)) {
 			// "setBuferSize" might change "connectionMap"
 			connection.handler.setBufferSize(bufferSize);
@@ -192,9 +192,9 @@ class OriginConnection implements Connection {
 
 	@Override
 	public void onDisconnect() {
-		for (ClientConnection conn : connectionMap.
+		for (TerminalConnection conn : connectionMap.
 				values().toArray(EMPTY_CONNECTIONS)) {
-			// "conn.onDisconnect()" might change "connMap"
+			// "conn.onDisconnect()" might change "connectionMap"
 			conn.activeClose = true;
 			conn.handler.disconnect();
 		}
@@ -208,33 +208,27 @@ class OriginConnection implements Connection {
  * An edge server for the {@link OriginServer}. All the accepted connections
  * will become the virtual connections of the connected OriginServer.<p>
  * The edge connection must be connected to the OriginServer immediately,
- * after the EdgeServer created.
- * Here is the code to make an edge server working:<p><code>
- * try (Connector connector = new Connector()) {<br>
- * &nbsp;&nbsp;EdgeServer edge = new EdgeServer(connector);<br>
- * &nbsp;&nbsp;connector.add(edge, 2424);<br>
- * &nbsp;&nbsp;connector.connect(edge.getOriginConnection(), "localhost", 2323);<br>
- * &nbsp;&nbsp;connector.doEvents();<br>
- * }</code>
+ * before the EdgeServer added into a {@link Connector}.<p>
+ * For detailed usage, see {@link com.xqbase.tuna.cli.Edge} in github.com
  */
 public class EdgeServer implements ServerConnection {
-	private OriginConnection origin;
+	private EdgeMuxConnection mux;
 
 	public EdgeServer(MuxContext context) {
-		origin = new OriginConnection(context);
+		mux = new EdgeMuxConnection(context);
 	}
 
 	@Override
 	public Connection get() {
-		return new ClientConnection(origin);
+		return new TerminalConnection(mux);
 	}
 
 	/** @return The connection to the {@link OriginServer}. */
-	public Connection getOriginConnection() {
-		return origin.appendFilter(new PacketFilter(MuxPacket.PARSER));
+	public Connection getMuxConnection() {
+		return mux.appendFilter(new PacketFilter(MuxPacket.PARSER));
 	}
 
 	public void setAuthPhrase(byte[] authPhrase) {
-		origin.authPhrase = authPhrase;
+		mux.authPhrase = authPhrase;
 	}
 }

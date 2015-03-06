@@ -59,7 +59,7 @@ class EdgeLoop implements Runnable {
 	public void run() {
 		EdgeServer server = new EdgeServer(context);
 		server.setAuthPhrase(authPhrase);
-		Connection connection = new ConnectionWrapper(server.getOriginConnection()) {
+		Connection connection = new ConnectionWrapper(server.getMuxConnection()) {
 			private boolean[] queued = {false};
 			private Connector.Closeable closeable = null;
 			private String local = "0.0.0.0:0", remote = "0.0.0.0:0";
@@ -75,8 +75,8 @@ class EdgeLoop implements Runnable {
 			public void onQueue(int size) {
 				super.onQueue(size);
 				if (context.isQueueChanged(size, queued)) {
-					Log.d((size == 0 ? "Origin Connection Unblocked, " :
-						"Origin Connection Blocked (" + size + "), ") +
+					Log.d((size == 0 ? "Mux Connection Unblocked, " :
+						"Mux Connection Blocked (" + size + "), ") +
 						local + " => " + remote);
 				}
 			}
@@ -87,12 +87,12 @@ class EdgeLoop implements Runnable {
 				super.onConnect(localAddr, localPort, remoteAddr, remotePort);
 				local = localAddr + ":" + localPort;
 				remote = remoteAddr + ":" + remotePort;
-				Log.i("Origin Connection Established, " + local + " => " + remote);
+				Log.i("Mux Connection Established, " + local + " => " + remote);
 				try {
 					closeable = connector.add(server, port);
 				} catch (IOException e) {
 					Log.w(e.getMessage());
-					Log.i("Disconnect Origin and wait 1 second before retry ...");
+					Log.i("Disconnect Mux and wait 1 second before retry ...");
 					handler.disconnect();
 					connector.postDelayed(EdgeLoop.this, Time.SECOND);
 				}
@@ -102,13 +102,13 @@ class EdgeLoop implements Runnable {
 			public void onDisconnect() {
 				super.onDisconnect();
 				if (closeable == null) {
-					Log.i("Origin Connection Failed, " + local + " => " + remote);
+					Log.i("Mux Connection Failed, " + local + " => " + remote);
 				} else {
 					closeable.close();
 					closeable = null;
-					Log.i("Origin Connection Lost, " + local + " <= " + remote);
+					Log.i("Mux Connection Lost, " + local + " <= " + remote);
 				}
-				Log.i("Disconnect Origin and wait 1 second before retry ...");
+				Log.i("Wait 1 second before retry ...");
 				connector.postDelayed(EdgeLoop.this, Time.SECOND);
 			}
 		};

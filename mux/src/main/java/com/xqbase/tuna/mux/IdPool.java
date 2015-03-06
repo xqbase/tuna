@@ -3,14 +3,14 @@ package com.xqbase.tuna.mux;
 import java.util.ArrayDeque;
 import java.util.HashSet;
 
-public class IdPool {
+class IdPool {
 	private static final int MAX_ID = 65535;
 
 	private int nextId = 0;
 	private ArrayDeque<Integer> returned = new ArrayDeque<>();
 	private HashSet<Integer> borrowed = new HashSet<>();
 
-	public int borrowId() {
+	int borrowId() {
 		Integer i = returned.poll();
 		if (i == null) {
 			if (nextId > MAX_ID) {
@@ -23,7 +23,7 @@ public class IdPool {
 		return i.intValue();
 	}
 
-	public void returnId(int id) {
+	void returnId(int id) {
 		Integer i = Integer.valueOf(id);
 		if (borrowed.remove(i)) {
 			returned.offer(i);
