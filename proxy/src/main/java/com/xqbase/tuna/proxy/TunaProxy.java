@@ -165,8 +165,8 @@ public class TunaProxy {
 						public void onQueue(int size) {
 							super.onQueue(size);
 							if (muxContext.isQueueChanged(size, queued)) {
-								Log.d((size == 0 ? "Edge Connection Unblocked" :
-									"Edge Connection Blocked (" + size + ")") + send);
+								Log.d((size == 0 ? "Mux Connection Unblocked" :
+									"Mux Connection Blocked (" + size + ")") + send);
 							}
 						}
 
@@ -178,13 +178,13 @@ public class TunaProxy {
 							String local = localAddr + ":" + localPort;
 							recv = ", " + remote + " => " + local;
 							send = ", " + remote + " <= " + local;
-							Log.d("Edge Connected" + recv);
+							Log.d("Mux Connected" + recv);
 						}
 
 						@Override
 						public void onDisconnect() {
 							super.onDisconnect();
-							Log.d("Edge Disconnected" + recv);
+							Log.d("Mux Disconnected" + recv);
 						}
 					});
 				}

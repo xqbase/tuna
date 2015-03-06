@@ -72,11 +72,11 @@ public class TestMulticast {
 				EdgeServer edge = new EdgeServer(context);
 				edge.setAuthPhrase(authPhrase);
 				connector.add(edge, 2424);
-				connector.connect(edge.getOriginConnection(), "127.0.0.1", 2323);
+				connector.connect(edge.getMuxConnection(), "127.0.0.1", 2323);
 				edge = new EdgeServer(context);
 				edge.setAuthPhrase(authPhrase);
 				connector.add(edge, 2525);
-				connector.connect(edge.getOriginConnection(), "127.0.0.1", 2323);
+				connector.connect(edge.getMuxConnection(), "127.0.0.1", 2323);
 				connector.doEvents();
 			}
 		}
