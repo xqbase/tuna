@@ -1,9 +1,9 @@
 package com.xqbase.tuna;
 
-public class ConnectionWrapper implements Connection {
+public abstract class ConnectionWrapper implements Connection {
 	Connection connection;
 
-	public ConnectionWrapper(Connection connection) {
+	protected ConnectionWrapper(Connection connection) {
 		this.connection = connection;
 	}
 

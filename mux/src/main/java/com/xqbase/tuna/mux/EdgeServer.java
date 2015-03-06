@@ -89,8 +89,8 @@ class OriginConnection implements Connection {
 			EMPTY_CONNECTIONS = new ClientConnection[0];
 
 	private TimerHandler.Closeable closeable = null;
+	private boolean[] queued = {false};
 	private MuxContext context;
-	private int queueLimit;
 
 	HashMap<Integer, ClientConnection> connectionMap = new HashMap<>();
 	byte[] authPhrase = null;
@@ -99,7 +99,6 @@ class OriginConnection implements Connection {
 
 	OriginConnection(MuxContext context) {
 		this.context = context;
-		queueLimit = context.getQueueLimit();
 	}
 
 	@Override
@@ -171,18 +170,15 @@ class OriginConnection implements Connection {
 
 	@Override
 	public void onQueue(int size) {
-		if (queueLimit < 0) {
+		if (!context.isQueueChanged(size, queued)) {
 			return;
 		}
-		int bufferSize = size > queueLimit ?
-				Connection.MAX_BUFFER_SIZE : size == 0 ? 0 : -1;
-		if (bufferSize >= 0) {
-			// block or unblock all "ClientConnection"s when origin is conjest or smooth
-			for (ClientConnection connection : connectionMap.
-					values().toArray(EMPTY_CONNECTIONS)) {
-				// "setBuferSize" might change "connectionMap"
-				connection.handler.setBufferSize(bufferSize);
-			}
+		int bufferSize = size == 0 ? 0 : Connection.MAX_BUFFER_SIZE;
+		// block or unblock all "ClientConnection"s when origin is conjested or smooth
+		for (ClientConnection connection : connectionMap.
+				values().toArray(EMPTY_CONNECTIONS)) {
+			// "setBuferSize" might change "connectionMap"
+			connection.handler.setBufferSize(bufferSize);
 		}
 	}
 

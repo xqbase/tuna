@@ -34,6 +34,7 @@ class Client {
 
 	int bufferSize = Connection.MAX_BUFFER_SIZE;
 	int status = STATUS_IDLE;
+	boolean connected = false;
 	ByteArrayQueue queue = new ByteArrayQueue();
 	SocketChannel socketChannel;
 	SelectionKey selectionKey;
@@ -72,21 +73,31 @@ class Client {
 	}
 
 	void interestOps() {
-		selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
-				(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
+		// setBufferSize may be called before connection
+		if (connected) {
+			selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
+					(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
+		}
 	}
 
 	void write() throws IOException {
-		while (queue.length() > 0) {
+		int len = queue.length();
+		int originalLen = len;
+		while (len > 0) {
 			int bytesWritten = socketChannel.write(ByteBuffer.wrap(queue.array(),
 					queue.offset(), queue.length()));
 			if (bytesWritten == 0) {
+				if (len < originalLen) {
+					connection.onQueue(len);
+				}
 				interestOps();
 				return;
 			}
-			queue.remove(bytesWritten);
+			len = queue.remove(bytesWritten).length();
 		}
-		connection.onQueue(queue.length());
+		if (len < originalLen) {
+			connection.onQueue(len);
+		}
 		if (status == STATUS_DISCONNECTING) {
 			finishClose();
 		} else {
@@ -121,6 +132,7 @@ class Client {
 	}
 
 	void finishConnect() {
+		connected = true;
 		InetSocketAddress local = ((InetSocketAddress) socketChannel.
 				socket().getLocalSocketAddress());
 		InetSocketAddress remote = ((InetSocketAddress) socketChannel.
@@ -231,6 +243,15 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 	}
 
+	private void add(Client client, int ops) {
+		try {
+			client.selectionKey = client.socketChannel.
+					register(selector, ops, client);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	/** @throws IOException if no IP address for the <code>host</code> could be found*/
 	@Override
 	public void connect(Connection connection, String host, int port) throws IOException {
@@ -266,14 +287,13 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		try {
 			socketChannel.connect(remote);
 			client.socketChannel = socketChannel;
-			client.selectionKey = client.socketChannel.
-					register(selector, SelectionKey.OP_CONNECT, client);
+			add(client, SelectionKey.OP_CONNECT);
 		} catch (IOException e) {
 			// May throw "Network is unreachable"
 			try {
 				socketChannel.close();
 			} catch (IOException e_) {/**/}
-			client.connection.onDisconnect();
+			client.startClose();
 		}
 	}
 
@@ -282,8 +302,12 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 			String host, int port) throws IOException {
 		Server server = new Server(this, serverConnection,
 				new InetSocketAddress(host, port));
-		server.selectionKey = server.serverSocketChannel.
-				register(selector, SelectionKey.OP_ACCEPT, server);
+		try {
+			server.selectionKey = server.serverSocketChannel.
+					register(selector, SelectionKey.OP_ACCEPT, server);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 		return () -> {
 			if (server.selectionKey.isValid()) {
 				server.close();
@@ -363,21 +387,11 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 					}
 					socketChannel.configureBlocking(false);
 				} catch (IOException e) {
-					continue;
-				}
-				SelectionKey selectionKey;
-				try {
-					selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
-				} catch (IOException e) {
-					try {
-						socketChannel.close();
-					} catch (IOException e_) {/**/}
-					continue;
+					throw new RuntimeException(e);
 				}
 				Client client = new Client(this, server.serverConnection.get());
 				client.socketChannel = socketChannel;
-				client.selectionKey = selectionKey;
-				selectionKey.attach(client);
+				add(client, SelectionKey.OP_READ);
 				client.finishConnect();
 				continue;
 			}
