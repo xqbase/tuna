@@ -3,7 +3,6 @@ package com.xqbase.tuna.mux;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 
@@ -13,7 +12,6 @@ import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
-import com.xqbase.tuna.portmap.PortMapClient;
 import com.xqbase.tuna.util.Bytes;
 
 class PublicConnection implements Connection {
@@ -77,27 +75,18 @@ class PublicConnection implements Connection {
 	}
 }
 
-class HostMuxConnection implements Connection, ServerConnection {
+class HostMuxConnection extends MuxClientConnection implements ServerConnection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
-	private static final PublicConnection[] EMPTY_CONNECTIONS = new PublicConnection[0];
 
-	HashMap<Integer, PublicConnection> connectionMap = new HashMap<>();
 	long accessed = System.currentTimeMillis();
-	ConnectionHandler handler;
 
-	private IdPool idPool = new IdPool();
 	private Connector.Closeable closeable = null;
-	private boolean[] queued = {false};
 	private HostServer host;
 	private boolean authed;
 
-	HostMuxConnection(HostServer host) {
+	HostMuxConnection(HostServer host, MuxContext context) {
+		super(context);
 		this.host = host;
-	}
-
-	@Override
-	public void setHandler(ConnectionHandler handler) {
-		this.handler = handler;
 	}
 
 	@Override
@@ -106,7 +95,6 @@ class HostMuxConnection implements Connection, ServerConnection {
 		accessed = System.currentTimeMillis();
 		host.timeoutSet.add(this);
 		MuxPacket packet = new MuxPacket(b, off);
-		int cid = packet.cid;
 		switch (packet.cmd) {
 		case MuxPacket.CLIENT_PING:
 			MuxPacket.send(handler, MuxPacket.SERVER_PONG, 0);
@@ -119,7 +107,7 @@ class HostMuxConnection implements Connection, ServerConnection {
 		case MuxPacket.CLIENT_LISTEN:
 			if (!authed) {
 				MuxPacket.send(handler, MuxPacket.SERVER_AUTH_NEED, 0);
-				MuxPacket.send(handler, MuxPacket.SERVER_LISTEN_ERROR, cid);
+				MuxPacket.send(handler, MuxPacket.SERVER_LISTEN_ERROR, packet.cid);
 				return;
 			}
 			if (closeable != null) {
@@ -127,68 +115,24 @@ class HostMuxConnection implements Connection, ServerConnection {
 				return;
 			}
 			try {
-				closeable = host.connector.add(this, cid);
+				closeable = host.connector.add(this, packet.cid);
 			} catch (IOException e) {
-				MuxPacket.send(handler, MuxPacket.SERVER_LISTEN_ERROR, cid);
+				MuxPacket.send(handler, MuxPacket.SERVER_LISTEN_ERROR, packet.cid);
 			}
-			return;
-		case MuxPacket.HANDLER_MULTICAST:
-			// TODO Multicast
-			return;
-		case MuxPacket.HANDLER_CLOSE:
-			idPool.returnId(cid);
 			return;
 		default:
-			PublicConnection connection = connectionMap.get(Integer.valueOf(cid));
-			if (closeable == null || connection == null) {
-				return;
+			if (closeable != null) {
+				onRecv(packet, b, off + HEAD_SIZE);
 			}
-			switch (packet.cmd) {
-			case MuxPacket.HANDLER_SEND:
-				if (packet.size > 0) {
-					connection.handler.send(b, off + HEAD_SIZE, packet.size);
-				}
-				return;
-			case MuxPacket.HANDLER_BUFFER:
-				if (packet.size >= 2) {
-					connection.handler.setBufferSize(Bytes.
-							toShort(b, off + HEAD_SIZE) & 0xFFFF);
-				}
-				return;
-			case MuxPacket.HANDLER_DISCONNECT:
-				connectionMap.remove(Integer.valueOf(cid));
-				idPool.returnId(cid);
-				connection.handler.disconnect();
-				return;
-			}
-		}
-	}
-
-	@Override
-	public void onQueue(int size) {
-		if (!host.context.isQueueChanged(size, queued)) {
-			return;
-		}
-		int bufferSize = size == 0 ? 0 : Connection.MAX_BUFFER_SIZE;
-		// block or unblock all "PublicConnection"s when origin is congested or smooth
-		for (PublicConnection connection : connectionMap.
-				values().toArray(EMPTY_CONNECTIONS)) {
-			// "setBuferSize" might change "connectionMap"
-			connection.handler.setBufferSize(bufferSize);
 		}
 	}
 
 	@Override
 	public void onDisconnect() {
+		super.onDisconnect();
 		host.timeoutSet.remove(this);
-		if (closeable == null) {
-			return;
-		}
-		closeable.close();
-		for (PublicConnection connection : connectionMap.
-				values().toArray(EMPTY_CONNECTIONS)) {
-			// "disconnect()" might change "connectionMap"
-			connection.handler.disconnect();
+		if (closeable != null) {
+			closeable.close();
 		}
 	}
 
@@ -199,18 +143,10 @@ class HostMuxConnection implements Connection, ServerConnection {
 
 	@Override
 	public Connection get() {
-		int cid = idPool.borrowId();
-		PublicConnection connection = new PublicConnection(this, cid);
-		connectionMap.put(Integer.valueOf(cid), connection);
-		return connection;
+		return new TerminalConnection(this);
 	}
 }
 
-/**
- * A Port Mapping Server, which provides the mapping service for {@link PortMapClient}s.
- * This server will open public ports, which map private ports provided by PortMapClients.
- * @see PortMapClient
- */
 public class HostServer implements ServerConnection, AutoCloseable {
 	LinkedHashSet<HostMuxConnection> timeoutSet = new LinkedHashSet<>();
 	Connector connector;
@@ -238,7 +174,7 @@ public class HostServer implements ServerConnection, AutoCloseable {
 
 	@Override
 	public Connection get() {
-		HostMuxConnection guest = new HostMuxConnection(this);
+		HostMuxConnection guest = new HostMuxConnection(this, context);
 		timeoutSet.add(guest);
 		return guest.appendFilter(new PacketFilter(MuxPacket.PARSER));
 	}

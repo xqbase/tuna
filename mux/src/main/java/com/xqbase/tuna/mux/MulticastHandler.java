@@ -57,13 +57,13 @@ public class MulticastHandler implements ConnectionHandler {
 				continue;
 			}
 			VirtualHandler virtual = ((VirtualHandler) handler);
-			ConnectionHandler muxHandler = virtual.getMuxHandler();
+			ConnectionHandler muxHandler = virtual.mux.handler;
 			ArrayList<Integer> connList = connListMap.get(muxHandler);
 			if (connList == null) {
 				connList = new ArrayList<>();
 				connListMap.put(muxHandler, connList);
 			}
-			connList.add(Integer.valueOf(virtual.getConnectionID()));
+			connList.add(Integer.valueOf(virtual.cid));
 		}
 		for (Entry<ConnectionHandler, ArrayList<Integer>> entry : connListMap.entrySet()) {
 			ConnectionHandler muxHandler = entry.getKey();
