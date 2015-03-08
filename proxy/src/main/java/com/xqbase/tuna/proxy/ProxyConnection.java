@@ -15,8 +15,8 @@ import com.xqbase.util.Log;
 
 /** Connection for <b>CONNECT</b> */
 class PeerConnection implements Connection {
-	private static final int LOG_DEBUG = ProxyConnection.LOG_DEBUG;
-	private static final int LOG_VERBOSE = ProxyConnection.LOG_VERBOSE;
+	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
+	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
 
 	private static final byte[] CONNECTION_ESTABLISHED =
 			"HTTP/1.0 200 Connection Established\r\n\r\n".getBytes();
@@ -91,8 +91,8 @@ class PeerConnection implements Connection {
 
 /** Connection for request except <b>CONNECT</b> */
 class ClientConnection implements Connection {
-	private static final int LOG_DEBUG = ProxyConnection.LOG_DEBUG;
-	private static final int LOG_VERBOSE = ProxyConnection.LOG_VERBOSE;
+	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
+	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
 
 	private ProxyConnection proxy;
 	private ConnectionHandler proxyHandler, handler;
@@ -291,14 +291,14 @@ class ClientConnection implements Connection {
 		}
 		if (requestClose) {
 			proxy.disconnect();
-			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Proxy Connection Closed due to HTTP/1.0 or " +
 						"\"Connection: close\" in Request, " + toString(false));
 			}
 			return;
 		}
 		if (responseClose) {
-			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Response Sent and Client Closed due to HTTP/1.0 or " +
 						"\"Connection: close\" in Response, " + toString(true));
 			}
@@ -306,7 +306,7 @@ class ClientConnection implements Connection {
 			remove();
 		} else {
 			handler.setBufferSize(MAX_BUFFER_SIZE);
-			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Response Sent and Unblocked, " + toString(true));
 			}
 		}
@@ -319,7 +319,7 @@ class ClientConnection implements Connection {
 		request.reset();
 		response.reset();
 		proxyHandler.setBufferSize(MAX_BUFFER_SIZE);
-		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+		if (logLevel >= LOG_VERBOSE) {
 			Log.v((proxy.getClientMap(secure).get(host) == null ? "Client Closed" :
 					"Client Kept Alive") + " and Request Unblocked due to " +
 					"Complete Request and Response, " + toString(false));
@@ -330,9 +330,8 @@ class ClientConnection implements Connection {
 }
 
 public class ProxyConnection implements Connection {
-	public static final int LOG_NONE = 0;
-	public static final int LOG_DEBUG = 1;
-	public static final int LOG_VERBOSE = 2;
+	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
+	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
 
 	private static final String ERROR_HEADERS = "\r\n" +
 			"Content-Length: 0\r\n" +

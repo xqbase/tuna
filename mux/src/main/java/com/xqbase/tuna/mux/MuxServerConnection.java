@@ -9,20 +9,28 @@ import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.util.Bytes;
+import com.xqbase.util.Log;
 
-public class MuxServerConnection implements Connection {
+class MuxServerConnection implements Connection {
+	private static final int LOG_DEBUG = MuxContext.LOG_DEBUG;
 	private static final Connection[] EMPTY_CONNECTIONS = new Connection[0];
 
+	private boolean established = false, guest;
 	private boolean[] queued = {false};
+	private String recv = "", send = "";
 	private ServerConnection server;
 	private MuxContext context;
+	private int logLevel;
 
+	boolean activeClose = false;
 	HashMap<Integer, Connection> connectionMap = new HashMap<>();
 	ConnectionHandler handler;
 
-	MuxServerConnection(ServerConnection server, MuxContext context) {
+	MuxServerConnection(ServerConnection server, MuxContext context, boolean guest) {
 		this.server = server;
 		this.context = context;
+		this.guest = guest;
+		logLevel = context.getLogLevel();
 	}
 
 	@Override
@@ -97,6 +105,31 @@ public class MuxServerConnection implements Connection {
 			// "connecton.onQueue()" might change "connectionMap"
 			connection.onQueue(size);
 		}
+		if (logLevel >= LOG_DEBUG) {
+			Log.d((size == 0 ?
+				"All Virtual Connections Unblocked due to Smooth Mux" :
+				"All Virtual Connections Blocked due to Congested Mux (" +
+				size + ")") + send);
+		}
+	}
+
+	@Override
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
+		established = true;
+		if (logLevel < LOG_DEBUG) {
+			return;
+		}
+		String local = localAddr + ":" + localPort;
+		String remote = remoteAddr + ":" + remotePort;
+		if (guest) {
+			recv = ", " + local + " <= " + remote;
+			send = ", " + local + " => " + remote;
+		} else {
+			recv = ", " + remote + " => " + local;
+			send = ", " + remote + " <= " + local;
+		}
+		Log.d("Mux Connection Established" + recv);
 	}
 
 	@Override
@@ -106,9 +139,15 @@ public class MuxServerConnection implements Connection {
 			// "connecton.onDisconnect()" might change "connectionMap"
 			connection.onDisconnect();
 		}
+		if (logLevel >= LOG_DEBUG) {
+			Log.d(!established ? "Mux Connection Failed" :
+					activeClose ? "Mux Connection Disconnected" + send :
+					"Mux Connection Lost" + recv);
+		}
 	}
 
 	void disconnect() {
+		activeClose = true;
 		handler.disconnect();
 		onDisconnect();
 	}

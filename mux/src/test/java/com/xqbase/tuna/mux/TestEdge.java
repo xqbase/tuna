@@ -11,7 +11,7 @@ import com.xqbase.tuna.mux.EdgeServer;
 public class TestEdge {
 	public static void main(String[] args) throws IOException {
 		try (ConnectorImpl connector = new ConnectorImpl()) {
-			EdgeServer edge = new EdgeServer(new MuxContext(connector, null, 1048576));
+			EdgeServer edge = new EdgeServer(new MuxContext(connector, null, 1048576, 0));
 			edge.setAuthPhrase("guest".getBytes());
 			connector.add(edge, 2626);
 			connector.connect(edge.getMuxConnection().

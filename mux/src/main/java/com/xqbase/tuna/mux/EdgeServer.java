@@ -5,18 +5,42 @@ import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
+import com.xqbase.tuna.util.Bytes;
 
-class EdgeMuxConnection extends MuxClientConnection {
+/**
+ * An edge server for the {@link OriginServer}. All the accepted connections
+ * will become the virtual connections of the connected OriginServer.<p>
+ * The edge connection must be connected to the OriginServer immediately,
+ * before the EdgeServer added into a {@link Connector}.<p>
+ * For detailed usage, see {@link com.xqbase.tuna.cli.Edge} in github.com
+ */
+public class EdgeServer extends MuxClientConnection implements ServerConnection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
 	private TimerHandler.Closeable closeable = null;
+	private byte[] authPhrase = null;
 	private MuxContext context;
 
-	byte[] authPhrase = null;
+	/** 
+	 * Creates an Edge Server to an {@link OriginServer}<p>
+	 * <b>WARNING: be sure to connect with {@link #getMuxConnection()}</b>
+	 */
+	public EdgeServer(MuxContext context) {
+		super(context, false);
+	}
 
-	EdgeMuxConnection(MuxContext context) {
-		super(context);
-		this.context = context;
+	public Connection getMuxConnection() {
+		return appendFilter(new PacketFilter(MuxPacket.PARSER));
+	}
+
+	public void setAuthPhrase(byte[] authPhrase) {
+		this.authPhrase = authPhrase;
+	}
+
+	private void auth() {
+		byte[] b = new byte[HEAD_SIZE + authPhrase.length];
+		System.arraycopy(authPhrase, 0, b, HEAD_SIZE, authPhrase.length);
+		MuxPacket.send(handler, b, MuxPacket.CLIENT_AUTH, 0);
 	}
 
 	@Override
@@ -25,14 +49,15 @@ class EdgeMuxConnection extends MuxClientConnection {
 		switch (packet.cmd) {
 		case MuxPacket.SERVER_PONG:
 		case MuxPacket.SERVER_AUTH_OK:
+			return;
 		case MuxPacket.SERVER_AUTH_ERROR:
-			// TODO Handle Auth Failure
+			context.test(Bytes.sub(b, off + HEAD_SIZE, packet.size));
 			return;
 		case MuxPacket.SERVER_AUTH_NEED:
-			if (authPhrase != null) {
-				byte[] bb = new byte[HEAD_SIZE + authPhrase.length];
-				System.arraycopy(authPhrase, 0, bb, HEAD_SIZE, authPhrase.length);
-				MuxPacket.send(handler, bb, MuxPacket.CLIENT_AUTH, 0);
+			if (authPhrase == null) {
+				context.test(Bytes.sub(b, off + HEAD_SIZE, packet.size));
+			} else {
+				auth();
 			}
 			return;
 		default:
@@ -43,6 +68,10 @@ class EdgeMuxConnection extends MuxClientConnection {
 	@Override
 	public void onConnect(String localAddr, int localPort,
 			String remoteAddr, int remotePort) {
+		super.onConnect(localAddr, localPort, remoteAddr, remotePort);
+		if (authPhrase != null) {
+			auth();
+		}
 		closeable = context.scheduleDelayed(() -> {
 			MuxPacket.send(handler, MuxPacket.CLIENT_PING, 0);
 		}, 45000, 45000);
@@ -55,33 +84,14 @@ class EdgeMuxConnection extends MuxClientConnection {
 			closeable.close();
 		}
 	}
-}
 
-/**
- * An edge server for the {@link OriginServer}. All the accepted connections
- * will become the virtual connections of the connected OriginServer.<p>
- * The edge connection must be connected to the OriginServer immediately,
- * before the EdgeServer added into a {@link Connector}.<p>
- * For detailed usage, see {@link com.xqbase.tuna.cli.Edge} in github.com
- */
-public class EdgeServer implements ServerConnection {
-	private EdgeMuxConnection mux;
-
-	public EdgeServer(MuxContext context) {
-		mux = new EdgeMuxConnection(context);
+	@Override
+	public void disconnect() {
+		super.disconnect();
 	}
 
 	@Override
 	public Connection get() {
-		return new TerminalConnection(mux);
-	}
-
-	/** @return The connection to the {@link OriginServer}. */
-	public Connection getMuxConnection() {
-		return mux.appendFilter(new PacketFilter(MuxPacket.PARSER));
-	}
-
-	public void setAuthPhrase(byte[] authPhrase) {
-		mux.authPhrase = authPhrase;
+		return new TerminalConnection(this);
 	}
 }

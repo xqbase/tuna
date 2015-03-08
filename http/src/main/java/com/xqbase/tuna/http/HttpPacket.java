@@ -212,7 +212,7 @@ public class HttpPacket {
 	/** @throws HttpPacketException a bad request or response */
 	public void read(ByteArrayQueue queue) throws HttpPacketException {
 		if (phase == PHASE_START) {
-			if (!readLine(queue)) {
+			if (!readLine(queue) || line.length() == 0) {
 				return;
 			}
 			String[] ss = line.toString().split(" ", 3);

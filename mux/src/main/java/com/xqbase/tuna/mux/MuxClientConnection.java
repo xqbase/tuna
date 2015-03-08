@@ -5,20 +5,28 @@ import java.util.HashMap;
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.util.Bytes;
+import com.xqbase.util.Log;
 
 class MuxClientConnection implements Connection {
+	private static final int LOG_DEBUG = MuxContext.LOG_DEBUG;
 	private static final TerminalConnection[]
 			EMPTY_CONNECTIONS = new TerminalConnection[0];
 
+	private boolean established = false, host;
 	private boolean[] queued = {false};
+	private String send = "", recv = "";
 	private MuxContext context;
+	private int logLevel;
 
+	boolean activeClose = false; 
 	HashMap<Integer, TerminalConnection> connectionMap = new HashMap<>();
 	IdPool idPool = new IdPool();
 	ConnectionHandler handler;
 
-	MuxClientConnection(MuxContext context) {
+	MuxClientConnection(MuxContext context, boolean host) {
 		this.context = context;
+		this.host = host;
+		logLevel = context.getLogLevel();
 	}
 
 	@Override
@@ -83,6 +91,31 @@ class MuxClientConnection implements Connection {
 			// "setBuferSize" might change "connectionMap"
 			connection.handler.setBufferSize(bufferSize);
 		}
+		if (logLevel >= LOG_DEBUG) {
+			Log.d((size == 0 ?
+				"All Terminal Connections Unblocked due to Smooth Mux" :
+				"All Terminal Connections Blocked due to Congested Mux (" +
+				size + ")") + send);
+		}
+	}
+
+	@Override
+	public void onConnect(String localAddr, int localPort,
+			String remoteAddr, int remotePort) {
+		established = true;
+		if (logLevel < LOG_DEBUG) {
+			return;
+		}
+		String local = localAddr + ":" + localPort;
+		String remote = remoteAddr + ":" + remotePort;
+		if (host) {
+			send = ", " + remote + " <= " + local;
+			recv = ", " + remote + " => " + local;
+		} else {
+			send = ", " + local + " => " + remote;
+			recv = ", " + local + " <= " + remote;
+		}
+		Log.d("Mux Connection Established" + send);
 	}
 
 	@Override
@@ -93,5 +126,16 @@ class MuxClientConnection implements Connection {
 			connection.activeClose = true;
 			connection.handler.disconnect();
 		}
+		if (logLevel >= LOG_DEBUG) {
+			Log.d(!established ? "Mux Connection Failed" :
+					activeClose ? "Mux Connection Disconnected" + send :
+					"Mux Connection Lost" + recv);
+		}
+	}
+
+	void disconnect() {
+		activeClose = true;
+		handler.disconnect();
+		onDisconnect();
 	}
 }

@@ -1,10 +1,14 @@
 package com.xqbase.tuna.cli;
 
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.util.logging.Logger;
+
+import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.misc.ForwardServer;
+import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -19,8 +23,8 @@ public class Forward {
 		}
 		if (args.length < 3) {
 			System.out.println("Forward Usage: java -cp tuna-tools.jar " +
-					"com.xqbase.tuna.cli.Forward " +
-					"<local-port> <remote-host> <remote-port>");
+					"com.xqbase.tuna.cli.Forward <local-port> " +
+					"<remote-host> <remote-port> [-s]");
 			service.shutdown();
 			return;
 		}
@@ -31,14 +35,20 @@ public class Forward {
 		int port = Numbers.parseInt(args[0], 443, 1, 65535);
 		String remoteHost = args[1];
 		int remotePort = Numbers.parseInt(args[2], 443, 1, 65535);
+		boolean ssl = args.length > 3 && "-s".equalsIgnoreCase(args[3]);
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
 			ForwardServer server = new ForwardServer(connector, remoteHost, remotePort);
+			if (ssl) {
+				SSLContext sslc = SSLContexts.get(null, 0);
+				server.appendRemoteFilter(() -> new SSLFilter(connector,
+						connector, sslc, SSLFilter.CLIENT));
+			}
 			connector.add(server, port);
-			Log.i(String.format("Forward Started (%s->%s:%s)",
-					"" + port, remoteHost, "" + remotePort));
+			Log.i(String.format("Forward Started (%s->%s:%s%s)",
+					"" + port, remoteHost, "" + remotePort, ssl ? "s" : ""));
 			connector.doEvents();
-		} catch (IOException e) {
+		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());
 		} catch (Error | RuntimeException e) {
 			Log.e(e);

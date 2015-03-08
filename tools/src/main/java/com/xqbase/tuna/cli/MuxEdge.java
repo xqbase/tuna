@@ -2,20 +2,20 @@ package com.xqbase.tuna.cli;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 import java.util.logging.Logger;
 
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
-import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.ConnectionWrapper;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.mux.EdgeServer;
 import com.xqbase.tuna.mux.MuxContext;
 import com.xqbase.tuna.ssl.SSLFilter;
-import com.xqbase.tuna.ssl.SSLManagers;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -27,73 +27,65 @@ class EdgeLoop implements Runnable {
 
 	static {
 		try {
-			sslc = SSLContext.getInstance("TLS");
-			sslc.init(SSLManagers.DEFAULT_KEY_MANAGERS,
-					SSLManagers.DEFAULT_TRUST_MANAGERS, null);
-		} catch (GeneralSecurityException e) {
+			sslc = SSLContexts.get(null, 0);
+		} catch (IOException | GeneralSecurityException e) {
 			throw new RuntimeException(e);
 		}
 	}
 
-	MuxContext context;
+	EdgeServer edge = null;
 	ConnectorImpl connector;
 	int port;
 
-	private byte[] authPhrase;
-	private int originPort;
-	private String originHost;
+	private String muxHost;
+	private int muxPort, queueLimit, logLevel;
 	private boolean ssl;
+	private byte[] authPhrase;
 
-	EdgeLoop(ConnectorImpl connector, byte[] authPhrase, int queueLimit,
-			int port, String originHost, int originPort, boolean ssl) {
-		context = new MuxContext(connector, null, queueLimit);
+	EdgeLoop(ConnectorImpl connector, int port, String muxHost, int muxPort,
+			boolean ssl, byte[] authPhrase, int queueLimit, int logLevel) {
 		this.connector = connector;
-		this.authPhrase = authPhrase;
 		this.port = port;
-		this.originHost = originHost;
-		this.originPort = originPort;
+		this.muxHost = muxHost;
+		this.muxPort = muxPort;
 		this.ssl = ssl;
+		this.authPhrase = authPhrase;
+		this.queueLimit = queueLimit;
+		this.logLevel = logLevel;
 	}
 
 	@Override
 	public void run() {
-		EdgeServer server = new EdgeServer(context);
-		server.setAuthPhrase(authPhrase);
-		Connection connection = new ConnectionWrapper(server.getMuxConnection()) {
-			private boolean[] queued = {false};
+		MuxContext context = new MuxContext(connector, t -> {
+			Log.w("Authentication Failed");
+			if (edge == null) {
+				return false;
+			}
+			Log.i("Disconnect Mux and wait 1 second before retry ...");
+			edge.disconnect();
+			edge = null;
+			connector.postDelayed(EdgeLoop.this, Time.SECOND);
+			return false;
+		}, queueLimit, logLevel);
+		edge = new EdgeServer(context);
+		edge.setAuthPhrase(authPhrase);
+		Connection connection = new ConnectionWrapper(edge.getMuxConnection()) {
 			private Connector.Closeable closeable = null;
-			private String local = "0.0.0.0:0", remote = "0.0.0.0:0";
-			private ConnectionHandler handler;
-
-			@Override
-			public void setHandler(ConnectionHandler handler) {
-				super.setHandler(handler);
-				this.handler = handler;
-			}
-
-			@Override
-			public void onQueue(int size) {
-				super.onQueue(size);
-				if (context.isQueueChanged(size, queued)) {
-					Log.d((size == 0 ? "Mux Connection Unblocked, " :
-						"Mux Connection Blocked (" + size + "), ") +
-						local + " => " + remote);
-				}
-			}
 
 			@Override
 			public void onConnect(String localAddr, int localPort,
 					String remoteAddr, int remotePort) {
 				super.onConnect(localAddr, localPort, remoteAddr, remotePort);
-				local = localAddr + ":" + localPort;
-				remote = remoteAddr + ":" + remotePort;
-				Log.i("Mux Connection Established, " + local + " => " + remote);
 				try {
-					closeable = connector.add(server, port);
+					closeable = connector.add(edge, port);
 				} catch (IOException e) {
 					Log.w(e.getMessage());
+					if (edge == null) {
+						return;
+					}
 					Log.i("Disconnect Mux and wait 1 second before retry ...");
-					handler.disconnect();
+					edge.disconnect();
+					edge = null;
 					connector.postDelayed(EdgeLoop.this, Time.SECOND);
 				}
 			}
@@ -101,14 +93,15 @@ class EdgeLoop implements Runnable {
 			@Override
 			public void onDisconnect() {
 				super.onDisconnect();
-				if (closeable == null) {
-					Log.i("Mux Connection Failed, " + local + " => " + remote);
-				} else {
+				if (closeable != null) {
 					closeable.close();
 					closeable = null;
-					Log.i("Mux Connection Lost, " + local + " <= " + remote);
+				}
+				if (edge == null) {
+					return;
 				}
 				Log.i("Wait 1 second before retry ...");
+				edge = null;
 				connector.postDelayed(EdgeLoop.this, Time.SECOND);
 			}
 		};
@@ -117,7 +110,7 @@ class EdgeLoop implements Runnable {
 				connection = connection.appendFilter(new SSLFilter(connector,
 						connector, sslc, SSLFilter.CLIENT));
 			}
-			connector.connect(connection, originHost, originPort);
+			connector.connect(connection, muxHost, muxPort);
 		} catch (IOException e) {
 			Log.w("Edge Aborted: " + e.getMessage());
 			connector.interrupt();
@@ -125,7 +118,9 @@ class EdgeLoop implements Runnable {
 	}
 }
 
-public class Edge {
+public class MuxEdge {
+	private static final List<String> LOG_VALUE = Arrays.asList("debug", "verbose");
+
 	private static Service service = new Service();
 
 	public static void main(String[] args) {
@@ -133,9 +128,9 @@ public class Edge {
 			return;
 		}
 		if (args.length < 3) {
-			System.out.println("Tuna Edge Usage: java -cp tuna-tools.jar " +
-					"com.xqbase.tuna.cli.Edge " +
-					"<local-port> <origin-host> <origin-port> [-s] [<auth-phrase>]");
+			System.out.println("MuxEdge Usage: java -cp tuna-tools.jar " +
+					"com.xqbase.tuna.cli.MuxEdge <local-port> " +
+					"<mux-host> <mux-port> [-s] [<auth-phrase>]");
 			service.shutdown();
 			return;
 		}
@@ -144,24 +139,24 @@ public class Edge {
 		Logger logger = Log.getAndSet(Conf.openLogger("Edge.", 16777216, 10));
 
 		int port = Numbers.parseInt(args[0], 80, 1, 65535);
-		String originHost = args[1];
-		int originPort = Numbers.parseInt(args[2], 8341, 1, 65535);
-		byte[] authPhrase;
-		boolean ssl = args.length >= 4 && "-s".equalsIgnoreCase(args[3]);
-		if (ssl) {
-			authPhrase = (args.length < 5 || args[4] == null ? null : args[4].getBytes());
-		} else {
-			authPhrase = (args.length < 4 || args[3] == null ? null : args[3].getBytes());
-		}
-		Properties p = Conf.load("Edge");
+		String muxHost = args[1];
+		int muxPort = Numbers.parseInt(args[2], 8341, 1, 65535);
+		boolean ssl = args.length > 3 && "-s".equalsIgnoreCase(args[3]);
+		int i = ssl ? 4 : 3;
+		byte[] authPhrase = (args.length <= i ||
+				args[i] == null ? null : args[i].getBytes());
+		Properties p = Conf.load("Mux");
 		int queueLimit = Numbers.parseInt(p.getProperty("queue_limit"), 1048576);
+		String logValue = Conf.DEBUG ? "verbose" : p.getProperty("log");
+		int logLevel = logValue == null ? 0 :
+				LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
-			new EdgeLoop(connector, authPhrase, queueLimit,
-					port, originHost, originPort, ssl).run();
-			Log.i(String.format("Edge Started (%s->%s:%s)",
-					"" + port, originHost, "" + originPort));
+			new EdgeLoop(connector, port, muxHost, muxPort,
+					ssl, authPhrase, queueLimit, logLevel).run();
+			Log.i(String.format("MuxEdge Started (%s->%s:%s%s)",
+					"" + port, ssl ? "s" : "", muxHost, "" + muxPort));
 			connector.doEvents();
 		} catch (Error | RuntimeException e) {
 			Log.e(e);
