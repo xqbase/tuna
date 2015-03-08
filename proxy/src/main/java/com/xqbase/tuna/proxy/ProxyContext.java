@@ -14,6 +14,10 @@ import com.xqbase.tuna.ServerConnection;
 
 public class ProxyContext implements Connector, EventQueue, Executor,
 		UnaryOperator<String>, BiPredicate<String, String> {
+	public static final int LOG_NONE = 0;
+	public static final int LOG_DEBUG = 1;
+	public static final int LOG_VERBOSE = 2;
+
 	private Connector connector;
 	private EventQueue eventQueue;
 	private Executor executor;

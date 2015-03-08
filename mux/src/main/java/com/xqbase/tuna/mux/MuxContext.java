@@ -5,15 +5,24 @@ import java.util.function.Predicate;
 import com.xqbase.tuna.TimerHandler;
 
 public class MuxContext implements TimerHandler, Predicate<byte[]> {
+	public static final int LOG_NONE = 0;
+	public static final int LOG_DEBUG = 1;
+	public static final int LOG_VERBOSE = 2;
+
 	private TimerHandler timerHandler;
 	private Predicate<byte[]> auth;
-	private int queueLimit;
+	private int queueLimit, logLevel;
 
+	/**
+	 * @param auth <i>auth-predicate</i> for Server or
+	 *        <i>auth-fail-callback</i> for Client
+	 */
 	public MuxContext(TimerHandler timerHandler,
-			Predicate<byte[]> auth, int queueLimit) {
+			Predicate<byte[]> auth, int queueLimit, int logLevel) {
 		this.timerHandler = timerHandler;
 		this.auth = auth;
 		this.queueLimit = queueLimit;
+		this.logLevel = logLevel;
 	}
 
 	@Override
@@ -39,5 +48,9 @@ public class MuxContext implements TimerHandler, Predicate<byte[]> {
 			return true;
 		}
 		return false;
+	}
+
+	public int getLogLevel() {
+		return logLevel;
 	}
 }

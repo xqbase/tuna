@@ -4,7 +4,6 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 
 import com.xqbase.tuna.Connection;
-import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
@@ -19,14 +18,9 @@ class OriginMuxConnection extends MuxServerConnection {
 	private boolean authed;
 
 	OriginMuxConnection(OriginServer origin) {
-		super(origin.server, origin.context);
+		super(origin.server, origin.context, false);
 		this.origin = origin;
 		authed = origin.context.test(null);
-	}
-
-	@Override
-	public void setHandler(ConnectionHandler handler) {
-		this.handler = handler;
 	}
 
 	@Override
@@ -49,20 +43,12 @@ class OriginMuxConnection extends MuxServerConnection {
 			if (authed) {
 				onRecv(packet, b, off + HEAD_SIZE);
 			} else {
-				MuxPacket.send(handler, MuxPacket.SERVER_AUTH_NEED, 0);
 				MuxPacket.send(handler, MuxPacket.HANDLER_DISCONNECT, cid);
+				MuxPacket.send(handler, MuxPacket.SERVER_AUTH_NEED, 0);
 			}
 			return;
 		default:
 			onRecv(packet, b, off + HEAD_SIZE);
-		}
-	}
-
-	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
-		if (!authed) {
-			MuxPacket.send(handler, MuxPacket.SERVER_AUTH_NEED, 0);
 		}
 	}
 
@@ -94,7 +80,7 @@ public class OriginServer implements ServerConnection, AutoCloseable {
 			OriginMuxConnection mux;
 			while (i.hasNext() && now > (mux = i.next()).accessed + 60000) {
 				i.remove();
-				mux.disconnect();
+				mux.handler.disconnect();
 			}
 		}, 1000, 1000);
 	}

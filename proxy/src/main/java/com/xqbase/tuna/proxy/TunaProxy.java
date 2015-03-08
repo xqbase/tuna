@@ -31,7 +31,6 @@ import sun.security.x509.X500Name;
 import sun.security.x509.X509CertImpl;
 import sun.security.x509.X509CertInfo;
 
-import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.mux.MuxContext;
@@ -153,41 +152,10 @@ public class TunaProxy {
 					byte[] authPhrase_ = authPhrase.getBytes();
 					muxAuth = t -> t != null && Bytes.equals(t, authPhrase_);
 				}
-				int queueLimit = Numbers.parseInt(p.getProperty("mux.queue_limit"), 1048576);
-				MuxContext muxContext = new MuxContext(connector, muxAuth, queueLimit);
-				server = new OriginServer(server, muxContext);
-				if (logLevel >= ProxyConnection.LOG_DEBUG) {
-					server = server.appendFilter(() -> new ConnectionFilter() {
-						private boolean[] queued = {false};
-						private String recv, send;
-
-						@Override
-						public void onQueue(int size) {
-							super.onQueue(size);
-							if (muxContext.isQueueChanged(size, queued)) {
-								Log.d((size == 0 ? "Mux Connection Unblocked" :
-									"Mux Connection Blocked (" + size + ")") + send);
-							}
-						}
-
-						@Override
-						public void onConnect(String localAddr, int localPort,
-								String remoteAddr, int remotePort) {
-							super.onConnect(localAddr, localPort, remoteAddr, remotePort);
-							String remote = remoteAddr + ":" + remotePort;
-							String local = localAddr + ":" + localPort;
-							recv = ", " + remote + " => " + local;
-							send = ", " + remote + " <= " + local;
-							Log.d("Mux Connected" + recv);
-						}
-
-						@Override
-						public void onDisconnect() {
-							super.onDisconnect();
-							Log.d("Mux Disconnected" + recv);
-						}
-					});
-				}
+				int queueLimit = Numbers.parseInt(p.
+						getProperty("mux.queue_limit"), 1048576);
+				server = new OriginServer(server, new MuxContext(connector,
+						muxAuth, queueLimit, logLevel));
 			}
 
 			if (Conf.getBoolean(p.getProperty("ssl"), false)) {

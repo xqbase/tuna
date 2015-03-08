@@ -64,7 +64,7 @@ public class TestMulticast {
 		byte[] authPhrase = "guest".getBytes();
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			MuxContext context = new MuxContext(connector, t ->
-					t != null && Bytes.equals(t, authPhrase), 1048576);
+					t != null && Bytes.equals(t, authPhrase), 1048576, 0);
 			try (OriginServer origin = new OriginServer(server, context)) {
 				connector.add(new CrossDomainServer(new File(TestMulticast.class.
 						getResource("/crossdomain.xml").toURI())), 843);
