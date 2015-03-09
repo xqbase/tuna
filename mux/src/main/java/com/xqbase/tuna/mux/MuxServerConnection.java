@@ -16,7 +16,7 @@ class MuxServerConnection implements Connection {
 	private static final Connection[] EMPTY_CONNECTIONS = new Connection[0];
 
 	private boolean established = false, guest;
-	private boolean[] queued = {false};
+	private int[] lastSize = {0};
 	private String recv = "", send = "";
 	private ServerConnection server;
 	private MuxContext context;
@@ -96,7 +96,7 @@ class MuxServerConnection implements Connection {
 
 	@Override
 	public void onQueue(int size) {
-		if (!context.isQueueChanged(size, queued)) {
+		if (!context.isQueueStatusChanged(size, lastSize)) {
 			return;
 		}
 		// Tell all virtual connections that mux is congested or smooth 
