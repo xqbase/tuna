@@ -13,7 +13,7 @@ import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionWrapper;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.misc.ForwardServer;
-import com.xqbase.tuna.mux.GuestConnection;
+import com.xqbase.tuna.mux.GuestServer;
 import com.xqbase.tuna.mux.MuxContext;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.util.Conf;
@@ -33,7 +33,7 @@ class GuestLoop implements Runnable {
 		}
 	}
 
-	GuestConnection guest = null;
+	GuestServer guest = null;
 	ConnectorImpl connector;
 	int publicPort;
 
@@ -71,8 +71,7 @@ class GuestLoop implements Runnable {
 			return false;
 		}, queueLimit, logLevel);
 		ForwardServer server = new ForwardServer(connector, privateHost, privatePort);
-		guest = new GuestConnection(server, context, publicPort);
-		guest.setAuthPhrase(authPhrase);
+		guest = new GuestServer(server, context, authPhrase, publicPort);
 		Connection connection = new ConnectionWrapper(guest.getMuxConnection()) {
 			@Override
 			public void onDisconnect() {

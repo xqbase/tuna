@@ -15,7 +15,7 @@ public class MuxContext implements TimerHandler, Predicate<byte[]> {
 
 	/**
 	 * @param auth <i>auth-predicate</i> for Server or
-	 *        <i>auth-fail-callback</i> for Client
+	 *        <i>auth/listen-error-callback</i> for Client
 	 */
 	public MuxContext(TimerHandler timerHandler,
 			Predicate<byte[]> auth, int queueLimit, int logLevel) {

@@ -69,12 +69,10 @@ public class TestMulticast {
 				connector.add(new CrossDomainServer(new File(TestMulticast.class.
 						getResource("/crossdomain.xml").toURI())), 843);
 				connector.add(origin, 2323);
-				EdgeServer edge = new EdgeServer(context);
-				edge.setAuthPhrase(authPhrase);
+				EdgeServer edge = new EdgeServer(context, authPhrase);
 				connector.add(edge, 2424);
 				connector.connect(edge.getMuxConnection(), "127.0.0.1", 2323);
-				edge = new EdgeServer(context);
-				edge.setAuthPhrase(authPhrase);
+				edge = new EdgeServer(context, authPhrase);
 				connector.add(edge, 2525);
 				connector.connect(edge.getMuxConnection(), "127.0.0.1", 2323);
 				connector.doEvents();

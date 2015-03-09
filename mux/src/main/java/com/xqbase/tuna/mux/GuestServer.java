@@ -6,7 +6,7 @@ import com.xqbase.tuna.TimerHandler;
 import com.xqbase.tuna.packet.PacketFilter;
 import com.xqbase.tuna.util.Bytes;
 
-public class GuestConnection extends MuxServerConnection {
+class GuestMuxConnection extends MuxServerConnection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
 	private TimerHandler.Closeable closeable = null;
@@ -14,35 +14,12 @@ public class GuestConnection extends MuxServerConnection {
 	private byte[] authPhrase;
 	private int publicPort;
 
-	/**
-	 * Creates a Guest Connection to a {@link HostServer}<p>
-	 * <b>WARNING: be sure to connect with {@link #getMuxConnection()}</b>
-	 * @param server - The {@link ServerConnection} to consume virtual connections
-	 * @param context
-	 * @param publicPort - The port to open in {@link HostServer}
-	 */
-	public GuestConnection(ServerConnection server, MuxContext context, int publicPort) {
+	GuestMuxConnection(ServerConnection server, MuxContext context,
+			byte[] authPhrase, int publicPort) {
 		super(server, context, true);
 		this.context = context;
-		this.publicPort = publicPort;
-	}
-
-	public Connection getMuxConnection() {
-		return appendFilter(new PacketFilter(MuxPacket.PARSER));
-	}
-
-	public void setAuthPhrase(byte[] authPhrase) {
 		this.authPhrase = authPhrase;
-	}
-
-	private void auth() {
-		byte[] b = new byte[HEAD_SIZE + authPhrase.length];
-		System.arraycopy(authPhrase, 0, b, HEAD_SIZE, authPhrase.length);
-		MuxPacket.send(handler, b, MuxPacket.CLIENT_AUTH, 0);
-	}
-
-	private void listen() {
-		MuxPacket.send(handler, MuxPacket.CLIENT_LISTEN, publicPort);
+		this.publicPort = publicPort;
 	}
 
 	@Override
@@ -53,16 +30,9 @@ public class GuestConnection extends MuxServerConnection {
 		case MuxPacket.SERVER_AUTH_OK:
 			return;
 		case MuxPacket.SERVER_AUTH_ERROR:
+		case MuxPacket.SERVER_AUTH_NEED:
 		case MuxPacket.SERVER_LISTEN_ERROR:
 			context.test(Bytes.sub(b, off + HEAD_SIZE, packet.size));
-			return;
-		case MuxPacket.SERVER_AUTH_NEED:
-			if (authPhrase == null) {
-				context.test(Bytes.sub(b, off + HEAD_SIZE, packet.size));
-			} else {
-				auth();
-				listen();
-			}
 			return;
 		default:
 			onRecv(packet, b, off + HEAD_SIZE);
@@ -74,9 +44,11 @@ public class GuestConnection extends MuxServerConnection {
 			String remoteAddr, int remotePort) {
 		super.onConnect(localAddr, localPort, remoteAddr, remotePort);
 		if (authPhrase != null) {
-			auth();
+			byte[] b = new byte[HEAD_SIZE + authPhrase.length];
+			System.arraycopy(authPhrase, 0, b, HEAD_SIZE, authPhrase.length);
+			MuxPacket.send(handler, b, MuxPacket.CLIENT_AUTH, 0);
 		}
-		listen();
+		MuxPacket.send(handler, MuxPacket.CLIENT_LISTEN, publicPort);
 		closeable = context.scheduleDelayed(() -> {
 			MuxPacket.send(handler, MuxPacket.CLIENT_PING, 0);
 		}, 45000, 45000);
@@ -89,9 +61,27 @@ public class GuestConnection extends MuxServerConnection {
 			closeable.close();
 		}
 	}
+}
 
-	@Override
+public class GuestServer {
+	private GuestMuxConnection mux;
+
+	/**
+	 * Creates a Guest Server to a {@link HostServer}<p>
+	 * @param server - The {@link ServerConnection} to consume virtual connections
+	 * @param context
+	 * @param publicPort - The port to open in {@link HostServer}
+	 */
+	public GuestServer(ServerConnection server, MuxContext context,
+			byte[] authPhrase, int publicPort) {
+		mux = new GuestMuxConnection(server, context, authPhrase, publicPort);
+	}
+	
+	public Connection getMuxConnection() {
+		return mux.appendFilter(new PacketFilter(MuxPacket.PARSER));
+	}
+
 	public void disconnect() {
-		super.disconnect();
+		mux.disconnect();
 	}
 }

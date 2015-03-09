@@ -1,0 +1,2 @@
+MuxGuest //IS --DisplayName="Tuna Mux Guest Service" --Startup=auto --LogPath="%CD%\..\logs" --Jvm="C:\Program Files\Java\jre8\bin\client\jvm.dll" --StartMode=jvm --StopMode=jvm --StartClass=com.xqbase.tuna.cli.MuxGuest --StartParams=80 --StartParams=localhost --StartParams=80 --StartParams=tuna.xqbase.com --StartParams=8341 --StopClass=com.xqbase.tuna.cli.MuxGuest --StopParams=stop --Classpath="%CD%\..\lib\tuna-tools.jar"
+MuxGuestw

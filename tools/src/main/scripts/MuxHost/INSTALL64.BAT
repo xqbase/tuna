@@ -1,0 +1,2 @@
+MuxHost64 //IS --DisplayName="Tuna Mux Host Service" --Startup=auto --LogPath="%CD%\..\logs" --Jvm="C:\Program Files\Java\jre8\bin\client\jvm.dll" --StartMode=jvm --StopMode=jvm --StartClass=com.xqbase.tuna.cli.MuxHost --StartParams=8341 --StopClass=com.xqbase.tuna.cli.MuxHost --StopParams=stop --Classpath="%CD%\..\lib\tuna-tools.jar"
+MuxHost64w

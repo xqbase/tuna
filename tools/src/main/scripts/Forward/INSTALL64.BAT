@@ -1,0 +1,2 @@
+Forward64 //IS --DisplayName="Tuna Forward Service" --Startup=auto --LogPath="%CD%\..\logs" --Jvm="C:\Program Files\Java\jre8\bin\client\jvm.dll" --StartMode=jvm --StopMode=jvm --StartClass=com.xqbase.tuna.cli.Forward --StartParams=80 ++StartParams=tuna.xqbase.com ++StartParams=443 ++StartParams=-s --StopClass=com.xqbase.tuna.cli.Forward --StopParams=stop --Classpath="%CD%\..\lib\tuna-tools.jar"
+Forward64w
