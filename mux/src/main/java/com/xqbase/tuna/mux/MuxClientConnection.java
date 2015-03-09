@@ -13,7 +13,7 @@ class MuxClientConnection implements Connection {
 			EMPTY_CONNECTIONS = new TerminalConnection[0];
 
 	private boolean established = false, host;
-	private boolean[] queued = {false};
+	private int[] lastSize = {0};
 	private String send = "", recv = "";
 	private MuxContext context;
 	private int logLevel;
@@ -81,7 +81,7 @@ class MuxClientConnection implements Connection {
 
 	@Override
 	public void onQueue(int size) {
-		if (!context.isQueueChanged(size, queued)) {
+		if (!context.isQueueStatusChanged(size, lastSize)) {
 			return;
 		}
 		int bufferSize = size == 0 ? 0 : Connection.MAX_BUFFER_SIZE;
