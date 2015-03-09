@@ -33,6 +33,7 @@ class EdgeLoop implements Runnable {
 		}
 	}
 
+	Connector.Closeable closeable = null;
 	EdgeServer edge = null;
 	ConnectorImpl connector;
 	int port;
@@ -62,16 +63,17 @@ class EdgeLoop implements Runnable {
 				return false;
 			}
 			Log.i("Disconnect Mux and wait 1 second before retry ...");
+			if (closeable != null) {
+				closeable.close();
+				closeable = null;
+			}
 			edge.disconnect();
 			edge = null;
 			connector.postDelayed(EdgeLoop.this, Time.SECOND);
 			return false;
 		}, queueLimit, logLevel);
-		edge = new EdgeServer(context);
-		edge.setAuthPhrase(authPhrase);
+		edge = new EdgeServer(context, authPhrase);
 		Connection connection = new ConnectionWrapper(edge.getMuxConnection()) {
-			private Connector.Closeable closeable = null;
-
 			@Override
 			public void onConnect(String localAddr, int localPort,
 					String remoteAddr, int remotePort) {
@@ -136,7 +138,7 @@ public class MuxEdge {
 		}
 		System.setProperty("java.util.logging.SimpleFormatter.format",
 				"%1$tY-%1$tm-%1$td %1$tk:%1$tM:%1$tS.%1$tL %2$s%n%4$s: %5$s%6$s%n");
-		Logger logger = Log.getAndSet(Conf.openLogger("Edge.", 16777216, 10));
+		Logger logger = Log.getAndSet(Conf.openLogger("MuxEdge.", 16777216, 10));
 
 		int port = Numbers.parseInt(args[0], 80, 1, 65535);
 		String muxHost = args[1];
@@ -156,7 +158,7 @@ public class MuxEdge {
 			new EdgeLoop(connector, port, muxHost, muxPort,
 					ssl, authPhrase, queueLimit, logLevel).run();
 			Log.i(String.format("MuxEdge Started (%s->%s:%s%s)",
-					"" + port, ssl ? "s" : "", muxHost, "" + muxPort));
+					"" + port, muxHost, "" + muxPort, ssl ? "s" : ""));
 			connector.doEvents();
 		} catch (Error | RuntimeException e) {
 			Log.e(e);

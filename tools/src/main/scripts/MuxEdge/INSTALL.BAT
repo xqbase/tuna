@@ -1,0 +1,2 @@
+MuxEdge //IS --DisplayName="Tuna Mux Edge Service" --Startup=auto --LogPath="%CD%\..\logs" --Jvm="C:\Program Files\Java\jre8\bin\client\jvm.dll" --StartMode=jvm --StopMode=jvm --StartClass=com.xqbase.tuna.cli.MuxEdge --StartParams=80 ++StartParams=tuna.xqbase.com ++StartParams=8341 --StopClass=com.xqbase.tuna.cli.MuxEdge --StopParams=stop --Classpath="%CD%\..\lib\tuna-tools.jar"
+MuxEdgew
