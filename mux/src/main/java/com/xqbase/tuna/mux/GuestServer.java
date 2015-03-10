@@ -10,14 +10,12 @@ class GuestMuxConnection extends MuxServerConnection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
 	private TimerHandler.Closeable closeable = null;
-	private MuxContext context;
 	private byte[] authPhrase;
 	private int publicPort;
 
 	GuestMuxConnection(ServerConnection server, MuxContext context,
 			byte[] authPhrase, int publicPort) {
 		super(server, context, true);
-		this.context = context;
 		this.authPhrase = authPhrase;
 		this.publicPort = publicPort;
 	}

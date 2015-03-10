@@ -11,12 +11,10 @@ class EdgeMuxConnection extends MuxClientConnection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
 	private TimerHandler.Closeable closeable = null;
-	private MuxContext context;
 	private byte[] authPhrase;
 
 	EdgeMuxConnection(MuxContext context, byte[] authPhrase) {
 		super(context, false);
-		this.context = context;
 		this.authPhrase = authPhrase;
 	}
 
