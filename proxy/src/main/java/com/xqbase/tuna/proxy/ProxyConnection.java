@@ -546,6 +546,7 @@ public class ProxyConnection implements Connection {
 		if (request.getHeader("HOST") == null) {
 			request.setHeader("Host", originalHost);
 		}
+		// TODO Append "X-Forwarded-For"
 		request.removeHeader("PROXY-AUTHORIZATION");
 		request.removeHeader("PROXY-CONNECTION");
 
