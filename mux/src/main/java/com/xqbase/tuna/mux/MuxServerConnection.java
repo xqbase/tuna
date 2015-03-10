@@ -1,6 +1,8 @@
 package com.xqbase.tuna.mux;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.InetAddress;
 import java.util.HashMap;
 
@@ -13,23 +15,24 @@ import com.xqbase.util.Log;
 
 class MuxServerConnection implements Connection {
 	private static final int LOG_DEBUG = MuxContext.LOG_DEBUG;
+	private static final int LOG_VERBOSE = MuxContext.LOG_VERBOSE;
 	private static final Connection[] EMPTY_CONNECTIONS = new Connection[0];
 
-	private boolean established = false, guest;
+	private boolean established = false, activeClose = false, reverse;
+	private String recv = "";
 	private int[] lastSize = {0};
-	private String recv = "", send = "";
 	private ServerConnection server;
-	private MuxContext context;
 	private int logLevel;
 
-	boolean activeClose = false;
-	HashMap<Integer, Connection> connectionMap = new HashMap<>();
+	HashMap<Integer, VirtualConnection> connectionMap = new HashMap<>();
+	String send = "";
+	MuxContext context;
 	ConnectionHandler handler;
 
-	MuxServerConnection(ServerConnection server, MuxContext context, boolean guest) {
+	MuxServerConnection(ServerConnection server, MuxContext context, boolean reverse) {
 		this.server = server;
 		this.context = context;
-		this.guest = guest;
+		this.reverse = reverse;
 		logLevel = context.getLogLevel();
 	}
 
@@ -42,17 +45,24 @@ class MuxServerConnection implements Connection {
 		int cid = packet.cid;
 		switch (packet.cmd) {
 		case MuxPacket.CONNECTION_RECV:
-			Connection connection = connectionMap.get(Integer.valueOf(cid));
+			VirtualConnection connection = connectionMap.get(Integer.valueOf(cid));
 			if (connection != null && packet.size > 0) {
 				connection.onRecv(b, off, packet.size);
+			} else if (logLevel >= LOG_DEBUG) {
+				// TODO "Not Found" or "Nothing to Recv" ?
+				Log.d("CONNECTION_RECV: Not Found or Nothing to Recv, #" + cid + recv);
 			}
 			return;
 		case MuxPacket.CONNECTION_CONNECT:
 			if (connectionMap.containsKey(Integer.valueOf(cid))) {
+				if (logLevel >= LOG_DEBUG) {
+					Log.d("CONNECTION_CONNECT: Mux Disconnected due to " +
+							"Duplicated Connection, #" + cid + recv);
+				}
 				disconnect();
 				return;
 			}
-			connection = server.get();
+			Connection connection_ = server.get();
 			String localAddr, remoteAddr;
 			int localPort, remotePort;
 			if (packet.size == 12 || packet.size == 36) {
@@ -72,16 +82,39 @@ class MuxServerConnection implements Connection {
 			} else {
 				localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
 				localPort = remotePort = 0;
+				if (logLevel >= LOG_DEBUG) {
+					StringWriter sw = new StringWriter();
+					PrintWriter out = new PrintWriter(sw);
+					out.println("CONNECTION_CONNECT: Bad Address for #" + cid + recv);
+					Bytes.dump(out, b, off, packet.size);
+					Log.d(sw.toString());
+				}
 			}
-			VirtualHandler virtualHandler = new VirtualHandler(this, cid);
-			connection.setHandler(virtualHandler);
+			connection = new VirtualConnection(connection_, this, cid);
+			connection_.setHandler(connection);
 			connectionMap.put(Integer.valueOf(cid), connection);
 			connection.onConnect(localAddr, localPort, remoteAddr, remotePort);
+			if (logLevel < LOG_DEBUG) {
+				return;
+			}
+			String local = localAddr + ":" + localPort;
+			String remote = remoteAddr + ":" + remotePort;
+			connection.send = ", " + remote + "<-" + local;
+			connection.recv = ", " + remote + "->" + local;
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("CONNECTION_CONNECT: #" + cid + connection.recv + recv);
+			}
 			return;
 		case MuxPacket.CONNECTION_QUEUE:
 			connection = connectionMap.get(Integer.valueOf(cid));
 			if (connection != null && packet.size >= 4) {
-				connection.onQueue(Bytes.toInt(b, off));
+				int size = Bytes.toInt(b, off);
+				connection.onQueue(size);
+				if (logLevel >= LOG_VERBOSE) {
+					Log.v("CONNECTION_QUEUE: " + size + ", " + cid + connection.recv + recv);
+				}
+			} else if (logLevel >= LOG_DEBUG) {
+				Log.d("CONNECTION_QUEUE: Not Found or Missing Queue Size, #" + cid + recv);
 			}
 			return;
 		case MuxPacket.CONNECTION_DISCONNECT:
@@ -89,6 +122,11 @@ class MuxServerConnection implements Connection {
 			if (connection != null) {
 				MuxPacket.send(handler, MuxPacket.HANDLER_CLOSE, cid);
 				connection.onDisconnect();
+				if (logLevel >= LOG_VERBOSE) {
+					Log.v("CONNECTION_DISCONNECT: #" + cid + connection.recv + recv);
+				}
+			} else if (logLevel >= LOG_DEBUG) {
+				Log.d("CONNECTION_DISCONNECT: Not Found, #" + cid + recv);
 			}
 			return;
 		}
@@ -96,6 +134,9 @@ class MuxServerConnection implements Connection {
 
 	@Override
 	public void onQueue(int size) {
+		if (logLevel >= LOG_VERBOSE) {
+			Log.v("onQueue(" + size + ")" + send);
+		}
 		if (!context.isQueueStatusChanged(size, lastSize)) {
 			return;
 		}
@@ -122,14 +163,14 @@ class MuxServerConnection implements Connection {
 		}
 		String local = localAddr + ":" + localPort;
 		String remote = remoteAddr + ":" + remotePort;
-		if (guest) {
-			recv = ", " + local + " <= " + remote;
+		if (reverse) {
 			send = ", " + local + " => " + remote;
+			recv = ", " + local + " <= " + remote;
 		} else {
-			recv = ", " + remote + " => " + local;
 			send = ", " + remote + " <= " + local;
+			recv = ", " + remote + " => " + local;
 		}
-		Log.d("Mux Connection Established" + recv);
+		Log.d("Mux Connection Established" + (reverse ? send : recv));
 	}
 
 	@Override

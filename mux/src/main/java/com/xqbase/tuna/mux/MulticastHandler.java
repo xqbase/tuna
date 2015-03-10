@@ -46,7 +46,7 @@ public class MulticastHandler implements ConnectionHandler {
 		HashMap<ConnectionHandler, ArrayList<Integer>> connListMap = new HashMap<>();
 		// "connections.iterator()" is called
 		for (ConnectionHandler handler : handlers) {
-			while (!(handler instanceof VirtualHandler)) {
+			while (!(handler instanceof VirtualConnection)) {
 				if (!(handler instanceof ConnectionFilter)) {
 					handler = null;
 					break;
@@ -56,7 +56,7 @@ public class MulticastHandler implements ConnectionHandler {
 			if (handler == null) {
 				continue;
 			}
-			VirtualHandler virtual = ((VirtualHandler) handler);
+			VirtualConnection virtual = ((VirtualConnection) handler);
 			ConnectionHandler muxHandler = virtual.mux.handler;
 			ArrayList<Integer> connList = connListMap.get(muxHandler);
 			if (connList == null) {

@@ -9,23 +9,23 @@ import com.xqbase.util.Log;
 
 class MuxClientConnection implements Connection {
 	private static final int LOG_DEBUG = MuxContext.LOG_DEBUG;
+	private static final int LOG_VERBOSE = MuxContext.LOG_VERBOSE;
 	private static final TerminalConnection[]
 			EMPTY_CONNECTIONS = new TerminalConnection[0];
 
-	private boolean established = false, host;
+	private boolean established = false, activeClose = false, reverse;
 	private int[] lastSize = {0};
-	private String send = "", recv = "";
-	private MuxContext context;
 	private int logLevel;
 
-	boolean activeClose = false; 
 	HashMap<Integer, TerminalConnection> connectionMap = new HashMap<>();
 	IdPool idPool = new IdPool();
+	String send = "", recv = "";
+	MuxContext context;
 	ConnectionHandler handler;
 
-	MuxClientConnection(MuxContext context, boolean host) {
+	MuxClientConnection(MuxContext context, boolean reverse) {
 		this.context = context;
-		this.host = host;
+		this.reverse = reverse;
 		logLevel = context.getLogLevel();
 	}
 
@@ -41,6 +41,9 @@ class MuxClientConnection implements Connection {
 			TerminalConnection connection = connectionMap.get(Integer.valueOf(cid));
 			if (connection != null && packet.size > 0) {
 				connection.handler.send(b, off, packet.size);
+			} else if (logLevel >= LOG_DEBUG) {
+				// TODO "Not Found" or "Nothing to Send" ?
+				Log.d("HANDLER_SEND: Not Found or Nothing to Send, #" + cid + recv);
 			}
 			return;
 		case MuxPacket.HANDLER_MULTICAST:
@@ -48,6 +51,9 @@ class MuxClientConnection implements Connection {
 			int dataOff = off + numConns * 2;
 			int dataLen = packet.size - numConns * 2;
 			if (dataLen <= 0) {
+				if (logLevel >= LOG_DEBUG) {
+					Log.d("HANDLER_MULTICAST: Nothing to Multicast");
+				}
 				return;
 			}
 			for (int i = 0; i < numConns; i ++) {
@@ -55,14 +61,23 @@ class MuxClientConnection implements Connection {
 				connection = connectionMap.get(Integer.valueOf(cid));
 				if (connection != null) {
 					connection.handler.send(b, dataOff, dataLen);
+				} else if (logLevel >= LOG_DEBUG) {
+					Log.d("HANDLER_MULTICAST: Not Found, #" + cid + recv);
 				}
 			}
 			return;
 		case MuxPacket.HANDLER_BUFFER:
 			connection = connectionMap.get(Integer.valueOf(cid));
 			if (connection != null && packet.size >= 2) {
-				connection.handler.setBufferSize(Bytes.
-						toShort(b, off) & 0xFFFF);
+				int bufferSize = Bytes.toShort(b, off) & 0xFFFF;
+				connection.handler.setBufferSize(bufferSize);
+				if (logLevel >= LOG_VERBOSE) {
+					Log.v("HANDLER_BUFFER: " + bufferSize +
+							", #" + cid + connection.send + recv);
+				}
+			} else if (logLevel >= LOG_DEBUG) {
+				Log.d("HANDLER_BUFFER: Not Found or Missing Buffer Size, #" +
+						cid + recv);
 			}
 			return;
 		case MuxPacket.HANDLER_DISCONNECT:
@@ -71,16 +86,27 @@ class MuxClientConnection implements Connection {
 				idPool.returnId(cid);
 				connection.activeClose = true;
 				connection.handler.disconnect();
+				if (logLevel >= LOG_VERBOSE) {
+					Log.v("HANDLER_DISCONNECT: #" + cid + connection.send + recv);
+				}
+			} else if (logLevel >= LOG_DEBUG) {
+				Log.d("HANDLER_DISCONNECT: Not Found, #" + cid + recv);
 			}
 			return;
 		case MuxPacket.HANDLER_CLOSE:
 			idPool.returnId(packet.cid);
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("HANDLER_CLOSE: #" + packet.cid + recv);
+			}
 			return;
 		}
 	}
 
 	@Override
 	public void onQueue(int size) {
+		if (logLevel >= LOG_VERBOSE) {
+			Log.v("onQueue(" + size + ")" + send);
+		}
 		if (!context.isQueueStatusChanged(size, lastSize)) {
 			return;
 		}
@@ -108,14 +134,14 @@ class MuxClientConnection implements Connection {
 		}
 		String local = localAddr + ":" + localPort;
 		String remote = remoteAddr + ":" + remotePort;
-		if (host) {
+		if (reverse) {
 			send = ", " + remote + " <= " + local;
 			recv = ", " + remote + " => " + local;
 		} else {
 			send = ", " + local + " => " + remote;
 			recv = ", " + local + " <= " + remote;
 		}
-		Log.d("Mux Connection Established" + send);
+		Log.d("Mux Connection Established" + (reverse ? recv : send));
 	}
 
 	@Override
