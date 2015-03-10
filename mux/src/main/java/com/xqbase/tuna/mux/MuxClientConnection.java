@@ -42,8 +42,8 @@ class MuxClientConnection implements Connection {
 			if (connection != null && packet.size > 0) {
 				connection.handler.send(b, off, packet.size);
 			} else if (logLevel >= LOG_DEBUG) {
-				// TODO "Not Found" or "Nothing to Send" ?
-				Log.d("HANDLER_SEND: Not Found or Nothing to Send, #" + cid + recv);
+				Log.d("HANDLER_SEND: " + (connection == null ?
+						"Not Found, #" : "Nothing to Send, #") + cid + recv);
 			}
 			return;
 		case MuxPacket.HANDLER_MULTICAST:

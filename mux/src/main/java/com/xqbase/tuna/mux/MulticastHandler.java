@@ -85,7 +85,7 @@ public class MulticastHandler implements ConnectionHandler {
 		}
 	}
 
-	// TODO multicast "setBufferSize" and "disconnect" ? 
+	// unable to multicast "setBufferSize" and "disconnect" yet 
 	@Override
 	public void setBufferSize(int bufferSize) {
 		throw new UnsupportedOperationException();

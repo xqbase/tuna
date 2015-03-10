@@ -49,8 +49,8 @@ class MuxServerConnection implements Connection {
 			if (connection != null && packet.size > 0) {
 				connection.onRecv(b, off, packet.size);
 			} else if (logLevel >= LOG_DEBUG) {
-				// TODO "Not Found" or "Nothing to Recv" ?
-				Log.d("CONNECTION_RECV: Not Found or Nothing to Recv, #" + cid + recv);
+				Log.d("CONNECTION_RECV: " + (connection == null ?
+						"Not Found, #" : "Nothing to Recv, #") + cid + recv);
 			}
 			return;
 		case MuxPacket.CONNECTION_CONNECT:
