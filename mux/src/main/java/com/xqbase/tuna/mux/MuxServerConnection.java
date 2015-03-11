@@ -114,7 +114,8 @@ class MuxServerConnection implements Connection {
 					Log.v("CONNECTION_QUEUE: " + size + ", " + cid + connection.recv + recv);
 				}
 			} else if (logLevel >= LOG_DEBUG) {
-				Log.d("CONNECTION_QUEUE: Not Found or Missing Queue Size, #" + cid + recv);
+				Log.d("CONNECTION_QUEUE: " + (connection == null ?
+						"Not Found, #" : "Missing Queue Size, #") + cid + recv);
 			}
 			return;
 		case MuxPacket.CONNECTION_DISCONNECT:

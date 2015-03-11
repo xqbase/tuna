@@ -32,9 +32,12 @@ class Client {
 	private static final int STATUS_DISCONNECTING = 2;
 	private static final int STATUS_CLOSED = 3;
 
+	private static final int CHANNEL_NONE = 0;
+	private static final int CHANNEL_READY = 1;
+	private static final int CHANNEL_CONNECTED = 2;
+
 	int bufferSize = Connection.MAX_BUFFER_SIZE;
-	int status = STATUS_IDLE;
-	boolean connected = false;
+	int status = STATUS_IDLE, channelStatus = CHANNEL_NONE;
 	ByteArrayQueue queue = new ByteArrayQueue();
 	SocketChannel socketChannel;
 	SelectionKey selectionKey;
@@ -72,9 +75,42 @@ class Client {
 		});
 	}
 
+	void add(Selector selector, int ops) {
+		try {
+			selectionKey = socketChannel.register(selector, ops, this);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	/**
+	 * registers a {@link Client} and connects to a remote address
+	 *
+	 * @see ConnectorImpl#connect(Connection, String, int)
+	 */
+	void connect(Selector selector, InetAddress addr, int port) {
+		try {
+			socketChannel = SocketChannel.open();
+			socketChannel.configureBlocking(false);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+		try {
+			socketChannel.connect(new InetSocketAddress(addr, port));
+			add(selector, SelectionKey.OP_CONNECT);
+			channelStatus = CHANNEL_READY;
+		} catch (IOException e) {
+			// May throw "Network is unreachable"
+			try {
+				socketChannel.close();
+			} catch (IOException e_) {/**/}
+			startClose();
+		}
+	}
+
 	void interestOps() {
 		// setBufferSize may be called before connection
-		if (connected) {
+		if (channelStatus == CHANNEL_CONNECTED) {
 			selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
 					(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
 		}
@@ -132,7 +168,7 @@ class Client {
 	}
 
 	void finishConnect() {
-		connected = true;
+		channelStatus = CHANNEL_CONNECTED;
 		InetSocketAddress local = ((InetSocketAddress) socketChannel.
 				socket().getLocalSocketAddress());
 		InetSocketAddress remote = ((InetSocketAddress) socketChannel.
@@ -153,6 +189,9 @@ class Client {
 
 	void finishClose() {
 		status = STATUS_CLOSED;
+		if (channelStatus == CHANNEL_NONE) {
+			return;
+		}
 		selectionKey.cancel();
 		try {
 			socketChannel.close();
@@ -243,58 +282,25 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 	}
 
-	private void add(Client client, int ops) {
-		try {
-			client.selectionKey = client.socketChannel.
-					register(selector, ops, client);
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
-	}
-
 	/** @throws IOException if no IP address for the <code>host</code> could be found*/
 	@Override
 	public void connect(Connection connection, String host, int port) throws IOException {
 		Client client = new Client(this, connection);
 		client.startConnect();
 		if (host.indexOf(':') >= 0 || !hostName.matcher(host).find()) {
-			connect(client, new InetSocketAddress(InetAddress.getByName(host), port));
+			// Connect immediately for IPv6 or IPv4 Address 
+			client.connect(selector, InetAddress.getByName(host), port);
 			return;
 		}
 		execute(() -> {
 			try {
+				// Resolve in Executor then Connect later
 				InetAddress addr = InetAddress.getByName(host);
-				invokeLater(() -> connect(client, new InetSocketAddress(addr, port)));
+				invokeLater(() -> client.connect(selector, addr, port));
 			} catch (IOException e) {
 				invokeLater(connection::onDisconnect);
 			}
 		});
-	}
-
-	/**
-	 * registers a {@link Client} and connects to a remote address
-	 *
-	 * @see #connect(Connection, String, int)
-	 */
-	private void connect(Client client, InetSocketAddress remote) {
-		SocketChannel socketChannel;
-		try {
-			socketChannel = SocketChannel.open();
-			socketChannel.configureBlocking(false);
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
-		try {
-			socketChannel.connect(remote);
-			client.socketChannel = socketChannel;
-			add(client, SelectionKey.OP_CONNECT);
-		} catch (IOException e) {
-			// May throw "Network is unreachable"
-			try {
-				socketChannel.close();
-			} catch (IOException e_) {/**/}
-			client.startClose();
-		}
 	}
 
 	@Override
@@ -391,7 +397,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 				}
 				Client client = new Client(this, server.serverConnection.get());
 				client.socketChannel = socketChannel;
-				add(client, SelectionKey.OP_READ);
+				client.add(selector, SelectionKey.OP_READ);
 				client.finishConnect();
 				continue;
 			}
