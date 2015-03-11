@@ -76,8 +76,8 @@ class MuxClientConnection implements Connection {
 							", #" + cid + connection.send + recv);
 				}
 			} else if (logLevel >= LOG_DEBUG) {
-				Log.d("HANDLER_BUFFER: Not Found or Missing Buffer Size, #" +
-						cid + recv);
+				Log.d("HANDLER_BUFFER: " + (connection == null ?
+						"Not Found, #" : "Missing Buffer Size, #") + cid + recv);
 			}
 			return;
 		case MuxPacket.HANDLER_DISCONNECT:
