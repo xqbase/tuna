@@ -10,6 +10,8 @@ import com.xqbase.tuna.util.Bytes;
 class EdgeMuxConnection extends MuxClientConnection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
+	private long accessed = System.currentTimeMillis();
+	private int pingElapse = 0;
 	private TimerHandler.Closeable closeable = null;
 	private byte[] authPhrase;
 
@@ -20,6 +22,7 @@ class EdgeMuxConnection extends MuxClientConnection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
+		accessed = System.currentTimeMillis();
 		MuxPacket packet = new MuxPacket(b, off);
 		switch (packet.cmd) {
 		case MuxPacket.SERVER_PONG:
@@ -44,8 +47,16 @@ class EdgeMuxConnection extends MuxClientConnection {
 			MuxPacket.send(handler, b, MuxPacket.CLIENT_AUTH, 0);
 		}
 		closeable = context.scheduleDelayed(() -> {
-			MuxPacket.send(handler, MuxPacket.CLIENT_PING, 0);
-		}, 45000, 45000);
+			if (System.currentTimeMillis() > accessed + 60000) {
+				disconnect();
+				return;
+			}
+			pingElapse ++;
+			if (pingElapse == 45) {
+				pingElapse = 0;
+				MuxPacket.send(handler, MuxPacket.CLIENT_PING, 0);
+			}
+		}, 1000, 1000);
 	}
 
 	@Override
@@ -53,6 +64,7 @@ class EdgeMuxConnection extends MuxClientConnection {
 		super.onDisconnect();
 		if (closeable != null) {
 			closeable.close();
+			closeable = null;
 		}
 	}
 }

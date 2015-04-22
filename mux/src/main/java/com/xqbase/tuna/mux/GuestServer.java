@@ -9,6 +9,8 @@ import com.xqbase.tuna.util.Bytes;
 class GuestMuxConnection extends MuxServerConnection {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;
 
+	private long accessed = System.currentTimeMillis();
+	private int pingElapse = 0;
 	private TimerHandler.Closeable closeable = null;
 	private byte[] authPhrase;
 	private int publicPort;
@@ -22,6 +24,7 @@ class GuestMuxConnection extends MuxServerConnection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
+		accessed = System.currentTimeMillis();
 		MuxPacket packet = new MuxPacket(b, off);
 		switch (packet.cmd) {
 		case MuxPacket.SERVER_PONG:
@@ -48,8 +51,16 @@ class GuestMuxConnection extends MuxServerConnection {
 		}
 		MuxPacket.send(handler, MuxPacket.CLIENT_LISTEN, publicPort);
 		closeable = context.scheduleDelayed(() -> {
-			MuxPacket.send(handler, MuxPacket.CLIENT_PING, 0);
-		}, 45000, 45000);
+			if (System.currentTimeMillis() > accessed + 60000) {
+				disconnect();
+				return;
+			}
+			pingElapse ++;
+			if (pingElapse == 45) {
+				pingElapse = 0;
+				MuxPacket.send(handler, MuxPacket.CLIENT_PING, 0);
+			}
+		}, 1000, 1000);
 	}
 
 	@Override
@@ -57,6 +68,7 @@ class GuestMuxConnection extends MuxServerConnection {
 		super.onDisconnect();
 		if (closeable != null) {
 			closeable.close();
+			closeable = null;
 		}
 	}
 }
