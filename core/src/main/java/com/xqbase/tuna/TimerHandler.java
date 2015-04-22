@@ -1,6 +1,7 @@
 package com.xqbase.tuna;
 
 public interface TimerHandler {
+	@FunctionalInterface
 	public static interface Closeable extends AutoCloseable {
 		@Override
 		public void close();

@@ -2,6 +2,7 @@ package com.xqbase.tuna;
 
 import java.util.concurrent.CountDownLatch;
 
+@FunctionalInterface
 public interface EventQueue {
 	/**
 	 * Executes a command in main thread.<p>
