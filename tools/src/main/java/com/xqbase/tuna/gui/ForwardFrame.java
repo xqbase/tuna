@@ -29,9 +29,9 @@ public class ForwardFrame extends ConnectorFrame {
 	private static final int SLIDER_NO_LIMIT = 4;
 
 	private JSlider slider = new JSlider(0, SLIDER_NO_LIMIT, SLIDER_NO_LIMIT);
-	private JTextField txtPort = new JTextField("23");
+	private JTextField txtPort = new JTextField("2323");
 	private JTextField txtRemoteHost = new JTextField("localhost");
-	private JTextField txtRemotePort = new JTextField("2323");
+	private JTextField txtRemotePort = new JTextField("23");
 	private JComboBox<String> cmbDump = new JComboBox<>(new
 			String[] {DUMP_NONE, DUMP_BINARY, DUMP_TEXT, DUMP_FOLDER});
 	private JFileChooser chooser = new JFileChooser();

@@ -10,7 +10,7 @@ import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.misc.ForwardServer;
 import com.xqbase.tuna.mux.GuestServer;
@@ -72,10 +72,20 @@ class GuestLoop implements Runnable {
 		}, queueLimit, logLevel);
 		ForwardServer server = new ForwardServer(connector, privateHost, privatePort);
 		guest = new GuestServer(server, context, authPhrase, publicPort);
-		Connection connection = new ConnectionWrapper(guest.getMuxConnection()) {
+		Connection connection = guest.getMuxConnection().appendFilter(new ConnectionFilter() {
 			@Override
 			public void onDisconnect() {
 				super.onDisconnect();
+				disconnect_();
+			}
+
+			@Override
+			public void disconnect() {
+				super.disconnect();
+				disconnect_();
+			}
+
+			private void disconnect_() {
 				if (guest == null) {
 					return;
 				}
@@ -83,7 +93,7 @@ class GuestLoop implements Runnable {
 				guest = null;
 				connector.postDelayed(GuestLoop.this, Time.SECOND);
 			}
-		};
+		});
 		try {
 			if (ssl) {
 				connection = connection.appendFilter(new SSLFilter(connector,

@@ -10,7 +10,7 @@ import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
-import com.xqbase.tuna.ConnectionWrapper;
+import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.mux.EdgeServer;
@@ -73,7 +73,7 @@ class EdgeLoop implements Runnable {
 			return false;
 		}, queueLimit, logLevel);
 		edge = new EdgeServer(context, authPhrase);
-		Connection connection = new ConnectionWrapper(edge.getMuxConnection()) {
+		Connection connection = edge.getMuxConnection().appendFilter(new ConnectionFilter() {
 			@Override
 			public void onConnect(String localAddr, int localPort,
 					String remoteAddr, int remotePort) {
@@ -95,6 +95,16 @@ class EdgeLoop implements Runnable {
 			@Override
 			public void onDisconnect() {
 				super.onDisconnect();
+				disconnect_();
+			}
+
+			@Override
+			public void disconnect() {
+				super.disconnect();
+				disconnect_();
+			}
+
+			private void disconnect_() {
 				if (closeable != null) {
 					closeable.close();
 					closeable = null;
@@ -106,7 +116,7 @@ class EdgeLoop implements Runnable {
 				edge = null;
 				connector.postDelayed(EdgeLoop.this, Time.SECOND);
 			}
-		};
+		});
 		try {
 			if (ssl) {
 				connection = connection.appendFilter(new SSLFilter(connector,
