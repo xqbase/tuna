@@ -507,6 +507,7 @@ public class ProxyConnection implements Connection {
 					(query == null || query.isEmpty() ? "" : "?" + query);
 		} catch (IOException e) {
 			// Use "Host" in headers if "host:port" not in URI
+			// TODO Bad Request if "reverse=disabled"
 			host = request.getHeader("HOST");
 			if (host == null) {
 				throw new HttpPacketException("Missing Host", "");
@@ -546,7 +547,7 @@ public class ProxyConnection implements Connection {
 		if (request.getHeader("HOST") == null) {
 			request.setHeader("Host", originalHost);
 		}
-		// TODO Append "X-Forwarded-For"
+		// TODO Append "X-Forwarded-For", see: http://www.squid-cache.org/Doc/config/forwarded_for/
 		request.removeHeader("PROXY-AUTHORIZATION");
 		request.removeHeader("PROXY-CONNECTION");
 
