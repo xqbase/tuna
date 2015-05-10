@@ -1,10 +1,8 @@
 package com.xqbase.tuna.mux;
 
-import java.io.IOException;
-import java.net.InetAddress;
-
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.util.Bytes;
 import com.xqbase.util.Log;
 
@@ -49,8 +47,7 @@ class TerminalConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
+	public void onConnect(ConnectionSession session) {
 		cid = mux.idPool.borrowId();
 		if (cid < 0) {
 			handler.disconnect();
@@ -59,27 +56,22 @@ class TerminalConnection implements Connection {
 			}
 			return;
 		}
-		byte[] localAddrBytes, remoteAddrBytes;
-		try {
-			localAddrBytes = InetAddress.getByName(localAddr).getAddress();
-			remoteAddrBytes = InetAddress.getByName(remoteAddr).getAddress();
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
+		byte[] localAddrBytes = session.getLocalSocketAddress().getAddress().getAddress();
+		byte[] remoteAddrBytes = session.getRemoteSocketAddress().getAddress().getAddress();
 		byte[] b = new byte[HEAD_SIZE + localAddrBytes.length + remoteAddrBytes.length + 4];
 		System.arraycopy(localAddrBytes, 0, b, HEAD_SIZE, localAddrBytes.length);
-		Bytes.setShort(localPort, b, HEAD_SIZE + localAddrBytes.length);
+		Bytes.setShort(session.getLocalPort(), b, HEAD_SIZE + localAddrBytes.length);
 		System.arraycopy(remoteAddrBytes, 0, b,
 				HEAD_SIZE + localAddrBytes.length + 2, localAddrBytes.length);
-		Bytes.setShort(remotePort, b, HEAD_SIZE +
+		Bytes.setShort(session.getRemotePort(), b, HEAD_SIZE +
 				localAddrBytes.length + 2 + remoteAddrBytes.length);
 		MuxPacket.send(mux.handler, b, MuxPacket.CONNECTION_CONNECT, cid);
 		mux.connectionMap.put(Integer.valueOf(cid), this);
 		if (logLevel < LOG_DEBUG) {
 			return;
 		}
-		String local = localAddr + ":" + localPort;
-		String remote = remoteAddr + ":" + remotePort;
+		String local = session.getLocalAddr() + ":" + session.getLocalPort();
+		String remote = session.getRemoteAddr() + ":" + session.getRemotePort();
 		send = ", " + remote + "<-" + local;
 		recv = ", " + remote + "->" + local;
 		if (logLevel >= LOG_VERBOSE) {

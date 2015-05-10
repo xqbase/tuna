@@ -46,6 +46,8 @@ import com.xqbase.util.Time;
 
 public class TunaProxy {
 	private static final List<String> LOG_VALUE = Arrays.asList("debug", "verbose");
+	private static final List<String> FORWARDED_VALUE =
+			Arrays.asList("transparent", "off", "delete", "truncate", "on");
 
 	private static SSLContext getSSLContext(String dn, long expire)
 			throws IOException, GeneralSecurityException {
@@ -96,8 +98,12 @@ public class TunaProxy {
 		String host = p.getProperty("host");
 		host = host == null || host.isEmpty() ? "0.0.0.0" : host;
 		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
+		boolean enableReverse = Conf.getBoolean(p.getProperty("reverse"), false);
 		String logValue = Conf.DEBUG ? "verbose" : p.getProperty("log");
 		int logLevel = logValue == null ? 0 : LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
+		String forwardedValue = p.getProperty("forwarded");
+		int forwardedType = forwardedValue == null ? 0 :
+				FORWARDED_VALUE.indexOf(forwardedValue.toLowerCase()) + 1;
 
 		boolean lookupEnabled = Conf.getBoolean(p.getProperty("lookup"), false);
 		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
@@ -140,7 +146,8 @@ public class TunaProxy {
 
 			SSLContext sslcClient = getSSLContext(null, 0);
 			ProxyContext context = new ProxyContext(connector, connector, connector,
-					sslcClient, lookup, auth, p.getProperty("realm"), logLevel);
+					sslcClient, lookup, auth, p.getProperty("realm"),
+					enableReverse, forwardedType, logLevel);
 			ServerConnection server = () -> new ProxyConnection(context);
 
 			if (Conf.getBoolean(p.getProperty("mux"), false)) {

@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.function.Supplier;
 
 import com.xqbase.tuna.ConnectionFilter;
+import com.xqbase.tuna.ConnectionSession;
 
 /**
  * A set of trusted IPs. This set also implements the interface
@@ -28,10 +29,9 @@ public class IPTrustSet extends HashSet<String> implements Supplier<ConnectionFi
 	public ConnectionFilter get() {
 		return new ConnectionFilter() {
 			@Override
-			public void onConnect(String localAddr, int localPort,
-					String remoteAddr, int remotePort) {
-				if (contains(remoteAddr)) {
-					super.onConnect(localAddr, localPort, remoteAddr, remotePort);
+			public void onConnect(ConnectionSession session) {
+				if (contains(session.getRemoteAddr())) {
+					super.onConnect(session);
 				} else {
 					disconnect();
 					onDisconnect();

@@ -1,6 +1,7 @@
 package com.xqbase.tuna.mux;
 
 import com.xqbase.tuna.Connection;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.TimerHandler;
@@ -38,9 +39,8 @@ class EdgeMuxConnection extends MuxClientConnection {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
-		super.onConnect(localAddr, localPort, remoteAddr, remotePort);
+	public void onConnect(ConnectionSession session) {
+		super.onConnect(session);
 		if (authPhrase != null) {
 			byte[] b = new byte[HEAD_SIZE + authPhrase.length];
 			System.arraycopy(authPhrase, 0, b, HEAD_SIZE, authPhrase.length);

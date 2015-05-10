@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectionHandler;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ServerConnection;
 
@@ -55,8 +56,7 @@ class ForwardConnection extends PeerConnection {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
+	public void onConnect(ConnectionSession session) {
 		peer = new PeerConnection(this);
 		Connection connection = peer;
 		for (Supplier<? extends ConnectionFilter> serverFilter : forward.serverFilters) {

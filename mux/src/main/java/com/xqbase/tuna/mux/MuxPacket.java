@@ -31,6 +31,11 @@ class MuxPacket {
 	static final int HANDLER_DISCONNECT	= 0x418;
 	static final int HANDLER_CLOSE		= 0x419;
 
+	// Session Bits
+	static final int SESSION_LOCAL_IPV6	= 1;
+	static final int SESSION_REMOTE_IPV6 = 2;
+	static final int SESSION_SSL		= 4;
+
 	static final int HEAD_SIZE			= 8;
 
 	static PacketParser PARSER = (b, off, len) -> {

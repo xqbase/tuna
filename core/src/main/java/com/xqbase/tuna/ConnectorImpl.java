@@ -88,7 +88,7 @@ class Client {
 	 *
 	 * @see ConnectorImpl#connect(Connection, String, int)
 	 */
-	void connect(Selector selector, InetAddress addr, int port) {
+	void connect(Selector selector, InetSocketAddress socketAddress) {
 		try {
 			socketChannel = SocketChannel.open();
 			socketChannel.configureBlocking(false);
@@ -96,7 +96,7 @@ class Client {
 			throw new RuntimeException(e);
 		}
 		try {
-			socketChannel.connect(new InetSocketAddress(addr, port));
+			socketChannel.connect(socketAddress);
 			add(selector, SelectionKey.OP_CONNECT);
 			channelStatus = CHANNEL_READY;
 		} catch (IOException e) {
@@ -173,8 +173,7 @@ class Client {
 				socket().getLocalSocketAddress());
 		InetSocketAddress remote = ((InetSocketAddress) socketChannel.
 				socket().getRemoteSocketAddress());
-		connection.onConnect(local.getAddress().getHostAddress(), local.getPort(),
-				remote.getAddress().getHostAddress(), remote.getPort());
+		connection.onConnect(new ConnectionSession(local, remote));
 	}
 
 	void startClose() {
@@ -284,19 +283,28 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 
 	/** @throws IOException if no IP address for the <code>host</code> could be found*/
 	@Override
-	public void connect(Connection connection, String host, int port) throws IOException {
+	public void connect(Connection connection,
+			InetSocketAddress socketAddress) throws IOException {
 		Client client = new Client(this, connection);
 		client.startConnect();
+		if (!socketAddress.isUnresolved()) {
+			client.connect(selector, socketAddress);
+			return;
+		}
+		String host = socketAddress.getHostName();
+		int port = socketAddress.getPort();
 		if (host.indexOf(':') >= 0 || !hostName.matcher(host).find()) {
 			// Connect immediately for IPv6 or IPv4 Address 
-			client.connect(selector, InetAddress.getByName(host), port);
+			client.connect(selector,
+					new InetSocketAddress(InetAddress.getByName(host), port));
 			return;
 		}
 		execute(() -> {
 			try {
 				// Resolve in Executor then Connect later
 				InetAddress addr = InetAddress.getByName(host);
-				invokeLater(() -> client.connect(selector, addr, port));
+				invokeLater(() -> client.connect(selector,
+						new InetSocketAddress(addr, port)));
 			} catch (IOException e) {
 				invokeLater(connection::onDisconnect);
 			}
@@ -305,9 +313,8 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 
 	@Override
 	public Connector.Closeable add(ServerConnection serverConnection,
-			String host, int port) throws IOException {
-		Server server = new Server(this, serverConnection,
-				new InetSocketAddress(host, port));
+			InetSocketAddress socketAddress) throws IOException {
+		Server server = new Server(this, serverConnection, socketAddress);
 		try {
 			server.selectionKey = server.serverSocketChannel.
 					register(selector, SelectionKey.OP_ACCEPT, server);

@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.function.Supplier;
 
 import com.xqbase.tuna.ConnectionFilter;
+import com.xqbase.tuna.ConnectionSession;
 
 /** A "ServerFilter" to limit bytes, requests and connections from the same IP. */
 public class DoSServerFilter implements Supplier<ConnectionFilter> {
@@ -43,9 +44,8 @@ public class DoSServerFilter implements Supplier<ConnectionFilter> {
 		}
 
 		@Override
-		public void onConnect(String localAddr, int localPort,
-				String remoteAddr_, int remotePort) {
-			remoteAddr = remoteAddr_;
+		public void onConnect(ConnectionSession session) {
+			remoteAddr = session.getRemoteAddr();
 			connected = true;
 			int[] connections_ = getData(connectionsMap, 1);
 			connections_[0] ++;
@@ -56,7 +56,7 @@ public class DoSServerFilter implements Supplier<ConnectionFilter> {
 					(requests > 0 && requests_[0] > requests)) {
 				onBlock(this, connections_[0], requests_[0], 0);
 			} else {
-				super.onConnect(localAddr, localPort, remoteAddr_, remotePort);
+				super.onConnect(session);
 			}
 		}
 

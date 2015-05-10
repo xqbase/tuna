@@ -4,11 +4,12 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.HashMap;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
-import com.xqbase.tuna.Connector;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.util.Bytes;
 import com.xqbase.util.Log;
@@ -63,24 +64,24 @@ class MuxServerConnection implements Connection {
 				return;
 			}
 			Connection connection_ = server.get();
-			String localAddr, remoteAddr;
+			InetAddress localAddress, remoteAddress;
 			int localPort, remotePort;
 			if (packet.size == 12 || packet.size == 36) {
 				int addrLen = packet.size / 2 - 2;
 				try {
-					localAddr = InetAddress.getByAddress(Bytes.
-							sub(b, off, addrLen)).getHostAddress();
-					remoteAddr = InetAddress.getByAddress(Bytes.
-							sub(b, off + addrLen + 2, addrLen)).getHostAddress();
+					localAddress = InetAddress.getByAddress(Bytes.
+							sub(b, off, addrLen));
+					remoteAddress = InetAddress.getByAddress(Bytes.
+							sub(b, off + addrLen + 2, addrLen));
 				} catch (IOException e) {
-					localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
+					localAddress = remoteAddress = new InetSocketAddress(0).getAddress();
 				}
 				localPort = Bytes.toShort(Bytes.
 						sub(b, off + addrLen, 2)) & 0xFFFF;
 				remotePort = Bytes.toShort(Bytes.
 						sub(b, off + addrLen * 2 + 2, 2)) & 0xFFFF;
 			} else {
-				localAddr = remoteAddr = Connector.ANY_LOCAL_ADDRESS;
+				localAddress = remoteAddress = new InetSocketAddress(0).getAddress();
 				localPort = remotePort = 0;
 				if (logLevel >= LOG_DEBUG) {
 					StringWriter sw = new StringWriter();
@@ -93,7 +94,9 @@ class MuxServerConnection implements Connection {
 			connection = new VirtualConnection(connection_, this, cid);
 			connection_.setHandler(connection);
 			connectionMap.put(Integer.valueOf(cid), connection);
-			connection.onConnect(localAddr, localPort, remoteAddr, remotePort);
+			InetSocketAddress localAddr = new InetSocketAddress(localAddress, localPort);
+			InetSocketAddress remoteAddr = new InetSocketAddress(remoteAddress, remotePort);
+			connection.onConnect(new ConnectionSession(localAddr, remoteAddr));
 			if (logLevel < LOG_DEBUG) {
 				return;
 			}
@@ -156,14 +159,13 @@ class MuxServerConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
+	public void onConnect(ConnectionSession session) {
 		established = true;
 		if (logLevel < LOG_DEBUG) {
 			return;
 		}
-		String local = localAddr + ":" + localPort;
-		String remote = remoteAddr + ":" + remotePort;
+		String local = session.getLocalAddr() + ":" + session.getLocalPort();
+		String remote = session.getRemoteAddr() + ":" + session.getRemotePort();
 		if (reverse) {
 			send = ", " + local + " => " + remote;
 			recv = ", " + local + " <= " + remote;

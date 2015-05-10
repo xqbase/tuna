@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.misc.CrossDomainServer;
@@ -41,8 +42,7 @@ class BroadcastConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
+	public void onConnect(ConnectionSession session) {
 		handlers.add(handler);
 	}
 

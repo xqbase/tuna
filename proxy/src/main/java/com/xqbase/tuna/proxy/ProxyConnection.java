@@ -7,6 +7,7 @@ import java.util.HashMap;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.http.HttpPacketException;
 import com.xqbase.tuna.ssl.SSLFilter;
@@ -65,11 +66,10 @@ class PeerConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
+	public void onConnect(ConnectionSession session) {
 		peerHandler.send(CONNECTION_ESTABLISHED);
 		established = true;
-		local = " (" + localAddr + ":" + localPort + ")";
+		local = " (" + session.getLocalAddr() + ":" + session.getLocalPort() + ")";
 		if (logLevel >= LOG_VERBOSE) {
 			Log.v("Connection Established, " + toString(false));
 		}
@@ -227,10 +227,9 @@ class ClientConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
+	public void onConnect(ConnectionSession session) {
 		established = true;
-		local = " (" + localAddr + ":" + localPort + ")";
+		local = " (" + session.getLocalAddr() + ":" + session.getLocalPort() + ")";
 		if (logLevel >= LOG_VERBOSE) {
 			Log.v("Client Connection Established, " + toString(false));
 		}
@@ -506,8 +505,10 @@ public class ProxyConnection implements Connection {
 			uri = (uri == null || uri.isEmpty() ? "/" : uri) +
 					(query == null || query.isEmpty() ? "" : "?" + query);
 		} catch (IOException e) {
-			// Use "Host" in headers if "host:port" not in URI
-			// TODO Bad Request if "reverse=disabled"
+			if (!context.isEnableReverse()) {
+				throw new HttpPacketException("Invalid URI", uri);
+			}
+			// Use "Host" in headers if "Reverse" enabled and "host:port" not in URI
 			host = request.getHeader("HOST");
 			if (host == null) {
 				throw new HttpPacketException("Missing Host", "");
@@ -547,7 +548,20 @@ public class ProxyConnection implements Connection {
 		if (request.getHeader("HOST") == null) {
 			request.setHeader("Host", originalHost);
 		}
-		// TODO Append "X-Forwarded-For", see: http://www.squid-cache.org/Doc/config/forwarded_for/
+		switch (context.getForwardedType()) {
+		case ProxyContext.FORWARDED_DELETE:
+			request.removeHeader("X-FORWARDED-FOR");
+			break;
+		case ProxyContext.FORWARDED_OFF:
+			request.setHeader("X-Forwarded-For", "unknown");
+			break;
+		case ProxyContext.FORWARDED_TRUNCATE:
+			// TODO
+			break;
+		case ProxyContext.FORWARDED_ON:
+			// TODO
+			break;
+		}
 		request.removeHeader("PROXY-AUTHORIZATION");
 		request.removeHeader("PROXY-CONNECTION");
 
@@ -660,9 +674,8 @@ public class ProxyConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
-		remote = remoteAddr + ":" + remotePort;
+	public void onConnect(ConnectionSession session) {
+		remote = session.getRemoteAddr() + ":" + session.getRemotePort();
 	}
 
 	@Override
