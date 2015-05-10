@@ -9,9 +9,9 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 import javax.net.ssl.SSLEngineResult.Status;
-import javax.net.ssl.SSLSession;
 
 import com.xqbase.tuna.ConnectionFilter;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.tuna.util.Bytes;
@@ -56,11 +56,10 @@ public class SSLFilter extends ConnectionFilter {
 	private int appBBSize;
 	private byte[] requestBytes;
 	private ByteBuffer requestBB;
+	private ConnectionSession session;
 	private HandshakeStatus hs = HandshakeStatus.NEED_UNWRAP;
 	private ByteArrayQueue baqRecv = new ByteArrayQueue();
 	private ByteArrayQueue baqToSend = new ByteArrayQueue();
-	private String localAddr, remoteAddr;
-	private int localPort, remotePort;
 
 	/**
 	 * Creates an SSLFilter with the given {@link Executor},
@@ -156,12 +155,8 @@ public class SSLFilter extends ConnectionFilter {
 	}
 
 	@Override
-	public void onConnect(String localAddr_, int localPort_,
-			String remoteAddr_, int remotePort_) {
-		localAddr = localAddr_;
-		localPort = localPort_;
-		remoteAddr = remoteAddr_;
-		remotePort = remotePort_;
+	public void onConnect(ConnectionSession session_) {
+		session = session_;
 		try {
 			doHandshake();
 		} catch (IOException e) {
@@ -265,7 +260,8 @@ public class SSLFilter extends ConnectionFilter {
 			}
 		}
 		// hs == HandshakeStatus.FINISHED
-		super.onConnect(localAddr, localPort, remoteAddr, remotePort);
+		super.onConnect(new SSLConnectionSession(session.getLocalSocketAddress(),
+				session.getRemoteSocketAddress(), ssle.getSession()));
 		recv();
 		if (baqRecv.length() > 0) {
 			onRecv(baqRecv.array(), baqRecv.offset(), baqRecv.length());
@@ -281,10 +277,5 @@ public class SSLFilter extends ConnectionFilter {
 			super.onRecv(requestBytes, 0, requestBB.position());
 			requestBB.clear();
 		}
-	}
-
-	/** @return The SSLSession for this connection. */
-	public SSLSession getSession() {
-		return ssle.getSession();
 	}
 }

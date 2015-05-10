@@ -6,6 +6,7 @@ import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionFilter;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.misc.BroadcastServer;
 import com.xqbase.tuna.misc.DumpFilter;
@@ -31,11 +32,13 @@ public class TestSSLForward {
 					Connection connection = super.get().
 							appendFilter(new ConnectionFilter() {
 						@Override
-						public void onConnect(String localAddr, int localPort,
-								String remoteAddr, int remotePort) {
-							super.onConnect(localAddr, localPort, remoteAddr, remotePort);
-							System.out.println("ssl_session_id=" +
-									Bytes.toHexLower(sslf.getSession().getId()));
+						public void onConnect(ConnectionSession session) {
+							super.onConnect(session);
+							if (session instanceof SSLConnectionSession) {
+								System.out.println("ssl_session_id=" +
+										Bytes.toHexLower(((SSLConnectionSession) session).
+										getSSLSession().getId()));
+							}
 						}
 					}).appendFilter(sslf);
 					return connection;

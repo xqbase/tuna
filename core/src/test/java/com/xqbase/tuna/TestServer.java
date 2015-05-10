@@ -28,8 +28,7 @@ public class TestServer {
 					}
 
 					@Override
-					public void onConnect(String localAddr, int localPort,
-							String remoteAddr, int remotePort) {
+					public void onConnect(ConnectionSession session) {
 						accepts ++;
 					}
 

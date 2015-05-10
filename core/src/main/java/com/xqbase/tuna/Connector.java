@@ -4,9 +4,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 
 public interface Connector {
-	public static final String ANY_LOCAL_ADDRESS =
-			new InetSocketAddress(0).getAddress().getHostAddress();
-
 	@FunctionalInterface
 	public static interface Closeable extends AutoCloseable {
 		@Override
@@ -17,28 +14,46 @@ public interface Connector {
 	 * Registers a {@link ServerConnection}
 	 *
 	 * @param serverConnection
-	 * @param port
+	 * @return a {@link Closeable} that will unregister the <code>serverConnection</code>.
+	 *         The connector will automatically unregister all
+	 *         <code>serverConnection</code>s when closing.
+	 */
+	public default Closeable add(ServerConnection serverConnection,
+			String host, int port) throws IOException {
+		return add(serverConnection, new InetSocketAddress(host, port));
+	}
+
+	/**
+	 * Registers a {@link ServerConnection}
+	 *
 	 * @return a {@link Closeable} that will unregister the <code>serverConnection</code>.
 	 *         The connector will automatically unregister all
 	 *         <code>serverConnection</code>s when closing.
 	 */
 	public default Closeable add(ServerConnection serverConnection,
 			int port) throws IOException {
-		return add(serverConnection, ANY_LOCAL_ADDRESS, port);
+		return add(serverConnection, new InetSocketAddress(port));
 	}
 
 	/**
 	 * Registers a {@link ServerConnection}
 	 *
-	 * @param serverConnection
-	 * @param host
-	 * @param port
 	 * @return a {@link Closeable} that will unregister the <code>serverConnection</code>.
 	 *         The connector will automatically unregister all
 	 *         <code>serverConnection</code>s when closing.
 	 */
 	public Closeable add(ServerConnection serverConnection,
-			String host, int port) throws IOException;
+			InetSocketAddress socketAddress) throws IOException;
+
+	/**
+	 * Registers and connects a {@link Connection} to a remote address
+	 *
+	 * @throws IOException If the remote address is invalid.
+	 */
+	public default void connect(Connection connection,
+			String host, int port) throws IOException {
+		connect(connection, InetSocketAddress.createUnresolved(host, port));
+	}
 
 	/**
 	 * Registers and connects a {@link Connection} to a remote address
@@ -46,5 +61,5 @@ public interface Connector {
 	 * @throws IOException If the remote address is invalid.
 	 */
 	public void connect(Connection connection,
-			String host, int port) throws IOException;
+			InetSocketAddress socketAddress) throws IOException;
 }

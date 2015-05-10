@@ -20,6 +20,7 @@ import javax.swing.UIManager;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.util.Numbers;
 
@@ -101,8 +102,7 @@ public class TerminalFrame extends ConnectorFrame {
 			}
 
 			@Override
-			public void onConnect(String localAddr, int localPort,
-					String remoteAddr, int remotePort) {
+			public void onConnect(ConnectionSession session) {
 				status = STATUS_CONNECTED;
 				btnConnect.setEnabled(true);
 				btnSend.setEnabled(true);

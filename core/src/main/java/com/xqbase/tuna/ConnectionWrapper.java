@@ -26,9 +26,8 @@ public abstract class ConnectionWrapper implements Connection {
 
 	/** Wraps connecting events, from the network side to the application side */
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
-		connection.onConnect(localAddr, localPort, remoteAddr, remotePort);
+	public void onConnect(ConnectionSession session) {
+		connection.onConnect(session);
 	}
 
 	/** Wraps passive disconnecting events, from the network side to the application side */

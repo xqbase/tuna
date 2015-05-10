@@ -27,13 +27,9 @@ public interface Connection {
 	/**
 	 * Consumes connecting events in the APPLICATION end of the connection.
 	 *
-	 * @param localAddr Local IP Address
-	 * @param localPort Local Port
-	 * @param remoteAddr Remote IP Address
-	 * @param remotePort Remote Port
+	 * @param session Local/Remote Address/Port
 	 */
-	public default void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {/**/}
+	public default void onConnect(ConnectionSession session) {/**/}
 	/** Consumes passive disconnecting events in the APPLICATION end of the connection. */
 	public default void onDisconnect() {/**/}
 

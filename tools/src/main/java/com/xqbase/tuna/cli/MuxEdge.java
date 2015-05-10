@@ -11,6 +11,7 @@ import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionFilter;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.mux.EdgeServer;
@@ -75,9 +76,8 @@ class EdgeLoop implements Runnable {
 		edge = new EdgeServer(context, authPhrase);
 		Connection connection = edge.getMuxConnection().appendFilter(new ConnectionFilter() {
 			@Override
-			public void onConnect(String localAddr, int localPort,
-					String remoteAddr, int remotePort) {
-				super.onConnect(localAddr, localPort, remoteAddr, remotePort);
+			public void onConnect(ConnectionSession session) {
+				super.onConnect(session);
 				try {
 					closeable = connector.add(edge, port);
 				} catch (IOException e) {

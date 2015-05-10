@@ -7,6 +7,7 @@ import java.io.PrintStream;
 import java.util.Calendar;
 
 import com.xqbase.tuna.ConnectionFilter;
+import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.util.Bytes;
 
 /** A {@link ConnectionFilter} which dumps sent and received data into console or files. */
@@ -138,15 +139,14 @@ public class DumpFilter extends ConnectionFilter {
 	}
 
 	@Override
-	public void onConnect(String localAddr, int localPort,
-			String remoteAddr, int remotePort) {
-		super.onConnect(localAddr, localPort, remoteAddr, remotePort);
+	public void onConnect(ConnectionSession session) {
+		super.onConnect(session);
 		if (useClientMode) {
-			host = localAddr;
-			port = localPort;
+			host = session.getLocalAddr();
+			port = session.getLocalPort();
 		} else {
-			host = remoteAddr;
-			port = remotePort;
+			host = session.getRemoteAddr();
+			port = session.getRemotePort();
 		}
 		if (dumpFolder != null) {
 			try {
