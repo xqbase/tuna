@@ -2,16 +2,24 @@ package com.xqbase.tuna.proxy;
 
 import java.io.IOException;
 import java.net.URL;
+import java.security.GeneralSecurityException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
+
+import javax.net.ssl.SSLSession;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.http.HttpPacketException;
+import com.xqbase.tuna.ssl.SSLConnectionSession;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.ByteArrayQueue;
+import com.xqbase.tuna.util.Bytes;
 import com.xqbase.util.Log;
 
 /** Connection for <b>CONNECT</b> */
@@ -353,6 +361,7 @@ public class ProxyConnection implements Connection {
 	private int logLevel; 
 	private ProxyContext context;
 	private ConnectionHandler handler;
+	private ConnectionSession session;
 	private String remote = null;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket request = new HttpPacket();
@@ -548,7 +557,8 @@ public class ProxyConnection implements Connection {
 		if (request.getHeader("HOST") == null) {
 			request.setHeader("Host", originalHost);
 		}
-		switch (context.getForwardedType()) {
+		int forwardedType = context.getForwardedType();
+		switch (forwardedType) {
 		case ProxyContext.FORWARDED_DELETE:
 			request.removeHeader("X-FORWARDED-FOR");
 			break;
@@ -556,10 +566,39 @@ public class ProxyConnection implements Connection {
 			request.setHeader("X-Forwarded-For", "unknown");
 			break;
 		case ProxyContext.FORWARDED_TRUNCATE:
-			// TODO
-			break;
 		case ProxyContext.FORWARDED_ON:
-			// TODO
+			String remoteAddr = session.getRemoteAddr();
+			if (forwardedType == ProxyContext.FORWARDED_ON) {
+				String xff = request.getHeader("X-FORWARDED-FOR");
+				if (xff != null && !xff.isEmpty()) {
+					remoteAddr = xff + ", " + remoteAddr;
+				}
+			}
+			request.setHeader("X-Forwarded-For", remoteAddr);
+			if (!(session instanceof SSLConnectionSession)) {
+				break;
+			}
+			SSLSession ssls = ((SSLConnectionSession) session).getSSLSession();
+			request.setHeader("X-Forwarded-SSL-Session-ID", Bytes.toHexLower(ssls.getId()));
+			request.setHeader("X-Forwarded-SSL-Cipher", ssls.getCipherSuite());
+			Certificate[] certificates;
+			try {
+				certificates = ssls.getPeerCertificates();
+				if (certificates == null) {
+					break;
+				}
+			} catch (IOException e) {
+				// Ignored
+				break;
+			}
+			try {
+				byte[] pkcs7 = CertificateFactory.getInstance("X509").
+						generateCertPath(Arrays.asList(certificates)).getEncoded("PKCS7");
+				request.setHeader("X-Forwarded-Certificates",
+						Base64.getEncoder().encodeToString(pkcs7));
+			} catch (GeneralSecurityException e) {
+				Log.w(e.getMessage());
+			}
 			break;
 		}
 		request.removeHeader("PROXY-AUTHORIZATION");
@@ -674,7 +713,8 @@ public class ProxyConnection implements Connection {
 	}
 
 	@Override
-	public void onConnect(ConnectionSession session) {
+	public void onConnect(ConnectionSession session_) {
+		session = session_;
 		remote = session.getRemoteAddr() + ":" + session.getRemotePort();
 	}
 
