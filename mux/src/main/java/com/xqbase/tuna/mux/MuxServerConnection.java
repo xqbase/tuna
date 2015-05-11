@@ -5,13 +5,21 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.security.GeneralSecurityException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.util.Collection;
 import java.util.HashMap;
+
+import javax.net.ssl.SSLSession;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.ServerConnection;
+import com.xqbase.tuna.ssl.SSLConnectionSession;
 import com.xqbase.tuna.util.Bytes;
+import com.xqbase.util.ByteArrayQueue;
 import com.xqbase.util.Log;
 
 class MuxServerConnection implements Connection {
@@ -42,6 +50,38 @@ class MuxServerConnection implements Connection {
 		this.handler = handler;
 	}
 
+	private static SSLSession getSSLSession(byte[] b, int off, int len) {
+		if (len < 1) {
+			return null;
+		}
+		int idLen = b[off] & 0xFF;
+		if (len < 2 + idLen) {
+			return null;
+		}
+		byte[] id = Bytes.sub(b, off + 1, idLen);
+		int cipherLen = b[off + 1 + idLen] & 0xFF;
+		int certLen = len - 2 - idLen - cipherLen;
+		if (certLen < 0) {
+			return null;
+		}
+		int cipherOff = off + 2 + idLen;
+		String cipher = new String(b, cipherOff, cipherLen);
+		Certificate[] certs = null;
+		if (certLen > 0) {
+			ByteArrayQueue baq = new ByteArrayQueue();
+			baq.add(b, cipherOff + cipherLen, certLen);
+			try {
+				Collection<? extends Certificate> certs_ = CertificateFactory.
+						getInstance("X509").generateCertificates(baq.getInputStream());
+				certs = certs_.toArray(new Certificate[0]);
+			} catch (GeneralSecurityException e) {
+				// Ignored
+			}
+		}
+		// TODO MuxSSLSession
+		return new MuxSSLSession(id, null, cipher, null, 0, certs, certs);
+	}
+
 	void onRecv(MuxPacket packet, byte[] b, int off) {
 		int cid = packet.cid;
 		switch (packet.cmd) {
@@ -66,27 +106,43 @@ class MuxServerConnection implements Connection {
 			Connection connection_ = server.get();
 			InetAddress localAddress, remoteAddress;
 			int localPort, remotePort;
-			if (packet.size == 12 || packet.size == 36) {
-				int addrLen = packet.size / 2 - 2;
-				try {
-					localAddress = InetAddress.getByAddress(Bytes.
-							sub(b, off, addrLen));
-					remoteAddress = InetAddress.getByAddress(Bytes.
-							sub(b, off + addrLen + 2, addrLen));
-				} catch (IOException e) {
-					localAddress = remoteAddress = new InetSocketAddress(0).getAddress();
+			SSLSession ssls = null;
+			try {
+				if (packet.size < 1) {
+					throw new IOException("No Session Byte");
 				}
-				localPort = Bytes.toShort(Bytes.
-						sub(b, off + addrLen, 2)) & 0xFFFF;
-				remotePort = Bytes.toShort(Bytes.
-						sub(b, off + addrLen * 2 + 2, 2)) & 0xFFFF;
-			} else {
+				int sessionBit = b[off];
+				int localAddrLen = 4, remoteAddrLen = 4;
+				int localPortOff = off + 3;
+				if ((sessionBit & MuxPacket.SESSION_LOCAL_IPV6) != 0) {
+					localAddrLen += 12;
+					localPortOff += 12;
+				}
+				int remotePortOff = localPortOff + 6;
+				if ((sessionBit & MuxPacket.SESSION_REMOTE_IPV6) != 0) {
+					remoteAddrLen += 12;
+					remotePortOff += 12;
+				}
+				if (packet.size < 5 + localAddrLen + remoteAddrLen) {
+					throw new IOException("Not Enough Address Data");
+				}
+				localAddress = InetAddress.getByAddress(Bytes.
+						sub(b, off + 1, localAddrLen));
+				localPort = Bytes.toShort(b, localPortOff) & 0xFFFF;
+				remoteAddress = InetAddress.getByAddress(Bytes.
+						sub(b, localPortOff + 2, remoteAddrLen));
+				remotePort = Bytes.toShort(b, remotePortOff) & 0xFFFF;
+				if ((sessionBit & MuxPacket.SESSION_SSL) != 0) {
+					ssls = getSSLSession(b, remotePortOff + 2,
+							packet.size - remotePortOff - 2);
+				}
+			} catch (IOException e) {
 				localAddress = remoteAddress = new InetSocketAddress(0).getAddress();
 				localPort = remotePort = 0;
 				if (logLevel >= LOG_DEBUG) {
 					StringWriter sw = new StringWriter();
 					PrintWriter out = new PrintWriter(sw);
-					out.println("CONNECTION_CONNECT: Bad Address for #" + cid + recv);
+					out.println("CONNECTION_CONNECT: " + e.getMessage() + ", #" + cid + recv);
 					Bytes.dump(out, b, off, packet.size);
 					Log.d(sw.toString());
 				}
@@ -94,14 +150,15 @@ class MuxServerConnection implements Connection {
 			connection = new VirtualConnection(connection_, this, cid);
 			connection_.setHandler(connection);
 			connectionMap.put(Integer.valueOf(cid), connection);
-			InetSocketAddress localAddr = new InetSocketAddress(localAddress, localPort);
-			InetSocketAddress remoteAddr = new InetSocketAddress(remoteAddress, remotePort);
-			connection.onConnect(new ConnectionSession(localAddr, remoteAddr));
+			InetSocketAddress localIsa = new InetSocketAddress(localAddress, localPort);
+			InetSocketAddress remoteIsa = new InetSocketAddress(remoteAddress, remotePort);
+			connection.onConnect(ssls == null ? new ConnectionSession(localIsa, remoteIsa) :
+					new SSLConnectionSession(localIsa, remoteIsa, ssls));
 			if (logLevel < LOG_DEBUG) {
 				return;
 			}
-			String local = localAddr + ":" + localPort;
-			String remote = remoteAddr + ":" + remotePort;
+			String local = localIsa + ":" + localPort;
+			String remote = remoteIsa + ":" + remotePort;
 			connection.send = ", " + remote + "<-" + local;
 			connection.recv = ", " + remote + "->" + local;
 			if (logLevel >= LOG_VERBOSE) {
