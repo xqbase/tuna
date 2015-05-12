@@ -23,19 +23,16 @@ class MuxPacket {
 	static final int CONNECTION_RECV	= 0x301;
 	static final int CONNECTION_QUEUE	= 0x312;
 	/**
-	 * 1 byte sessionTag +<br>
-	 * 4/16 bytes localAddr + 2 bytes localPort +<br>
-	 * 4/16 bytes remoteAddr + 2 bytes remotePort +<br>
-	 * <i>(Optional)</i><br>
-	 * 1 byte sslSessionIDLen + SSL Session ID +<br>
-	 * 1 byte sslCipherLen + SSL Cipher +<br>
-	 * PKCS7-Encoded Peer Certificates
+	 * sessionTag[1] + localAddr[4/16] + localPort[2] + remoteAddr[4/16] + remotePort[2] +<br>
+	 * <i>(Optional)</i> sslSessionIDLen[1] + peerHostLen[1] + peerCertsLen[2] + localCertsLen[2] +<br>
+	 * SSL-Session-ID[sslSessionIDLen] + SSL-Cipher[2] + SSL-Protocol[2] + Peer-Host[peerHostLen] +<br>
+	 * Peer-Port[2] + Peer-Certificates[peerCertsLen] + Local-Certificates[localCertsLen]
 	 */
 	static final int CONNECTION_CONNECT	= 0x315;
 	static final int CONNECTION_DISCONNECT = 0x318;
 	// Handler Commands
 	static final int HANDLER_SEND		= 0x401;
-	/** 2 bytes numConns + (numConns * 2) bytes Conn IDs + Data */
+	/** numConns[2] + Conn-IDs[numConns * 2] + Data */
 	static final int HANDLER_MULTICAST	= 0x402;
 	static final int HANDLER_BUFFER		= 0x413;
 	static final int HANDLER_DISCONNECT	= 0x418;

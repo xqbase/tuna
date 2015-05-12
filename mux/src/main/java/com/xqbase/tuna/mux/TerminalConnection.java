@@ -3,6 +3,7 @@ package com.xqbase.tuna.mux;
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.ConnectionSession;
+import com.xqbase.tuna.ssl.SSLConnectionSession;
 import com.xqbase.tuna.util.Bytes;
 import com.xqbase.util.Log;
 
@@ -58,13 +59,25 @@ class TerminalConnection implements Connection {
 		}
 		byte[] localAddrBytes = session.getLocalSocketAddress().getAddress().getAddress();
 		byte[] remoteAddrBytes = session.getRemoteSocketAddress().getAddress().getAddress();
-		byte[] b = new byte[HEAD_SIZE + localAddrBytes.length + remoteAddrBytes.length + 4];
-		System.arraycopy(localAddrBytes, 0, b, HEAD_SIZE, localAddrBytes.length);
-		Bytes.setShort(session.getLocalPort(), b, HEAD_SIZE + localAddrBytes.length);
+		int len = HEAD_SIZE + 5 + localAddrBytes.length + remoteAddrBytes.length;
+		byte[] b;
+		if (session instanceof SSLConnectionSession) {
+			byte[] sslBytes = new MuxSSLSession(((SSLConnectionSession) session).
+					getSSLSession()).getEncoded();
+			b = new byte[len + sslBytes.length];
+			System.arraycopy(sslBytes, 0, b, len, sslBytes.length);
+		} else {
+			b = new byte[len];
+		}
+		b[HEAD_SIZE] = (byte) ((localAddrBytes.length == 16 ? MuxPacket.SESSION_LOCAL_IPV6 : 0) +
+				(remoteAddrBytes.length == 16 ? MuxPacket.SESSION_REMOTE_IPV6 : 0) +
+				(session instanceof SSLConnectionSession ? MuxPacket.SESSION_SSL : 0));
+		System.arraycopy(localAddrBytes, 0, b, HEAD_SIZE + 1, localAddrBytes.length);
+		Bytes.setShort(session.getLocalPort(), b, HEAD_SIZE + 1 + localAddrBytes.length);
 		System.arraycopy(remoteAddrBytes, 0, b,
-				HEAD_SIZE + localAddrBytes.length + 2, localAddrBytes.length);
-		Bytes.setShort(session.getRemotePort(), b, HEAD_SIZE +
-				localAddrBytes.length + 2 + remoteAddrBytes.length);
+				HEAD_SIZE + 3 + localAddrBytes.length, localAddrBytes.length);
+		Bytes.setShort(session.getRemotePort(), b, HEAD_SIZE + 3 +
+				localAddrBytes.length + remoteAddrBytes.length);
 		MuxPacket.send(mux.handler, b, MuxPacket.CONNECTION_CONNECT, cid);
 		mux.connectionMap.put(Integer.valueOf(cid), this);
 		if (logLevel < LOG_DEBUG) {
