@@ -22,31 +22,31 @@ public class SSLFilter extends ConnectionFilter {
 	 * Indicates that SSLFilter is created in server mode with
 	 * NO client authentication desired.
 	 *
-	 * @see #SSLFilter(Executor, SSLContext, int)
-	 * @see #SSLFilter(Executor, SSLContext, int, String, int)
+	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int)
+	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_NO_AUTH = 0;
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * client authentication REQUESTED.
 	 *
-	 * @see #SSLFilter(Executor, SSLContext, int)
-	 * @see #SSLFilter(Executor, SSLContext, int, String, int)
+	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int)
+	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_WANT_AUTH = 1;
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * client authentication REQUIRED.
 	 *
-	 * @see #SSLFilter(Executor, SSLContext, int)
-	 * @see #SSLFilter(Executor, SSLContext, int, String, int)
+	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int)
+	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_NEED_AUTH = 2;
 	/**
 	 * Indicates that SSLFilter is created in client mode.
 	 *
-	 * @see #SSLFilter(Executor, SSLContext, int)
-	 * @see #SSLFilter(Executor, SSLContext, int, String, int)
+	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int)
+	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int, String, int)
 	 */
 	public static final int CLIENT = 3;
 
