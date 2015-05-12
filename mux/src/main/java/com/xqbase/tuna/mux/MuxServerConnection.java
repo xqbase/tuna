@@ -120,8 +120,8 @@ class MuxServerConnection implements Connection {
 			if (logLevel < LOG_DEBUG) {
 				return;
 			}
-			String local = localIsa + ":" + localPort;
-			String remote = remoteIsa + ":" + remotePort;
+			String local = localAddress.getHostAddress() + ":" + localPort;
+			String remote = remoteAddress.getHostAddress() + ":" + remotePort;
 			connection.send = ", " + remote + "<-" + local;
 			connection.recv = ", " + remote + "->" + local;
 			if (logLevel >= LOG_VERBOSE) {
