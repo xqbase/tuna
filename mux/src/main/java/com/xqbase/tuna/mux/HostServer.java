@@ -85,7 +85,7 @@ public class HostServer implements ServerConnection, AutoCloseable {
 	private TimerHandler.Closeable closeable;
 
 	/**
-	 * Creates a Host Server for {@link GuestConnection}s to open ports
+	 * Creates a Host Server for {@link GuestServer}s to open ports
 	 * @param connector The {@link Connector} to accept public connections
 	 */
 	public HostServer(Connector connector, MuxContext context) {

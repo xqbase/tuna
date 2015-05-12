@@ -88,7 +88,6 @@ public class ForwardServer implements ServerConnection {
 	 * @param connector - A connector which remote connections registered to.
 	 * @param host - The remote (forwarded) host.
 	 * @param port - The remote (forwarded) port.
-	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
 	public ForwardServer(Connector connector, String host, int port) {
 		this.connector = connector;
@@ -96,7 +95,7 @@ public class ForwardServer implements ServerConnection {
 		this.port = port;
 	}
 
-	/** @return A list of "ServerFilter"s applied to remote connections. */
+	/** Append "ServerFilter"s to remote connections. */
 	public void appendRemoteFilter(Supplier<? extends ConnectionFilter> serverFilter) {
 		serverFilters.add(serverFilter);
 	}

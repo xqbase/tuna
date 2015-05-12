@@ -12,7 +12,7 @@ import com.xqbase.tuna.util.Bytes;
 /**
  * The broadcasting to a large number of virtual connections can be done via a multicast
  * connection, which can save the network bandwidth by the multicast approach.<p>
- * For detailed usage, see {@link com.xqbase.tuna.mux.TestMulticast} from github.com
+ * For detailed usage, see <code>com.xqbase.tuna.mux.TestMulticast</code> in test
  */
 public class MulticastHandler implements ConnectionHandler {
 	private static final int HEAD_SIZE = MuxPacket.HEAD_SIZE;

@@ -74,7 +74,7 @@ class EdgeMuxConnection extends MuxClientConnection {
  * will become the virtual connections of the connected OriginServer.<p>
  * The edge connection must be connected to the OriginServer immediately,
  * before the EdgeServer added into a {@link Connector}.<p>
- * For detailed usage, see {@link com.xqbase.tuna.cli.Edge} in github.com
+ * For detailed usage, see <code>com.xqbase.tuna.cli.MuxEdge</code> in <code>tuna-tools</code>
  */
 public class EdgeServer implements ServerConnection {
 	private EdgeMuxConnection mux;
