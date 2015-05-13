@@ -1,6 +1,7 @@
 package com.xqbase.tuna.http;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -38,6 +39,7 @@ public class HttpPacket {
 	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
 	private ByteArrayQueue body = new ByteArrayQueue();
 	private StringBuilder line = new StringBuilder();
+	private HashMap<String, Object> attributeMap = new HashMap<>();
 
 	public void reset() {
 		phase = PHASE_START;
@@ -474,5 +476,13 @@ public class HttpPacket {
 		ByteArrayQueue data = new ByteArrayQueue();
 		write(data, begin, forceChunked);
 		handler.send(data.array(), data.offset(), data.length());
+	}
+
+	public Object getAttribute(String key) {
+		return attributeMap.get(key);
+	}
+
+	public void setAttribute(String key, Object value) {
+		attributeMap.put(key, value);
 	}
 }

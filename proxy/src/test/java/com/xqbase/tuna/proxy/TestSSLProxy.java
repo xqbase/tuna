@@ -11,7 +11,6 @@ import javax.net.ssl.TrustManagerFactory;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.ssl.SSLFilter;
-import com.xqbase.tuna.ssl.SSLManagers;
 import com.xqbase.util.Log;
 
 public class TestSSLProxy {
@@ -24,19 +23,17 @@ public class TestSSLProxy {
 			kmf.init(ks, "changeit".toCharArray());
 			TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
 			tmf.init(ks);
-			SSLContext sslcServer = SSLContext.getInstance("TLS");
-			sslcServer.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+			SSLContext sslc = SSLContext.getInstance("TLS");
+			sslc.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
 			
-			SSLContext sslcClient = SSLContext.getInstance("TLS");
-			sslcClient.init(SSLManagers.DEFAULT_KEY_MANAGERS,
-					SSLManagers.DEFAULT_TRUST_MANAGERS, null);
-
-			ProxyContext context = new ProxyContext(connector, connector, connector,
-					sslcClient, (t) -> "localhost", (t, u) -> true, null, true,
-					ProxyContext.FORWARDED_ON, ProxyContext.LOG_DEBUG); 
+			ProxyContext context = new ProxyContext(connector, connector, connector);
+			context.setLookup(t -> "localhost");
+			context.setEnableReverse(true);
+			context.setForwardedType(ProxyContext.FORWARDED_ON);
+			context.setLogLevel(ProxyContext.LOG_DEBUG);
 			ServerConnection server = () -> new ProxyConnection(context);
 			connector.add(server.appendFilter(() -> new SSLFilter(connector,
-					connector, sslcServer, SSLFilter.SERVER_WANT_AUTH)), 8443);
+					connector, sslc, SSLFilter.SERVER_WANT_AUTH)), 8443);
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());
