@@ -174,6 +174,7 @@ class ClientConnection implements Connection {
 				if (!response.isCompleteHeader()) {
 					proxy.badGateway();
 				}
+				proxy.onComplete(response);
 				proxy.disconnect();
 				return;
 			}
@@ -185,6 +186,7 @@ class ClientConnection implements Connection {
 			if (!response.isCompleteHeader()) {
 				return;
 			}
+			proxy.onResponse(response);
 			int status = response.getStatus();
 			if (status != 100) { // Not Necessary to Support "102 Processing"
 				if (logLevel >= LOG_VERBOSE) {
@@ -275,6 +277,7 @@ class ClientConnection implements Connection {
 		}
 		// Just disconnect because request is not saved.
 		// Most browsers will retry request. 
+		proxy.onComplete(response);
 		proxy.disconnect();
 	}
 
@@ -297,6 +300,7 @@ class ClientConnection implements Connection {
 			return;
 		}
 		if (requestClose) {
+			proxy.onComplete(response);
 			proxy.disconnect();
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Proxy Connection Closed due to HTTP/1.0 or " +
@@ -323,6 +327,7 @@ class ClientConnection implements Connection {
 	}
 
 	private void reset() {
+		proxy.onComplete(response);
 		request.reset();
 		response.reset();
 		proxyHandler.setBufferSize(MAX_BUFFER_SIZE);
@@ -394,6 +399,14 @@ public class ProxyConnection implements Connection {
 		handler.send(GATEWAY_TIMEOUT);
 	}
 
+	void onResponse(HttpPacket response) {
+		context.onResponse(request, response);
+	}
+
+	void onComplete(HttpPacket response) {
+		context.onComplete(request, response);
+	}
+
 	private void readEx() throws HttpPacketException {
 		request.read(queue);
 		if (client != null) {
@@ -417,7 +430,7 @@ public class ProxyConnection implements Connection {
 				password = basic.substring(colon + 1);
 			}
 		}
-		if (!context.test(username, password)) {
+		if (!context.auth(username, password)) {
 			String realm = context.getRealm();
 			HttpPacket response = new HttpPacket();
 			response.setType(HttpPacket.TYPE_RESPONSE);
@@ -446,9 +459,29 @@ public class ProxyConnection implements Connection {
 			return;
 		}
 
+		request.setAttribute(ProxyContext.SESSION_KEY, session);
+		HttpPacket response = context.onRequest(request);
+		if (response != null) {
+			if (connectionClose || !request.isComplete()) {
+				// Skip reading body
+				response.setHeader("Connection", "close");
+				response.write(handler, true, false);
+				disconnect();
+			} else { 
+				response.setHeader("Connection", "keep-alive");
+				response.write(handler, true, false);
+				request.reset();
+				// No request from peer, so continue reading
+				if (queue.length() > 0) {
+					readEx();
+				}
+			}
+			return;
+		}
+
 		String method = request.getMethod().toUpperCase();
 		if (method.equals("CONNECT")) {
-			String uri = context.apply(request.getUri().toLowerCase());
+			String uri = context.lookup(request.getUri().toLowerCase());
 			if (uri == null) {
 				if (logLevel >= LOG_DEBUG) {
 					Log.d("Connection to \"" + request.getUri() +
@@ -525,7 +558,7 @@ public class ProxyConnection implements Connection {
 		}
 
 		String originalHost = host;
-		host = context.apply(originalHost.toLowerCase());
+		host = context.lookup(originalHost.toLowerCase());
 		if (host == null) {
 			if (logLevel >= LOG_DEBUG) {
 				Log.d("Request to \"" + originalHost +

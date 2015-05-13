@@ -133,6 +133,7 @@ public class SSLFilter extends ConnectionFilter {
 		do {
 			try {
 				result = unwrap();
+				// FIXME: may be thrown if connected by FireFox
 			} catch (IOException e) {
 				disconnect();
 				onDisconnect();

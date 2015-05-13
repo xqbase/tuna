@@ -12,9 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.function.BiPredicate;
 import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
 import java.util.logging.Logger;
 
 import javax.net.ssl.KeyManager;
@@ -98,43 +96,29 @@ public class TunaProxy {
 		String host = p.getProperty("host");
 		host = host == null || host.isEmpty() ? "0.0.0.0" : host;
 		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
+		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
+		boolean lookupEnabled = Conf.getBoolean(p.getProperty("lookup"), false);
+		String realm = p.getProperty("realm");
 		boolean enableReverse = Conf.getBoolean(p.getProperty("reverse"), false);
-		String logValue = Conf.DEBUG ? "verbose" : p.getProperty("log");
-		int logLevel = logValue == null ? 0 : LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 		String forwardedValue = p.getProperty("forwarded");
 		int forwardedType = forwardedValue == null ? 0 :
 				FORWARDED_VALUE.indexOf(forwardedValue.toLowerCase()) + 1;
-
-		boolean lookupEnabled = Conf.getBoolean(p.getProperty("lookup"), false);
-		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
-		HashMap<String, String> lookupMap = new HashMap<>();
-		HashMap<String, String> authMap = new HashMap<>();
-		UnaryOperator<String> lookup = lookupEnabled ? lookupMap::get : t -> t;
-		BiPredicate<String, String> auth;
-		if (authEnabled) {
-			auth = (t, u) -> {
-				if (t == null) {
-					return false;
-				}
-				String password = authMap.get(t);
-				return password != null && password.equals(u);
-			};
-		} else {
-			auth = (t, u) -> true;
-		}
+		String logValue = Conf.DEBUG ? "verbose" : p.getProperty("log");
+		int logLevel = logValue == null ? 0 : LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
-			if (lookupEnabled) {
-				connector.scheduleDelayed(() -> {
-					lookupMap.clear();
-					Properties p_ = Conf.load("Lookup");
-					for (Map.Entry<?, ?> entry : p_.entrySet()) {
-						lookupMap.put((String) entry.getKey(), (String) entry.getValue());
-					}
-				}, 0, 10000);
-			}
+
+			ProxyContext context = new ProxyContext(connector, connector, connector);
 			if (authEnabled) {
+				HashMap<String, String> authMap = new HashMap<>();
+				context.setAuth((t, u) -> {
+					if (t == null) {
+						return false;
+					}
+					String password = authMap.get(t);
+					return password != null && password.equals(u);
+				});
 				connector.scheduleDelayed(() -> {
 					authMap.clear();
 					Properties p_ = Conf.load("Auth");
@@ -143,11 +127,21 @@ public class TunaProxy {
 					}
 				}, 0, 10000);
 			}
-
-			SSLContext sslcClient = getSSLContext(null, 0);
-			ProxyContext context = new ProxyContext(connector, connector, connector,
-					sslcClient, lookup, auth, p.getProperty("realm"),
-					enableReverse, forwardedType, logLevel);
+			if (lookupEnabled) {
+				HashMap<String, String> lookupMap = new HashMap<>();
+				context.setLookup(lookupMap::get);
+				connector.scheduleDelayed(() -> {
+					lookupMap.clear();
+					Properties p_ = Conf.load("Lookup");
+					for (Map.Entry<?, ?> entry : p_.entrySet()) {
+						lookupMap.put((String) entry.getKey(), (String) entry.getValue());
+					}
+				}, 0, 10000);
+			}
+			context.setRealm(realm);
+			context.setEnableReverse(enableReverse);
+			context.setForwardedType(forwardedType);
+			context.setLogLevel(logLevel);
 			ServerConnection server = () -> new ProxyConnection(context);
 
 			if (Conf.getBoolean(p.getProperty("mux"), false)) {
