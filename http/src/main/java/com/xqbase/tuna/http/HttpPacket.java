@@ -48,6 +48,7 @@ public class HttpPacket {
 		headers.clear();
 		body.clear();
 		line.setLength(0);
+		attributeMap.clear();
 	}
 
 	/** @return <code>true</code> for reading request */
@@ -484,5 +485,24 @@ public class HttpPacket {
 
 	public void setAttribute(String key, Object value) {
 		attributeMap.put(key, value);
+	}
+
+	public static HttpPacket createResponse(int status, String reason,
+			String body, String... headerPair) {
+		HttpPacket response = new HttpPacket();
+		response.setType(HttpPacket.TYPE_RESPONSE);
+		response.setStatus(status);
+		response.setReason(reason);
+		byte[] bodyBytes = body.getBytes();
+		response.getBody().add(bodyBytes);
+		response.setHeader("Content-Length", "" + bodyBytes.length);
+		for (int i = 0; i < headerPair.length - 1; i += 2) {
+			String key = headerPair[i];
+			String value = headerPair[i + 1];
+			if (key != null && value != null) {
+				response.setHeader(key, value);
+			}
+		}
+		return response;
 	}
 }
