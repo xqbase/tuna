@@ -12,12 +12,12 @@ import java.util.function.UnaryOperator;
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.Connection;
-import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.ssl.SSLManagers;
+import com.xqbase.util.function.ConsumerEx;
 
 public class ProxyContext implements Connector, EventQueue, Executor {
 	public static final int FORWARDED_TRANSPARENT = 0;
@@ -29,8 +29,6 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 	public static final int LOG_NONE = 0;
 	public static final int LOG_DEBUG = 1;
 	public static final int LOG_VERBOSE = 2;
-
-	public static final String SESSION_KEY = ConnectionSession.class.getName();
 
 	private static SSLContext defaultSSLContext;
 
@@ -50,7 +48,7 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 	private SSLContext sslc = defaultSSLContext;
 	private BiPredicate<String, String> auth = (t, u) -> true;
 	private UnaryOperator<String> lookup = t -> t;
-	private UnaryOperator<HttpPacket> onRequest = t -> null;
+	private ConsumerEx<HttpPacket, OnRequestException> onRequest = t -> {/**/};
 	private BiConsumer<HttpPacket, HttpPacket>
 			onResponse = (t, u) -> {/**/}, onComplete = (t, u) -> {/**/};
 	private IntFunction<byte[]> errorPages = t -> new byte[0];
@@ -98,7 +96,7 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 		this.lookup = lookup;
 	}
 
-	public void setOnRequest(UnaryOperator<HttpPacket> onRequest) {
+	public void setOnRequest(ConsumerEx<HttpPacket, OnRequestException> onRequest) {
 		this.onRequest = onRequest;
 	}
 
@@ -142,8 +140,8 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 		return lookup.apply(host);
 	}
 
-	public HttpPacket onRequest(HttpPacket request) {
-		return onRequest.apply(request);
+	public void onRequest(HttpPacket request) throws OnRequestException {
+		onRequest.accept(request);
 	}
 
 	public void onResponse(HttpPacket request, HttpPacket response) {

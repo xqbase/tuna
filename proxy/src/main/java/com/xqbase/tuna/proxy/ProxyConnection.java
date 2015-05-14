@@ -21,6 +21,7 @@ import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.tuna.util.Bytes;
 import com.xqbase.util.Log;
+import com.xqbase.util.Numbers;
 
 /** Connection for <b>CONNECT</b> */
 class PeerConnection implements Connection {
@@ -342,6 +343,12 @@ class ClientConnection implements Connection {
 }
 
 public class ProxyConnection implements Connection {
+	public static final String SESSION_KEY = ConnectionSession.class.getName();
+	public static final String NEXT_PROXY_KEY =
+			ProxyConnection.class.getName() + ".NEXT_PROXY";
+	public static final String PROXY_AUTH_KEY =
+			ProxyConnection.class.getName() + ".PROXY_AUTH";
+
 	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
 
@@ -459,9 +466,11 @@ public class ProxyConnection implements Connection {
 			return;
 		}
 
-		request.setAttribute(ProxyContext.SESSION_KEY, session);
-		HttpPacket response = context.onRequest(request);
-		if (response != null) {
+		request.setAttribute(SESSION_KEY, session);
+		try {
+			context.onRequest(request);
+		} catch (OnRequestException e) {
+			HttpPacket response = e.getResponse();
 			if (connectionClose || !request.isComplete()) {
 				// Skip reading body
 				response.setHeader("Connection", "close");
@@ -497,12 +506,7 @@ public class ProxyConnection implements Connection {
 			}
 			String host = uri.substring(0, colon);
 			String value = uri.substring(colon + 1);
-			int port;
-			try {
-				port = Integer.parseInt(value);
-			} catch (NumberFormatException e) {
-				port = -1;
-			}
+			int port = Numbers.parseInt(value, -1);
 			if (port < 0 || port > 0xFFFF) {
 				throw new HttpPacketException("Invalid Port", value);
 			}
@@ -522,74 +526,91 @@ public class ProxyConnection implements Connection {
 			return;
 		}
 
+		request.removeHeader("PROXY-AUTHORIZATION");
+		request.removeHeader("PROXY-CONNECTION");
+
+		String host = (String) request.getAttribute(NEXT_PROXY_KEY);
 		String uri = request.getUri();
 		boolean secure = false;
-		String host;
+		String connectHost;
 		int port;
-		try {
-			// Use "host:port" in URI
-			URL url = new URL(uri);
-			String proto = url.getProtocol().toLowerCase();
-			if (proto.equals("https")) {
-				secure = true;
-			} else if (!proto.equals("http")) {
-				if (logLevel >= LOG_DEBUG) {
-					Log.d("\"" + proto + "\" Not Implemented, " + getRemote());
+		if (host == null) {
+			try {
+				// Use "host:port" in URI
+				URL url = new URL(uri);
+				String proto = url.getProtocol().toLowerCase();
+				if (proto.equals("https")) {
+					secure = true;
+				} else if (!proto.equals("http")) {
+					if (logLevel >= LOG_DEBUG) {
+						Log.d("\"" + proto + "\" Not Implemented, " + getRemote());
+					}
+					handler.send(NOT_IMPLEMENTED);
+					disconnect();
+					return;
 				}
-				handler.send(NOT_IMPLEMENTED);
+				port = url.getPort();
+				host = url.getHost() + (port < 0 ? "" : ":" + port);
+				String query = url.getQuery();
+				uri = url.getPath();
+				uri = (uri == null || uri.isEmpty() ? "/" : uri) +
+						(query == null || query.isEmpty() ? "" : "?" + query);
+			} catch (IOException e) {
+				if (!context.isEnableReverse()) {
+					throw new HttpPacketException("Invalid URI", uri);
+				}
+				// Use "Host" in headers if "Reverse" enabled and "host:port" not in URI
+				host = request.getHeader("HOST");
+				if (host == null) {
+					throw new HttpPacketException("Missing Host", "");
+				}
+			}
+
+			String originalHost = host;
+			host = context.lookup(originalHost.toLowerCase());
+			if (host == null) {
+				if (logLevel >= LOG_DEBUG) {
+					Log.d("Request to \"" + originalHost +
+							"\" is Forbidden, " + getRemote());
+				}
+				handler.send(FORBIDDEN);
 				disconnect();
 				return;
 			}
-			port = url.getPort();
-			host = url.getHost() + (port < 0 ? "" : ":" + port);
-			String query = url.getQuery();
-			uri = url.getPath();
-			uri = (uri == null || uri.isEmpty() ? "/" : uri) +
-					(query == null || query.isEmpty() ? "" : "?" + query);
-		} catch (IOException e) {
-			if (!context.isEnableReverse()) {
-				throw new HttpPacketException("Invalid URI", uri);
+			int colon = host.lastIndexOf(':');
+			if (colon < 0) {
+				connectHost = host;
+				port = secure ? 443 : 80;
+			} else {
+				connectHost = host.substring(0, colon);
+				String value = host.substring(colon + 1);
+				port = Numbers.parseInt(value, -1);
+				if (port < 0 || port > 0xFFFF) {
+					throw new HttpPacketException("Invalid Port", value);
+				}
 			}
-			// Use "Host" in headers if "Reverse" enabled and "host:port" not in URI
-			host = request.getHeader("HOST");
-			if (host == null) {
-				throw new HttpPacketException("Missing Host", "");
-			}
-		}
 
-		String originalHost = host;
-		host = context.lookup(originalHost.toLowerCase());
-		if (host == null) {
-			if (logLevel >= LOG_DEBUG) {
-				Log.d("Request to \"" + originalHost +
-						"\" is Forbidden, " + getRemote());
+			request.setUri(uri);
+			if (request.getHeader("HOST") == null) {
+				request.setHeader("Host", originalHost);
 			}
-			handler.send(FORBIDDEN);
-			disconnect();
-			return;
-		}
-		int colon = host.lastIndexOf(':');
-		String connectHost;
-		if (colon < 0) {
-			connectHost = host;
-			port = secure ? 443 : 80;
+
 		} else {
-			connectHost = host.substring(0, colon);
-			String value = host.substring(colon + 1);
-			try {
-				port = Integer.parseInt(value);
-			} catch (NumberFormatException e_) {
-				port = -1;
+			int colon = host.lastIndexOf(':');
+			if (colon < 0) {
+				connectHost = host;
+				port = 3128;
+			} else {
+				connectHost = host.substring(0, colon);
+				String value = host.substring(colon + 1);
+				port = Numbers.parseInt(value, 3128, 0, 0xFFFF);
 			}
-			if (port < 0 || port > 0xFFFF) {
-				throw new HttpPacketException("Invalid Port", value);
+			proxyAuth = (String) request.getAttribute(PROXY_AUTH_KEY);
+			if (proxyAuth != null) {
+				request.setHeader("Proxy-Authorization", proxyAuth);
 			}
 		}
 
-		request.setUri(uri);
-		if (request.getHeader("HOST") == null) {
-			request.setHeader("Host", originalHost);
-		}
 		int forwardedType = context.getForwardedType();
 		switch (forwardedType) {
 		case ProxyContext.FORWARDED_DELETE:
@@ -634,8 +655,6 @@ public class ProxyConnection implements Connection {
 			}
 			break;
 		}
-		request.removeHeader("PROXY-AUTHORIZATION");
-		request.removeHeader("PROXY-CONNECTION");
 
 		client = getClientMap(secure).get(host);
 		if (client == null) {
