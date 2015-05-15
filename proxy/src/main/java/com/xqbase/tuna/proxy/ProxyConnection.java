@@ -33,15 +33,16 @@ class PeerConnection implements Connection {
 
 	private ProxyConnection peer;
 	private ConnectionHandler peerHandler, handler;
-	private boolean established = false;
+	private boolean proxyChain, established = false;
 	// For DEBUG only
 	private int logLevel, port;
 	private String host, local = " (0.0.0.0:0)";
 
 	PeerConnection(ProxyConnection peer, ConnectionHandler peerHandler,
-			int logLevel, String host, int port) {
+			boolean proxyChain, int logLevel, String host, int port) {
 		this.peer = peer;
 		this.peerHandler = peerHandler;
+		this.proxyChain = proxyChain;
 		this.logLevel = logLevel;
 		this.host = host;
 		this.port = port;
@@ -76,7 +77,9 @@ class PeerConnection implements Connection {
 
 	@Override
 	public void onConnect(ConnectionSession session) {
-		peerHandler.send(CONNECTION_ESTABLISHED);
+		if (!proxyChain) {
+			peerHandler.send(CONNECTION_ESTABLISHED);
+		}
 		established = true;
 		local = " (" + session.getLocalAddr() + ":" + session.getLocalPort() + ")";
 		if (logLevel >= LOG_VERBOSE) {
@@ -175,7 +178,7 @@ class ClientConnection implements Connection {
 				if (!response.isCompleteHeader()) {
 					proxy.badGateway();
 				}
-				proxy.onComplete(response);
+				proxy.onComplete();
 				proxy.disconnect();
 				return;
 			}
@@ -278,7 +281,7 @@ class ClientConnection implements Connection {
 		}
 		// Just disconnect because request is not saved.
 		// Most browsers will retry request. 
-		proxy.onComplete(response);
+		proxy.onComplete();
 		proxy.disconnect();
 	}
 
@@ -301,7 +304,7 @@ class ClientConnection implements Connection {
 			return;
 		}
 		if (requestClose) {
-			proxy.onComplete(response);
+			proxy.onComplete();
 			proxy.disconnect();
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Proxy Connection Closed due to HTTP/1.0 or " +
@@ -328,7 +331,7 @@ class ClientConnection implements Connection {
 	}
 
 	private void reset() {
-		proxy.onComplete(response);
+		proxy.onComplete();
 		request.reset();
 		response.reset();
 		proxyHandler.setBufferSize(MAX_BUFFER_SIZE);
@@ -344,8 +347,8 @@ class ClientConnection implements Connection {
 
 public class ProxyConnection implements Connection {
 	public static final String SESSION_KEY = ConnectionSession.class.getName();
-	public static final String NEXT_PROXY_KEY =
-			ProxyConnection.class.getName() + ".NEXT_PROXY";
+	public static final String PROXY_CHAIN_KEY =
+			ProxyConnection.class.getName() + ".PROXY_CHAIN";
 	public static final String PROXY_AUTH_KEY =
 			ProxyConnection.class.getName() + ".PROXY_AUTH";
 
@@ -377,6 +380,7 @@ public class ProxyConnection implements Connection {
 	private String remote = null;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket request = new HttpPacket();
+	private HashMap<String, Object> bindings = new HashMap<>();
 	private PeerConnection peer = null;
 	private ClientConnection client = null;
 	private HashMap<String, ClientConnection> clientMap = new HashMap<>();
@@ -407,11 +411,12 @@ public class ProxyConnection implements Connection {
 	}
 
 	void onResponse(HttpPacket response) {
-		context.onResponse(request, response);
+		context.onResponse(bindings, response);
 	}
 
-	void onComplete(HttpPacket response) {
-		context.onComplete(request, response);
+	void onComplete() {
+		context.onComplete(bindings);
+		bindings.clear();
 	}
 
 	private void readEx() throws HttpPacketException {
@@ -439,13 +444,9 @@ public class ProxyConnection implements Connection {
 		}
 		if (!context.auth(username, password)) {
 			String realm = context.getRealm();
-			HttpPacket response = new HttpPacket();
-			response.setType(HttpPacket.TYPE_RESPONSE);
-			response.setStatus(407);
-			response.setReason("Proxy Authentication Required");
-			response.setHeader("Proxy-Authenticate", realm == null ||
+			HttpPacket response = new HttpPacket(407, "Proxy Authentication Required",
+					"", "Proxy-Authenticate", realm == null ||
 					realm.isEmpty() ? "Basic" : "Basic realm=\"" + realm + "\"");
-			response.setHeader("Content-Length", "0");
 			if (connectionClose || !request.isComplete()) {
 				// Skip reading body
 				response.setHeader("Connection", "close");
@@ -466,10 +467,10 @@ public class ProxyConnection implements Connection {
 			return;
 		}
 
-		request.setAttribute(SESSION_KEY, session);
+		bindings.put(SESSION_KEY, session);
 		try {
-			context.onRequest(request);
-		} catch (OnRequestException e) {
+			context.onRequest(bindings, request);
+		} catch (RequestException e) {
 			HttpPacket response = e.getResponse();
 			if (connectionClose || !request.isComplete()) {
 				// Skip reading body
@@ -479,6 +480,7 @@ public class ProxyConnection implements Connection {
 			} else { 
 				response.setHeader("Connection", "keep-alive");
 				response.write(handler, true, false);
+				bindings.clear();
 				request.reset();
 				// No request from peer, so continue reading
 				if (queue.length() > 0) {
@@ -490,33 +492,56 @@ public class ProxyConnection implements Connection {
 
 		String method = request.getMethod().toUpperCase();
 		if (method.equals("CONNECT")) {
-			String uri = context.lookup(request.getUri().toLowerCase());
-			if (uri == null) {
-				if (logLevel >= LOG_DEBUG) {
-					Log.d("Connection to \"" + request.getUri() +
-							"\" is Forbidden, " + getRemote());
+			ByteArrayQueue body = request.getBody();
+			String host = (String) bindings.get(PROXY_CHAIN_KEY);
+			int port;
+			boolean proxyChain;
+			if (host == null) {
+				String uri = context.lookup(request.getUri().toLowerCase());
+				if (uri == null) {
+					if (logLevel >= LOG_DEBUG) {
+						Log.d("Connection to \"" + request.getUri() +
+								"\" is Forbidden, " + getRemote());
+					}
+					handler.send(FORBIDDEN);
+					disconnect();
+					return;
 				}
-				handler.send(FORBIDDEN);
-				disconnect();
-				return;
+				int colon = uri.lastIndexOf(':');
+				if (colon < 0) {
+					throw new HttpPacketException("Invalid Destination", uri);
+				}
+				host = uri.substring(0, colon);
+				String value = uri.substring(colon + 1);
+				port = Numbers.parseInt(value, -1);
+				if (port < 0 || port > 0xFFFF) {
+					throw new HttpPacketException("Invalid Port", value);
+				}
+				proxyChain = false;
+			} else {
+				port = 3128;
+				int colon = host.lastIndexOf(':');
+				if (colon < 0) {
+					port = 3128;
+				} else {
+					port = Numbers.parseInt(host.substring(colon + 1), 3128, 0, 0xFFFF);
+					host = host.substring(0, colon);
+				}
+				proxyAuth = (String) bindings.get(PROXY_AUTH_KEY);
+				if (proxyAuth == null) {
+					request.removeHeader("PROXY-AUTHORIZATION");
+				} else {
+					request.setHeader("Proxy-Authorization", proxyAuth);
+				}
+				request.write(body, true, false);
+				proxyChain = true;
 			}
-			int colon = uri.lastIndexOf(':');
-			if (colon < 0) {
-				throw new HttpPacketException("Invalid Destination", uri);
-			}
-			String host = uri.substring(0, colon);
-			String value = uri.substring(colon + 1);
-			int port = Numbers.parseInt(value, -1);
-			if (port < 0 || port > 0xFFFF) {
-				throw new HttpPacketException("Invalid Port", value);
-			}
-			peer = new PeerConnection(this, handler, logLevel, host, port);
+			peer = new PeerConnection(this, handler, proxyChain, logLevel, host, port);
 			try {
 				context.connect(peer, host, port);
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", host);
 			}
-			ByteArrayQueue body = request.getBody();
 			if (body.length() > 0) {
 				peer.getHandler().send(body.array(), body.offset(), body.length());
 			}
@@ -529,7 +554,7 @@ public class ProxyConnection implements Connection {
 		request.removeHeader("PROXY-AUTHORIZATION");
 		request.removeHeader("PROXY-CONNECTION");
 
-		String host = (String) request.getAttribute(NEXT_PROXY_KEY);
+		String host = (String) bindings.get(PROXY_CHAIN_KEY);
 		String uri = request.getUri();
 		boolean secure = false;
 		String connectHost;
@@ -602,10 +627,9 @@ public class ProxyConnection implements Connection {
 				port = 3128;
 			} else {
 				connectHost = host.substring(0, colon);
-				String value = host.substring(colon + 1);
-				port = Numbers.parseInt(value, 3128, 0, 0xFFFF);
+				port = Numbers.parseInt(host.substring(colon + 1), 3128, 0, 0xFFFF);
 			}
-			proxyAuth = (String) request.getAttribute(PROXY_AUTH_KEY);
+			proxyAuth = (String) bindings.get(PROXY_AUTH_KEY);
 			if (proxyAuth != null) {
 				request.setHeader("Proxy-Authorization", proxyAuth);
 			}
@@ -702,22 +726,6 @@ public class ProxyConnection implements Connection {
 		}
 	}
 
-	void disconnect() {
-		for (ClientConnection client_ : clientMap.values()) {
-			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Client Closed, " + client_.toString(false));
-			}
-			client_.getHandler().disconnect();
-		}
-		for (ClientConnection client_ : secureClientMap.values()) {
-			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Client Closed, " + client_.toString(false));
-			}
-			client_.getHandler().disconnect();
-		}
-		handler.disconnect();
-	}
-
 	public ProxyConnection(ProxyContext context) {
 		this.context = context;
 		logLevel = context.getLogLevel();
@@ -779,5 +787,21 @@ public class ProxyConnection implements Connection {
 			}
 		}
 		disconnect();
+	}
+
+	public void disconnect() {
+		for (ClientConnection client_ : clientMap.values()) {
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("Client Closed, " + client_.toString(false));
+			}
+			client_.getHandler().disconnect();
+		}
+		for (ClientConnection client_ : secureClientMap.values()) {
+			if (logLevel >= LOG_VERBOSE) {
+				Log.v("Client Closed, " + client_.toString(false));
+			}
+			client_.getHandler().disconnect();
+		}
+		handler.disconnect();
 	}
 }

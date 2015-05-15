@@ -1,7 +1,6 @@
 package com.xqbase.tuna.http;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -39,7 +38,29 @@ public class HttpPacket {
 	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
 	private ByteArrayQueue body = new ByteArrayQueue();
 	private StringBuilder line = new StringBuilder();
-	private HashMap<String, Object> attributeMap = new HashMap<>();
+
+	public HttpPacket() {/**/}
+
+	public HttpPacket(int status, String reason,
+			byte[] body, String... headerPairs) {
+		type = TYPE_RESPONSE;
+		this.status = status;
+		this.reason = reason;
+		getBody().add(body);
+		setHeader("Content-Length", "" + body.length);
+		for (int i = 0; i < headerPairs.length - 1; i += 2) {
+			String key = headerPairs[i];
+			String value = headerPairs[i + 1];
+			if (key != null && value != null) {
+				setHeader(key, value);
+			}
+		}
+	}
+
+	public HttpPacket(int status, String reason,
+			String body, String... headerPairs) {
+		this(status, reason, body.getBytes(), headerPairs);
+	}
 
 	public void reset() {
 		phase = PHASE_START;
@@ -48,7 +69,6 @@ public class HttpPacket {
 		headers.clear();
 		body.clear();
 		line.setLength(0);
-		attributeMap.clear();
 	}
 
 	/** @return <code>true</code> for reading request */
@@ -477,32 +497,5 @@ public class HttpPacket {
 		ByteArrayQueue data = new ByteArrayQueue();
 		write(data, begin, forceChunked);
 		handler.send(data.array(), data.offset(), data.length());
-	}
-
-	public Object getAttribute(String key) {
-		return attributeMap.get(key);
-	}
-
-	public void setAttribute(String key, Object value) {
-		attributeMap.put(key, value);
-	}
-
-	public static HttpPacket createResponse(int status, String reason,
-			String body, String... headerPair) {
-		HttpPacket response = new HttpPacket();
-		response.setType(HttpPacket.TYPE_RESPONSE);
-		response.setStatus(status);
-		response.setReason(reason);
-		byte[] bodyBytes = body.getBytes();
-		response.getBody().add(bodyBytes);
-		response.setHeader("Content-Length", "" + bodyBytes.length);
-		for (int i = 0; i < headerPair.length - 1; i += 2) {
-			String key = headerPair[i];
-			String value = headerPair[i + 1];
-			if (key != null && value != null) {
-				response.setHeader(key, value);
-			}
-		}
-		return response;
 	}
 }

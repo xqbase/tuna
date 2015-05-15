@@ -2,18 +2,18 @@ package com.xqbase.tuna.proxy;
 
 import com.xqbase.tuna.http.HttpPacket;
 
-public class OnRequestException extends Exception {
+public class RequestException extends Exception {
 	private static final long serialVersionUID = 1L;
 
 	private HttpPacket response;
 
-	public OnRequestException(HttpPacket response) {
+	public RequestException(HttpPacket response) {
 		this.response = response;
 	}
 
-	public OnRequestException(int status, String reason,
+	public RequestException(int status, String reason,
 			String body, String... headerPair) {
-		response = HttpPacket.createResponse(status, reason, body, headerPair);
+		response = new HttpPacket(status, reason, body, headerPair);
 	}
 
 	public HttpPacket getResponse() {

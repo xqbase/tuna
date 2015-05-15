@@ -20,7 +20,7 @@ import com.xqbase.util.Log;
 class MuxServerConnection implements Connection {
 	private static final int LOG_DEBUG = MuxContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = MuxContext.LOG_VERBOSE;
-	private static final Connection[] EMPTY_CONNECTIONS = new Connection[0];
+	private static final Connection[] EMPTY_CONNECTIONS = {};
 
 	private boolean established = false, activeClose = false, reverse;
 	private String recv = "";

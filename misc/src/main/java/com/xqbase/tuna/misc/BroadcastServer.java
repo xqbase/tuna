@@ -8,7 +8,7 @@ import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.ServerConnection;
 
 class BroadcastConnection implements Connection {
-	private static final ConnectionHandler[] EMPTY_HANDLER = new ConnectionHandler[0];
+	private static final ConnectionHandler[] EMPTY_HANDLERS = {};
 
 	private LinkedHashSet<ConnectionHandler> handlers;
 	private boolean noEcho;
@@ -26,7 +26,7 @@ class BroadcastConnection implements Connection {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		for (ConnectionHandler handler_ : handlers.toArray(EMPTY_HANDLER)) {
+		for (ConnectionHandler handler_ : handlers.toArray(EMPTY_HANDLERS)) {
 			// "connection.onDisconnect()" might change "handlers"
 			if (!noEcho || handler_ != handler) {
 				handler_.send(b, off, len);
