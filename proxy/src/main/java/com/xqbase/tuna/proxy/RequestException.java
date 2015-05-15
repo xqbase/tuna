@@ -7,13 +7,14 @@ public class RequestException extends Exception {
 
 	private HttpPacket response;
 
-	public RequestException(HttpPacket response) {
-		this.response = response;
+	public RequestException(int status, String reason,
+			byte[] body, String... headerPairs) {
+		response = new HttpPacket(status, reason, body, headerPairs);
 	}
 
-	public RequestException(int status, String reason,
-			String body, String... headerPair) {
-		response = new HttpPacket(status, reason, body, headerPair);
+	public RequestException(int status, String... headPairs) {
+		this(status, ProxyContext.getReason(status),
+				ProxyContext.getDefaultErrorPage(status), headPairs);
 	}
 
 	public HttpPacket getResponse() {

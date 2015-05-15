@@ -16,6 +16,7 @@ import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.http.HttpPacketException;
+import com.xqbase.tuna.http.HttpStatus;
 import com.xqbase.tuna.ssl.SSLConnectionSession;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.ByteArrayQueue;
@@ -24,7 +25,7 @@ import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
 
 /** Connection for <b>CONNECT</b> */
-class PeerConnection implements Connection {
+class PeerConnection implements Connection, HttpStatus {
 	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
 
@@ -93,7 +94,7 @@ class PeerConnection implements Connection {
 			if (logLevel >= LOG_DEBUG) {
 				Log.d("Connection Failed, " + toString(false));
 			}
-			peer.sendError(ProxyContext.SC_GATEWAY_TIMEOUT);
+			peer.sendError(SC_GATEWAY_TIMEOUT);
 		} else if (logLevel >= LOG_VERBOSE) {
 			Log.v("Connection Lost, " + toString(true));
 		}
@@ -102,7 +103,7 @@ class PeerConnection implements Connection {
 }
 
 /** Connection for request except <b>CONNECT</b> */
-class ClientConnection implements Connection {
+class ClientConnection implements Connection, HttpStatus {
 	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
 
@@ -176,7 +177,7 @@ class ClientConnection implements Connection {
 				}
 				// Disconnect for a Bad Response
 				if (!response.isCompleteHeader()) {
-					proxy.sendError(ProxyContext.SC_BAD_GATEWAY);
+					proxy.sendError(SC_BAD_GATEWAY);
 				}
 				proxy.onComplete();
 				proxy.disconnect();
@@ -277,7 +278,7 @@ class ClientConnection implements Connection {
 			}
 		}
 		if (!established) {
-			proxy.sendError(ProxyContext.SC_GATEWAY_TIMEOUT);
+			proxy.sendError(SC_GATEWAY_TIMEOUT);
 		}
 		// Just disconnect because request is not saved.
 		// Most browsers will retry request. 
@@ -345,7 +346,7 @@ class ClientConnection implements Connection {
 	}
 }
 
-public class ProxyConnection implements Connection {
+public class ProxyConnection implements Connection, HttpStatus {
 	public static final String SESSION_KEY = ConnectionSession.class.getName();
 	public static final String PROXY_CHAIN_KEY =
 			ProxyConnection.class.getName() + ".PROXY_CHAIN";
@@ -387,8 +388,7 @@ public class ProxyConnection implements Connection {
 	void sendError(int status) {
 		byte[] body = context.getErrorPage(status);
 		new HttpPacket(status, ProxyContext.getReason(status),
-				body, "Content-Length", "" + body.length,
-				"Connection", "close").write(handler, true, false);
+				body, "Connection", "close").write(handler, true, false);
 	}
 
 	void onResponse(HttpPacket response) {
@@ -425,7 +425,7 @@ public class ProxyConnection implements Connection {
 		}
 		if (!context.auth(username, password)) {
 			String realm = context.getRealm();
-			int status = ProxyContext.SC_PROXY_AUTHENTICATION_REQUIRED;
+			int status = SC_PROXY_AUTHENTICATION_REQUIRED;
 			HttpPacket response = new HttpPacket(status,
 					ProxyContext.getReason(status), context.getErrorPage(status),
 					"Proxy-Authenticate", realm == null || realm.isEmpty() ?
@@ -486,7 +486,7 @@ public class ProxyConnection implements Connection {
 						Log.d("Connection to \"" + request.getUri() +
 								"\" is Forbidden, " + getRemote());
 					}
-					sendError(ProxyContext.SC_FORBIDDEN);
+					sendError(SC_FORBIDDEN);
 					disconnect();
 					return;
 				}
@@ -553,7 +553,7 @@ public class ProxyConnection implements Connection {
 					if (logLevel >= LOG_DEBUG) {
 						Log.d("\"" + proto + "\" Not Implemented, " + getRemote());
 					}
-					sendError(ProxyContext.SC_NOT_IMPLEMENTED);
+					sendError(SC_NOT_IMPLEMENTED);
 					disconnect();
 					return;
 				}
@@ -581,7 +581,7 @@ public class ProxyConnection implements Connection {
 					Log.d("Request to \"" + originalHost +
 							"\" is Forbidden, " + getRemote());
 				}
-				sendError(ProxyContext.SC_FORBIDDEN);
+				sendError(SC_FORBIDDEN);
 				disconnect();
 				return;
 			}
@@ -701,10 +701,9 @@ public class ProxyConnection implements Connection {
 			if (client == null || !client.isBegun()) {
 				String type = e.getType();
 				sendError(type == HttpPacketException.HEADER_SIZE ?
-						ProxyContext.SC_REQUEST_ENTITY_TOO_LARGE :
+						SC_REQUEST_ENTITY_TOO_LARGE :
 						type == HttpPacketException.VERSION ?
-						ProxyContext.SC_HTTP_VERSION_NOT_SUPPORTED :
-						ProxyContext.SC_BAD_REQUEST);
+						SC_HTTP_VERSION_NOT_SUPPORTED : SC_BAD_REQUEST);
 			}
 			disconnect();
 		}
