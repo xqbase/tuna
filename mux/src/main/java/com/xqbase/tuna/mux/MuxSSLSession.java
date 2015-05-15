@@ -75,7 +75,7 @@ class MuxSSLSession implements SSLSession {
 
 	MuxSSLSession(SSLSession ssls) {
 		id = ssls.getId();
-		id = id == null ? new byte[0] : id;
+		id = id == null ? Bytes.EMPTY_BYTES : id;
 		cipherSuite = ssls.getCipherSuite();
 		protocol = ssls.getProtocol();
 		peerHost = ssls.getPeerHost();
@@ -238,19 +238,19 @@ class MuxSSLSession implements SSLSession {
 
 	private static byte[] encodeCerts(Certificate[] certs) {
 		if (certs == null) {
-			return new byte[0];
+			return Bytes.EMPTY_BYTES;
 		}
 		try {
 			return CertificateFactory.getInstance("X509").
 					generateCertPath(Arrays.asList(certs)).getEncoded("PKCS7");
 		} catch (GeneralSecurityException e) {
-			return new byte[0];
+			return Bytes.EMPTY_BYTES;
 		}
 	}
 
 	/** see {@link MuxPacket#CONNECTION_CONNECT } */
 	byte[] getEncoded() {
-		byte[] peerHostBytes = (peerHost == null ? new byte[0] : peerHost.getBytes());
+		byte[] peerHostBytes = (peerHost == null ? Bytes.EMPTY_BYTES : peerHost.getBytes());
 		byte[] peerCertsBytes = encodeCerts(peerCertificates);
 		byte[] localCertsBytes = encodeCerts(localCertificates);
 		int idLen = id.length;

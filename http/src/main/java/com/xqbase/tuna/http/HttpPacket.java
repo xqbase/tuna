@@ -14,7 +14,6 @@ public class HttpPacket {
 			TYPE_RESPONSE = 1,
 			TYPE_RESPONSE_HEAD = 2,
 			TYPE_RESPONSE_HTTP10 = 3;
-
 	private static final int
 			PHASE_START = 0,
 			PHASE_HEADER = 1,
@@ -25,7 +24,6 @@ public class HttpPacket {
 			PHASE_TRAILER = 6,
 			PHASE_END_CHUNK = 7,
 			PHASE_END = 8;
-
 	private static final byte[]
 			SPACE = {' '},
 			COLON = {':', ' '},
@@ -58,11 +56,6 @@ public class HttpPacket {
 				setHeader(key, value);
 			}
 		}
-	}
-
-	public HttpPacket(int status, String reason,
-			String body, String... headerPairs) {
-		this(status, reason, body.getBytes(), headerPairs);
 	}
 
 	public void reset() {

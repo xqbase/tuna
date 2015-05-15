@@ -21,7 +21,9 @@ import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.http.HttpPacket;
+import com.xqbase.tuna.http.HttpStatus;
 import com.xqbase.tuna.ssl.SSLManagers;
+import com.xqbase.tuna.util.Bytes;
 
 public class ProxyContext implements Connector, EventQueue, Executor {
 	public static final int
@@ -34,16 +36,6 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 			LOG_NONE = 0,
 			LOG_DEBUG = 1,
 			LOG_VERBOSE = 2;
-	public static final int
-			SC_BAD_REQUEST = 400,
-			SC_FORBIDDEN = 403,
-			SC_PROXY_AUTHENTICATION_REQUIRED = 407,
-			SC_REQUEST_ENTITY_TOO_LARGE = 413,
-			SC_NOT_IMPLEMENTED = 501,
-			SC_BAD_GATEWAY = 502,
-			SC_GATEWAY_TIMEOUT = 504,
-			SC_HTTP_VERSION_NOT_SUPPORTED = 505;
-
 	private static final String ERROR_PAGE_FORMAT = "<!DOCTYPE html><html>" +
 			"<head><title>%d %s</title></head>" +
 			"<body><center><h1>%d %s</h1></center><hr><center>Tuna Proxy/0.1.0</center></body>" +
@@ -56,7 +48,7 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 
 	static {
 		try {
-			for (Field field : ProxyContext.class.getFields()) {
+			for (Field field : HttpStatus.class.getFields()) {
 				String name = field.getName();
 				if (!name.startsWith("SC_") || field.getModifiers() !=
 						Modifier.PUBLIC + Modifier.STATIC + Modifier.FINAL) {
@@ -90,7 +82,13 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 	}
 
 	public static String getReason(int status) {
-		return reasonMap.get(Integer.valueOf(status));
+		String reason = reasonMap.get(Integer.valueOf(status));
+		return reason == null ? "" + status : reason;
+	}
+
+	public static byte[] getDefaultErrorPage(int status) {
+		byte[] errorPage = errorPageMap.get(Integer.valueOf(status));
+		return errorPage == null ? Bytes.EMPTY_BYTES : errorPage;
 	}
 
 	private Connector connector;
@@ -102,7 +100,7 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 	private RequestListener onRequest = (t, u) -> {/**/};
 	private BiConsumer<Map<String, Object>, HttpPacket> onResponse = (t, u) -> {/**/};
 	private Consumer<Map<String, Object>> onComplete = t -> {/**/};
-	private IntFunction<byte[]> errorPages = errorPageMap::get;
+	private IntFunction<byte[]> errorPages = ProxyContext::getDefaultErrorPage;
 	private String realm = null;
 	private boolean enableReverse = false;
 	private int forwardedType = FORWARDED_TRANSPARENT, logLevel = LOG_NONE;
