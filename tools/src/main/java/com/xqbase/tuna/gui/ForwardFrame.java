@@ -21,10 +21,11 @@ import com.xqbase.util.Numbers;
 public class ForwardFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
 
-	private static final String DUMP_NONE = "None";
-	private static final String DUMP_BINARY = "Binary";
-	private static final String DUMP_TEXT = "Text";
-	private static final String DUMP_FOLDER = "Folder";
+	private static final String
+			DUMP_NONE = "None",
+			DUMP_BINARY = "Binary",
+			DUMP_TEXT = "Text",
+			DUMP_FOLDER = "Folder";
 
 	private static final int SLIDER_NO_LIMIT = 4;
 

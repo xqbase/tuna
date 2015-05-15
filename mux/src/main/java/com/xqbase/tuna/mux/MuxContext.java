@@ -5,9 +5,10 @@ import java.util.function.Predicate;
 import com.xqbase.tuna.TimerHandler;
 
 public class MuxContext implements TimerHandler, Predicate<byte[]> {
-	public static final int LOG_NONE = 0;
-	public static final int LOG_DEBUG = 1;
-	public static final int LOG_VERBOSE = 2;
+	public static final int
+			LOG_NONE = 0,
+			LOG_DEBUG = 1,
+			LOG_VERBOSE = 2;
 
 	private TimerHandler timerHandler;
 	private Predicate<byte[]> auth;

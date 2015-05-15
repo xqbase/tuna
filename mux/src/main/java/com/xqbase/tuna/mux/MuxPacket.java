@@ -6,44 +6,53 @@ import com.xqbase.tuna.packet.PacketParser;
 import com.xqbase.tuna.util.Bytes;
 
 class MuxPacket {
-	private static final int HEAD_TAG	= 0x2095;
+	private static final int HEAD_TAG = 0x2095;
 
 	// Client Commands
-	static final int CLIENT_PING		= 0x101;
-	static final int CLIENT_AUTH		= 0x111;
-	static final int CLIENT_LISTEN		= 0x121;
+	static final int
+			CLIENT_PING			= 0x101,
+			CLIENT_AUTH			= 0x111,
+			CLIENT_LISTEN		= 0x121;
 	// Server Commands
-	static final int SERVER_PONG		= 0x201;
-	static final int SERVER_AUTH_NEED	= 0x212;
-	static final int SERVER_AUTH_OK		= 0x218;
-	static final int SERVER_AUTH_ERROR	= 0x219;
-	static final int SERVER_LISTEN_OK	= 0x228;
-	static final int SERVER_LISTEN_ERROR = 0x229;
+	static final int
+			SERVER_PONG			= 0x201,
+			SERVER_AUTH_NEED	= 0x212,
+			SERVER_AUTH_OK		= 0x218,
+			SERVER_AUTH_ERROR	= 0x219,
+			SERVER_LISTEN_OK	= 0x228,
+			SERVER_LISTEN_ERROR	= 0x229;
 	// Connection Commands
-	static final int CONNECTION_RECV	= 0x301;
-	static final int CONNECTION_QUEUE	= 0x312;
 	/**
+	 * <b>CONNETION_CONNECT</b><p>
 	 * sessionTag[1] + localAddr[4/16] + localPort[2] + remoteAddr[4/16] + remotePort[2] +<br>
 	 * <i>(Optional)</i> sslSessionIDLen[1] + peerHostLen[1] + peerCertsLen[2] + localCertsLen[2] +<br>
 	 * SSL-Session-ID[sslSessionIDLen] + SSL-Cipher[2] + SSL-Protocol[2] + Peer-Host[peerHostLen] +<br>
 	 * Peer-Port[2] + Peer-Certificates[peerCertsLen] + Local-Certificates[localCertsLen]
 	 */
-	static final int CONNECTION_CONNECT	= 0x315;
-	static final int CONNECTION_DISCONNECT = 0x318;
+	static final int
+			CONNECTION_RECV		= 0x301,
+			CONNECTION_QUEUE	= 0x312,
+			CONNECTION_CONNECT	= 0x315,
+			CONNECTION_DISCONNECT = 0x318;
 	// Handler Commands
-	static final int HANDLER_SEND		= 0x401;
-	/** numConns[2] + Conn-IDs[numConns * 2] + Data */
-	static final int HANDLER_MULTICAST	= 0x402;
-	static final int HANDLER_BUFFER		= 0x413;
-	static final int HANDLER_DISCONNECT	= 0x418;
-	static final int HANDLER_CLOSE		= 0x419;
+	/**
+	 * <b>HANDLER_MULTICAST</b><p> 
+	 * numConns[2] + Conn-IDs[numConns * 2] + Data
+	 */
+	static final int
+			HANDLER_SEND		= 0x401,
+			HANDLER_MULTICAST	= 0x402,
+			HANDLER_BUFFER		= 0x413,
+			HANDLER_DISCONNECT	= 0x418,
+			HANDLER_CLOSE		= 0x419;
 
 	// Session Bits
-	static final int SESSION_LOCAL_IPV6	= 1;
-	static final int SESSION_REMOTE_IPV6 = 2;
-	static final int SESSION_SSL		= 4;
+	static final int
+			SESSION_LOCAL_IPV6	= 1,
+			SESSION_REMOTE_IPV6 = 2,
+			SESSION_SSL			= 4;
 
-	static final int HEAD_SIZE			= 8;
+	static final int HEAD_SIZE = 8;
 
 	static PacketParser PARSER = (b, off, len) -> {
 		if (len < HEAD_SIZE) {

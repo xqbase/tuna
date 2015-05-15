@@ -27,14 +27,16 @@ import com.xqbase.tuna.util.ByteArrayQueue;
  * which corresponds to a TCP Socket.
  */
 class Client {
-	private static final int STATUS_IDLE = 0;
-	private static final int STATUS_BUSY = 1;
-	private static final int STATUS_DISCONNECTING = 2;
-	private static final int STATUS_CLOSED = 3;
+	private static final int
+			STATUS_IDLE = 0,
+			STATUS_BUSY = 1,
+			STATUS_DISCONNECTING = 2,
+			STATUS_CLOSED = 3;
 
-	private static final int CHANNEL_NONE = 0;
-	private static final int CHANNEL_READY = 1;
-	private static final int CHANNEL_CONNECTED = 2;
+	private static final int
+			CHANNEL_NONE = 0,
+			CHANNEL_READY = 1,
+			CHANNEL_CONNECTED = 2;
 
 	int bufferSize = Connection.MAX_BUFFER_SIZE;
 	int status = STATUS_IDLE, channelStatus = CHANNEL_NONE;

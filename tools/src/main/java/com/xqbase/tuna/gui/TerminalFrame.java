@@ -27,9 +27,10 @@ import com.xqbase.util.Numbers;
 public class TerminalFrame extends ConnectorFrame {
 	private static final long serialVersionUID = 1L;
 
-	private static final int STATUS_CONNECTING = 0;
-	private static final int STATUS_CONNECTED = 1;
-	private static final int STATUS_DISCONNECTED = 2;
+	private static final int
+			STATUS_CONNECTING = 0,
+			STATUS_CONNECTED = 1,
+			STATUS_DISCONNECTED = 2;
 
 	static String now() {
 		Calendar cal = Calendar.getInstance();
