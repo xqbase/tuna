@@ -9,27 +9,30 @@ import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.util.ByteArrayQueue;
 
 public class HttpPacket {
-	public static final int TYPE_REQUEST = 0;
-	public static final int TYPE_RESPONSE = 1;
-	public static final int TYPE_RESPONSE_HEAD = 2;
-	public static final int TYPE_RESPONSE_HTTP10 = 3;
+	public static final int
+			TYPE_REQUEST = 0,
+			TYPE_RESPONSE = 1,
+			TYPE_RESPONSE_HEAD = 2,
+			TYPE_RESPONSE_HTTP10 = 3;
 
-	private static final int PHASE_START = 0;
-	private static final int PHASE_HEADER = 1;
-	private static final int PHASE_BODY = 2;
-	private static final int PHASE_CHUNK_SIZE = 3;
-	private static final int PHASE_CHUNK_DATA = 4;
-	private static final int PHASE_CHUNK_CRLF = 5;
-	private static final int PHASE_TRAILER = 6;
-	private static final int PHASE_END_CHUNK = 7;
-	private static final int PHASE_END = 8;
+	private static final int
+			PHASE_START = 0,
+			PHASE_HEADER = 1,
+			PHASE_BODY = 2,
+			PHASE_CHUNK_SIZE = 3,
+			PHASE_CHUNK_DATA = 4,
+			PHASE_CHUNK_CRLF = 5,
+			PHASE_TRAILER = 6,
+			PHASE_END_CHUNK = 7,
+			PHASE_END = 8;
 
-	private static final byte[] SPACE = {' '};
-	private static final byte[] COLON = {':', ' '};
-	private static final byte[] CRLF = {'\r', '\n'};
-	private static final byte[] HTTP10 = "HTTP/1.0".getBytes();
-	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
-	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
+	private static final byte[]
+			SPACE = {' '},
+			COLON = {':', ' '},
+			CRLF = {'\r', '\n'},
+			HTTP10 = "HTTP/1.0".getBytes(),
+			HTTP11 = "HTTP/1.1".getBytes(),
+			FINAL_CRLF = {'0', '\r', '\n'};
 
 	private int type = TYPE_REQUEST, phase = PHASE_START,
 			headerLimit = 32768, headerSize = 0, status = 0, bytesToRead = 0;

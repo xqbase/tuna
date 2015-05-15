@@ -1,8 +1,11 @@
 package com.xqbase.tuna.proxy;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.net.InetSocketAddress;
 import java.security.GeneralSecurityException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
@@ -21,19 +24,62 @@ import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.ssl.SSLManagers;
 
 public class ProxyContext implements Connector, EventQueue, Executor {
-	public static final int FORWARDED_TRANSPARENT = 0;
-	public static final int FORWARDED_DELETE = 1;
-	public static final int FORWARDED_OFF = 2;
-	public static final int FORWARDED_TRUNCATE = 3;
-	public static final int FORWARDED_ON = 4;
+	public static final int
+			FORWARDED_TRANSPARENT = 0,
+			FORWARDED_DELETE = 1,
+			FORWARDED_OFF = 2,
+			FORWARDED_TRUNCATE = 3,
+			FORWARDED_ON = 4;
+	public static final int
+			LOG_NONE = 0,
+			LOG_DEBUG = 1,
+			LOG_VERBOSE = 2;
+	public static final int
+			SC_BAD_REQUEST = 400,
+			SC_FORBIDDEN = 403,
+			SC_PROXY_AUTHENTICATION_REQUIRED = 407,
+			SC_REQUEST_ENTITY_TOO_LARGE = 413,
+			SC_NOT_IMPLEMENTED = 501,
+			SC_BAD_GATEWAY = 502,
+			SC_GATEWAY_TIMEOUT = 504,
+			SC_HTTP_VERSION_NOT_SUPPORTED = 505;
 
-	public static final int LOG_NONE = 0;
-	public static final int LOG_DEBUG = 1;
-	public static final int LOG_VERBOSE = 2;
+	private static final String ERROR_PAGE_FORMAT = "<!DOCTYPE html><html>" +
+			"<head><title>%d %s</title></head>" +
+			"<body><center><h1>%d %s</h1></center><hr><center>Tuna Proxy/0.1.0</center></body>" +
+			"</html>";
+
+	private static HashMap<Integer, String> reasonMap = new HashMap<>();
+	private static HashMap<Integer, byte[]> errorPageMap = new HashMap<>();
 
 	private static SSLContext defaultSSLContext;
 
 	static {
+		try {
+			for (Field field : ProxyContext.class.getFields()) {
+				String name = field.getName();
+				if (!name.startsWith("SC_") || field.getModifiers() !=
+						Modifier.PUBLIC + Modifier.STATIC + Modifier.FINAL) {
+					continue;
+				}
+				Integer status = (Integer) field.get(null);
+				StringBuilder sb = new StringBuilder();
+				for (String s : name.substring(3).split("_")) {
+					if (s.equals("HTTP")) {
+						sb.append(" HTTP");
+					} else if (!s.isEmpty()) {
+						sb.append(' ').append(s.charAt(0)).
+								append(s.substring(1).toLowerCase());
+					}
+				}
+				String reason = sb.substring(1);
+				reasonMap.put(status, reason);
+				errorPageMap.put(status, String.format(ERROR_PAGE_FORMAT,
+						status, reason, status, reason).getBytes());
+			}
+		} catch (ReflectiveOperationException e) {
+			throw new RuntimeException(e);
+		}
 		try {
 			defaultSSLContext = SSLContext.getInstance("TLS");
 			defaultSSLContext.init(SSLManagers.DEFAULT_KEY_MANAGERS,
@@ -41,6 +87,10 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 		} catch (GeneralSecurityException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	public static String getReason(int status) {
+		return reasonMap.get(Integer.valueOf(status));
 	}
 
 	private Connector connector;
@@ -52,7 +102,7 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 	private RequestListener onRequest = (t, u) -> {/**/};
 	private BiConsumer<Map<String, Object>, HttpPacket> onResponse = (t, u) -> {/**/};
 	private Consumer<Map<String, Object>> onComplete = t -> {/**/};
-	private IntFunction<byte[]> errorPages = t -> new byte[0];
+	private IntFunction<byte[]> errorPages = errorPageMap::get;
 	private String realm = null;
 	private boolean enableReverse = false;
 	private int forwardedType = FORWARDED_TRANSPARENT, logLevel = LOG_NONE;

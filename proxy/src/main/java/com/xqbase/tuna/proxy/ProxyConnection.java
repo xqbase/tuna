@@ -93,7 +93,7 @@ class PeerConnection implements Connection {
 			if (logLevel >= LOG_DEBUG) {
 				Log.d("Connection Failed, " + toString(false));
 			}
-			peer.gatewayTimeout();
+			peer.sendError(ProxyContext.SC_GATEWAY_TIMEOUT);
 		} else if (logLevel >= LOG_VERBOSE) {
 			Log.v("Connection Lost, " + toString(true));
 		}
@@ -176,7 +176,7 @@ class ClientConnection implements Connection {
 				}
 				// Disconnect for a Bad Response
 				if (!response.isCompleteHeader()) {
-					proxy.badGateway();
+					proxy.sendError(ProxyContext.SC_BAD_GATEWAY);
 				}
 				proxy.onComplete();
 				proxy.disconnect();
@@ -277,7 +277,7 @@ class ClientConnection implements Connection {
 			}
 		}
 		if (!established) {
-			proxy.gatewayTimeout();
+			proxy.sendError(ProxyContext.SC_GATEWAY_TIMEOUT);
 		}
 		// Just disconnect because request is not saved.
 		// Most browsers will retry request. 
@@ -355,24 +355,6 @@ public class ProxyConnection implements Connection {
 	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
 
-	private static final String ERROR_HEADERS = "\r\n" +
-			"Content-Length: 0\r\n" +
-			"Connection: close\r\n\r\n";
-	private static final byte[] BAD_REQUEST =
-			("HTTP/1.1 400 Bad Request" + ERROR_HEADERS).getBytes();
-	private static final byte[] FORBIDDEN =
-			("HTTP/1.1 403 Forbidden" + ERROR_HEADERS).getBytes();
-	private static final byte[] REQUEST_ENTITY_TOO_LARGE =
-			("HTTP/1.1 413 Request Entity Too Large" + ERROR_HEADERS).getBytes();
-	private static final byte[] NOT_IMPLEMENTED =
-			("HTTP/1.1 501 Not Implemented" + ERROR_HEADERS).getBytes();
-	private static final byte[] BAD_GATEWAY =
-			("HTTP/1.1 502 Bad Gateway" + ERROR_HEADERS).getBytes();
-	private static final byte[] GATEWAY_TIMEOUT =
-			("HTTP/1.1 504 Gateway Timeout" + ERROR_HEADERS).getBytes();
-	private static final byte[] HTTP_VERSION_NOT_SUPPORTED =
-			("HTTP/1.1 505 HTTP Version Not Supported" + ERROR_HEADERS).getBytes();
-
 	private int logLevel; 
 	private ProxyContext context;
 	private ConnectionHandler handler;
@@ -402,12 +384,11 @@ public class ProxyConnection implements Connection {
 		return remote;
 	}
 
-	void badGateway() {
-		handler.send(BAD_GATEWAY);
-	}
-
-	void gatewayTimeout() {
-		handler.send(GATEWAY_TIMEOUT);
+	void sendError(int status) {
+		byte[] body = context.getErrorPage(status);
+		new HttpPacket(status, ProxyContext.getReason(status),
+				body, "Content-Length", "" + body.length,
+				"Connection", "close").write(handler, true, false);
 	}
 
 	void onResponse(HttpPacket response) {
@@ -444,9 +425,11 @@ public class ProxyConnection implements Connection {
 		}
 		if (!context.auth(username, password)) {
 			String realm = context.getRealm();
-			HttpPacket response = new HttpPacket(407, "Proxy Authentication Required",
-					"", "Proxy-Authenticate", realm == null ||
-					realm.isEmpty() ? "Basic" : "Basic realm=\"" + realm + "\"");
+			int status = ProxyContext.SC_PROXY_AUTHENTICATION_REQUIRED;
+			HttpPacket response = new HttpPacket(status,
+					ProxyContext.getReason(status), context.getErrorPage(status),
+					"Proxy-Authenticate", realm == null || realm.isEmpty() ?
+					"Basic" : "Basic realm=\"" + realm + "\"");
 			if (connectionClose || !request.isComplete()) {
 				// Skip reading body
 				response.setHeader("Connection", "close");
@@ -503,7 +486,7 @@ public class ProxyConnection implements Connection {
 						Log.d("Connection to \"" + request.getUri() +
 								"\" is Forbidden, " + getRemote());
 					}
-					handler.send(FORBIDDEN);
+					sendError(ProxyContext.SC_FORBIDDEN);
 					disconnect();
 					return;
 				}
@@ -570,7 +553,7 @@ public class ProxyConnection implements Connection {
 					if (logLevel >= LOG_DEBUG) {
 						Log.d("\"" + proto + "\" Not Implemented, " + getRemote());
 					}
-					handler.send(NOT_IMPLEMENTED);
+					sendError(ProxyContext.SC_NOT_IMPLEMENTED);
 					disconnect();
 					return;
 				}
@@ -598,7 +581,7 @@ public class ProxyConnection implements Connection {
 					Log.d("Request to \"" + originalHost +
 							"\" is Forbidden, " + getRemote());
 				}
-				handler.send(FORBIDDEN);
+				sendError(ProxyContext.SC_FORBIDDEN);
 				disconnect();
 				return;
 			}
@@ -717,10 +700,11 @@ public class ProxyConnection implements Connection {
 			}
 			if (client == null || !client.isBegun()) {
 				String type = e.getType();
-				handler.send(type == HttpPacketException.HEADER_SIZE ?
-						REQUEST_ENTITY_TOO_LARGE :
+				sendError(type == HttpPacketException.HEADER_SIZE ?
+						ProxyContext.SC_REQUEST_ENTITY_TOO_LARGE :
 						type == HttpPacketException.VERSION ?
-						HTTP_VERSION_NOT_SUPPORTED : BAD_REQUEST);
+						ProxyContext.SC_HTTP_VERSION_NOT_SUPPORTED :
+						ProxyContext.SC_BAD_REQUEST);
 			}
 			disconnect();
 		}
