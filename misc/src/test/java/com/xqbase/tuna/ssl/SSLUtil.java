@@ -2,30 +2,13 @@ package com.xqbase.tuna.ssl;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
-import java.security.cert.X509Certificate;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
 
 public class SSLUtil {
-	private static final X509TrustManager[] NULL_TRUST_MANAGERS = {
-		new X509TrustManager() {
-			@Override
-			public void checkClientTrusted(X509Certificate[] certs, String s) {/**/}
-
-			@Override
-			public void checkServerTrusted(X509Certificate[] certs, String s) {/**/}
-
-			@Override
-			public X509Certificate[] getAcceptedIssuers() {
-				return new X509Certificate[0];
-			}
-		}
-	};
-
 	public static SSLContext getSSLContext(CertKey certKey, CertMap certMap) {
 		try {
 			// 1. KeyManagerFactory
@@ -34,7 +17,7 @@ public class SSLUtil {
 			// 2. TrustManagerFactory
 			TrustManager[] trustManagers;
 			if (certMap == null) {
-				trustManagers = NULL_TRUST_MANAGERS;
+				trustManagers = SSLManagers.DEFAULT_TRUST_MANAGERS;
 			} else {
 				TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
 				tmf.init(certMap.exportJks());

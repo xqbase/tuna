@@ -6,7 +6,7 @@ import javax.net.ssl.KeyManager;
 import javax.net.ssl.X509TrustManager;
 
 public class SSLManagers {
-	public static final KeyManager[] DEFAULT_KEY_MANAGERS = new KeyManager[0];
+	public static final KeyManager[] DEFAULT_KEY_MANAGERS = {};
 	public static final X509TrustManager[] DEFAULT_TRUST_MANAGERS = new X509TrustManager[] {
 		new X509TrustManager() {
 			@Override

@@ -11,8 +11,7 @@ import com.xqbase.util.Log;
 class MuxClientConnection implements Connection {
 	private static final int LOG_DEBUG = MuxContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = MuxContext.LOG_VERBOSE;
-	private static final TerminalConnection[]
-			EMPTY_CONNECTIONS = new TerminalConnection[0];
+	private static final TerminalConnection[] EMPTY_CONNECTIONS = {};
 
 	private boolean established = false, activeClose = false, reverse;
 	private int[] lastSize = {0};

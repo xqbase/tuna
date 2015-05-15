@@ -3,9 +3,11 @@ package com.xqbase.tuna.proxy;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.GeneralSecurityException;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 import java.util.function.IntFunction;
 import java.util.function.UnaryOperator;
 
@@ -17,7 +19,6 @@ import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.ssl.SSLManagers;
-import com.xqbase.util.function.ConsumerEx;
 
 public class ProxyContext implements Connector, EventQueue, Executor {
 	public static final int FORWARDED_TRANSPARENT = 0;
@@ -48,9 +49,9 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 	private SSLContext sslc = defaultSSLContext;
 	private BiPredicate<String, String> auth = (t, u) -> true;
 	private UnaryOperator<String> lookup = t -> t;
-	private ConsumerEx<HttpPacket, OnRequestException> onRequest = t -> {/**/};
-	private BiConsumer<HttpPacket, HttpPacket>
-			onResponse = (t, u) -> {/**/}, onComplete = (t, u) -> {/**/};
+	private RequestListener onRequest = (t, u) -> {/**/};
+	private BiConsumer<Map<String, Object>, HttpPacket> onResponse = (t, u) -> {/**/};
+	private Consumer<Map<String, Object>> onComplete = t -> {/**/};
 	private IntFunction<byte[]> errorPages = t -> new byte[0];
 	private String realm = null;
 	private boolean enableReverse = false;
@@ -96,15 +97,15 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 		this.lookup = lookup;
 	}
 
-	public void setOnRequest(ConsumerEx<HttpPacket, OnRequestException> onRequest) {
+	public void setOnRequest(RequestListener onRequest) {
 		this.onRequest = onRequest;
 	}
 
-	public void setOnResponse(BiConsumer<HttpPacket, HttpPacket> onResponse) {
+	public void setOnResponse(BiConsumer<Map<String, Object>, HttpPacket> onResponse) {
 		this.onResponse = onResponse;
 	}
 
-	public void setOnComplete(BiConsumer<HttpPacket, HttpPacket> onComplete) {
+	public void setOnComplete(Consumer<Map<String, Object>> onComplete) {
 		this.onComplete = onComplete;
 	}
 
@@ -140,16 +141,17 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 		return lookup.apply(host);
 	}
 
-	public void onRequest(HttpPacket request) throws OnRequestException {
-		onRequest.accept(request);
+	public void onRequest(Map<String, Object> bindings,
+			HttpPacket request) throws RequestException {
+		onRequest.accept(bindings, request);
 	}
 
-	public void onResponse(HttpPacket request, HttpPacket response) {
-		onResponse.accept(request, response);
+	public void onResponse(Map<String, Object> bindings, HttpPacket response) {
+		onResponse.accept(bindings, response);
 	}
 
-	public void onComplete(HttpPacket request, HttpPacket response) {
-		onComplete.accept(request, response);
+	public void onComplete(Map<String, Object> bindings) {
+		onComplete.accept(bindings);
 	}
 
 	public byte[] getErrorPage(int status) {

@@ -22,7 +22,7 @@ public class TestSSLMuxEdge {
 		Log.getAndSet(Conf.openLogger("", 16777216, 10));
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			KeyStore ks = KeyStore.getInstance("PKCS12");
-			ks.load(TestSSLProxy.class.getResourceAsStream("/localhost.pfx"),
+			ks.load(TestSSLMuxEdge.class.getResourceAsStream("/localhost.pfx"),
 					"changeit".toCharArray());
 			KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
 			kmf.init(ks, "changeit".toCharArray());
