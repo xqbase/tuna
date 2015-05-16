@@ -24,6 +24,7 @@ import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.http.HttpStatus;
 import com.xqbase.tuna.ssl.SSLManagers;
 import com.xqbase.tuna.util.Bytes;
+import com.xqbase.util.function.BiConsumerEx;
 
 public class ProxyContext implements Connector, EventQueue, Executor {
 	public static final int
@@ -97,7 +98,8 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 	private SSLContext sslc = defaultSSLContext;
 	private BiPredicate<String, String> auth = (t, u) -> true;
 	private UnaryOperator<String> lookup = t -> t;
-	private RequestListener onRequest = (t, u) -> {/**/};
+	private BiConsumerEx<Map<String, Object>, HttpPacket, RequestException>
+			onRequest = (t, u) -> {/**/};
 	private BiConsumer<Map<String, Object>, HttpPacket> onResponse = (t, u) -> {/**/};
 	private Consumer<Map<String, Object>> onComplete = t -> {/**/};
 	private IntFunction<byte[]> errorPages = ProxyContext::getDefaultErrorPage;
@@ -145,7 +147,8 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 		this.lookup = lookup;
 	}
 
-	public void setOnRequest(RequestListener onRequest) {
+	public void setOnRequest(BiConsumerEx<Map<String, Object>,
+			HttpPacket, RequestException> onRequest) {
 		this.onRequest = onRequest;
 	}
 

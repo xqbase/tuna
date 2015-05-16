@@ -3,7 +3,6 @@ package com.xqbase.tuna.mux;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Map.Entry;
 
 import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectionHandler;
@@ -65,24 +64,22 @@ public class MulticastHandler implements ConnectionHandler {
 			}
 			connList.add(Integer.valueOf(virtual.cid));
 		}
-		for (Entry<ConnectionHandler, ArrayList<Integer>> entry : connListMap.entrySet()) {
-			ConnectionHandler muxHandler = entry.getKey();
-			ArrayList<Integer> connList = entry.getValue();
-			int numConnsToSend = connList.size();
+		connListMap.forEach((k, v) -> {
+			int numConnsToSend = v.size();
 			int numConnsSent = 0;
 			while (numConnsToSend > 0) {
 				int numConns = Math.min(numConnsToSend, maxNumConns);
 				byte[] bb = new byte[HEAD_SIZE + numConns * 2 + len];
 				for (int i = 0; i < numConns; i ++) {
-					Bytes.setShort(connList.get(numConnsSent + i).intValue(),
+					Bytes.setShort(v.get(numConnsSent + i).intValue(),
 							bb, HEAD_SIZE + i * 2);
 				}
 				System.arraycopy(b, off, bb, HEAD_SIZE + numConns * 2, len);
-				MuxPacket.send(muxHandler, bb, MuxPacket.HANDLER_MULTICAST, numConns);
+				MuxPacket.send(k, bb, MuxPacket.HANDLER_MULTICAST, numConns);
 				numConnsToSend -= numConns;
 				numConnsSent += numConns;
 			}
-		}
+		});
 	}
 
 	// unable to multicast "setBufferSize" and "disconnect" yet 
