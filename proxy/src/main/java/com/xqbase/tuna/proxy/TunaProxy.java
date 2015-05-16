@@ -10,7 +10,6 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.function.Predicate;
 import java.util.logging.Logger;
@@ -121,10 +120,8 @@ public class TunaProxy {
 				});
 				connector.scheduleDelayed(() -> {
 					authMap.clear();
-					Properties p_ = Conf.load("Auth");
-					for (Map.Entry<?, ?> entry : p_.entrySet()) {
-						authMap.put((String) entry.getKey(), (String) entry.getValue());
-					}
+					Conf.load("Auth").forEach((k, v) ->
+							authMap.put((String) k, (String) v));
 				}, 0, 10000);
 			}
 			if (lookupEnabled) {
@@ -132,10 +129,8 @@ public class TunaProxy {
 				context.setLookup(lookupMap::get);
 				connector.scheduleDelayed(() -> {
 					lookupMap.clear();
-					Properties p_ = Conf.load("Lookup");
-					for (Map.Entry<?, ?> entry : p_.entrySet()) {
-						lookupMap.put((String) entry.getKey(), (String) entry.getValue());
-					}
+					Conf.load("Lookup").forEach((k, v) ->
+							lookupMap.put((String) k, (String) v));
 				}, 0, 10000);
 			}
 			context.setRealm(realm);
