@@ -48,10 +48,10 @@ class MuxSSLSession implements SSLSession {
 			idMapField.setAccessible(true);
 			Field nameField = clazz.getDeclaredField("name");
 			nameField.setAccessible(true);
-			((Map<?, ?>) idMapField.get(null)).forEach((k, v) -> {
-				Integer id = (Integer) k;
+			((Map<?, ?>) idMapField.get(null)).forEach((id_, cipherSuite) -> {
+				Integer id = (Integer) id_;
 				try {
-					String name = (String) nameField.get(v);
+					String name = (String) nameField.get(cipherSuite);
 					cipherName2Id.put(name, id);
 					cipherId2Name.put(id, name);
 				} catch (ReflectiveOperationException e) {

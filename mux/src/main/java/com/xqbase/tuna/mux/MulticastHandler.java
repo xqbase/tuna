@@ -64,18 +64,18 @@ public class MulticastHandler implements ConnectionHandler {
 			}
 			connList.add(Integer.valueOf(virtual.cid));
 		}
-		connListMap.forEach((k, v) -> {
-			int numConnsToSend = v.size();
+		connListMap.forEach((muxHandler, connList) -> {
+			int numConnsToSend = connList.size();
 			int numConnsSent = 0;
 			while (numConnsToSend > 0) {
 				int numConns = Math.min(numConnsToSend, maxNumConns);
 				byte[] bb = new byte[HEAD_SIZE + numConns * 2 + len];
 				for (int i = 0; i < numConns; i ++) {
-					Bytes.setShort(v.get(numConnsSent + i).intValue(),
+					Bytes.setShort(connList.get(numConnsSent + i).intValue(),
 							bb, HEAD_SIZE + i * 2);
 				}
 				System.arraycopy(b, off, bb, HEAD_SIZE + numConns * 2, len);
-				MuxPacket.send(k, bb, MuxPacket.HANDLER_MULTICAST, numConns);
+				MuxPacket.send(muxHandler, bb, MuxPacket.HANDLER_MULTICAST, numConns);
 				numConnsToSend -= numConns;
 				numConnsSent += numConns;
 			}
