@@ -110,25 +110,27 @@ class ClientConnection implements Connection, HttpStatus {
 	private ProxyConnection proxy;
 	private ConnectionHandler proxyHandler, handler;
 	private HttpPacket request, response = new HttpPacket();
-	private boolean secure, established = false, begun = false, chunked = false,
+	private boolean secure, proxyChain, established = false, begun = false, chunked = false,
 			requestClose = false, responseClose = false;
 	private int logLevel;
 	private String host, local = " (0.0.0.0:0)";
 
-	ClientConnection(ProxyConnection proxy, ConnectionHandler proxyHandler,
-			int logLevel, HttpPacket request, boolean secure, String host) {
+	ClientConnection(ProxyConnection proxy, ConnectionHandler proxyHandler, HttpPacket request,
+			String host, boolean secure, boolean proxyChain, int logLevel) {
 		this.proxy = proxy;
 		this.proxyHandler = proxyHandler;
-		this.logLevel = logLevel;
 		this.request = request;
-		this.secure = secure;
 		this.host = host;
+		this.secure = secure;
+		this.proxyChain = proxyChain;
+		this.logLevel = logLevel;
 	}
 
 	String toString(boolean resp) {
 		String uri = request.getUri();
 		return proxy.getRemote() + (resp ? " <= " : " => ") +
-				(secure ? "https://" : "http://") + host + (uri == null ? "" : uri) + local;
+				(proxyChain ? uri + " via " + host :
+				(secure ? "https://" : "http://") + host + uri) + local;
 	}
 
 	boolean isBegun() {
@@ -540,6 +542,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 		String host = (String) bindings.get(PROXY_CHAIN_KEY);
 		String uri = request.getUri();
 		boolean secure = false;
+		boolean proxyChain;
 		String connectHost;
 		int port;
 		if (host == null) {
@@ -602,6 +605,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			if (request.getHeader("HOST") == null) {
 				request.setHeader("Host", originalHost);
 			}
+			proxyChain = false;
 
 		} else {
 			int colon = host.lastIndexOf(':');
@@ -616,6 +620,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			if (proxyAuth != null) {
 				request.setHeader("Proxy-Authorization", proxyAuth);
 			}
+			proxyChain = true;
 		}
 
 		int forwardedType = context.getForwardedType();
@@ -665,7 +670,8 @@ public class ProxyConnection implements Connection, HttpStatus {
 
 		client = getClientMap(secure).get(host);
 		if (client == null) {
-			client = new ClientConnection(this, handler, logLevel, request, secure, host);
+			client = new ClientConnection(this, handler,
+					request, host, secure, proxyChain, logLevel);
 			getClientMap(secure).put(host, client);
 			Connection connection;
 			if (secure) {
