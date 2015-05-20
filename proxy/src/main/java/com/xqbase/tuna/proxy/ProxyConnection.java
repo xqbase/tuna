@@ -335,14 +335,14 @@ class ClientConnection implements Connection, HttpStatus {
 
 	private void reset() {
 		proxy.onComplete();
-		request.reset();
-		response.reset();
 		proxyHandler.setBufferSize(MAX_BUFFER_SIZE);
 		if (logLevel >= LOG_VERBOSE) {
 			Log.v((proxy.getClientMap(secure).get(host) == null ? "Client Closed" :
 					"Client Kept Alive") + " and Request Unblocked due to " +
 					"Complete Request and Response, " + toString(false));
 		}
+		request.reset();
+		response.reset();
 		proxy.clearCurrentClient();
 		proxy.read();
 	}
