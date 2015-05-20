@@ -130,7 +130,8 @@ class ClientConnection implements Connection, HttpStatus {
 		String uri = request.getUri();
 		return proxy.getRemote() + (resp ? " <= " : " => ") +
 				(proxyChain ? uri + " via " + host :
-				(secure ? "https://" : "http://") + host + uri) + local;
+				(secure ? "https://" : "http://") + host +
+				(uri == null ? "" : uri)) + local;
 	}
 
 	boolean isBegun() {
