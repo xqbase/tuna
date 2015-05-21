@@ -350,6 +350,7 @@ class ClientConnection implements Connection, HttpStatus {
 }
 
 public class ProxyConnection implements Connection, HttpStatus {
+	public static final String CONNECTION_KEY = ProxyConnection.class.getName();
 	public static final String SESSION_KEY = ConnectionSession.class.getName();
 	public static final String PROXY_CHAIN_KEY =
 			ProxyConnection.class.getName() + ".PROXY_CHAIN";
@@ -453,6 +454,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			return;
 		}
 
+		bindings.put(CONNECTION_KEY, this);
 		bindings.put(SESSION_KEY, session);
 		try {
 			context.onRequest(bindings, request);
