@@ -350,7 +350,6 @@ class ClientConnection implements Connection, HttpStatus {
 }
 
 public class ProxyConnection implements Connection, HttpStatus {
-	public static final String CONNECTION_KEY = ProxyConnection.class.getName();
 	public static final String SESSION_KEY = ConnectionSession.class.getName();
 	public static final String PROXY_CHAIN_KEY =
 			ProxyConnection.class.getName() + ".PROXY_CHAIN";
@@ -360,7 +359,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
 
-	private int logLevel; 
+	private int logLevel;
 	private ProxyContext context;
 	private ConnectionHandler handler;
 	private ConnectionSession session;
@@ -428,33 +427,20 @@ public class ProxyConnection implements Connection, HttpStatus {
 			}
 		}
 		if (!context.auth(username, password)) {
-			String realm = context.getRealm();
 			int status = SC_PROXY_AUTHENTICATION_REQUIRED;
+			String realm = context.getRealm();
 			HttpPacket response = new HttpPacket(status,
 					ProxyContext.getReason(status), context.getErrorPage(status),
-					"Proxy-Authenticate", realm == null || realm.isEmpty() ?
-					"Basic" : "Basic realm=\"" + realm + "\"");
-			if (connectionClose || !request.isComplete()) {
-				// Skip reading body
-				response.setHeader("Connection", "close");
-				response.write(handler, true, false);
-				disconnect();
-			} else { 
-				response.setHeader("Connection", "keep-alive");
-				response.write(handler, true, false);
-				request.reset();
-				// No request from peer, so continue reading
-				if (queue.length() > 0) {
-					readEx();
-				}
-			}
+					"Proxy-Authenticate", realm == null || realm.isEmpty() ? "Basic" :
+					"Basic realm=\"" + realm + "\"", "Connection", "close");
+			response.write(handler, true, false);
+			disconnect();
 			if (logLevel >= LOG_DEBUG) {
 				Log.d("Auth Failed, " + getRemote());
 			}
 			return;
 		}
 
-		bindings.put(CONNECTION_KEY, this);
 		bindings.put(SESSION_KEY, session);
 		try {
 			context.onRequest(bindings, request);
