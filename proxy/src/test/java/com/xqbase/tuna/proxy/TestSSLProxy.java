@@ -25,7 +25,7 @@ public class TestSSLProxy {
 			tmf.init(ks);
 			SSLContext sslc = SSLContext.getInstance("TLS");
 			sslc.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
-			
+
 			ProxyContext context = new ProxyContext(connector, connector, connector);
 			context.setLookup(t -> "localhost");
 			context.setEnableReverse(true);
