@@ -358,6 +358,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 
 	private static final int LOG_DEBUG = ProxyContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = ProxyContext.LOG_VERBOSE;
+	private static final ClientConnection[] EMPTY_CONNECTIONS = {/**/};
 
 	private int logLevel;
 	private ProxyContext context;
@@ -768,13 +769,15 @@ public class ProxyConnection implements Connection, HttpStatus {
 	}
 
 	public void disconnect() {
-		for (ClientConnection client_ : clientMap.values()) {
+		for (ClientConnection client_ : clientMap.
+				values().toArray(EMPTY_CONNECTIONS)) {
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Closed, " + client_.toString(false));
 			}
 			client_.getHandler().disconnect();
 		}
-		for (ClientConnection client_ : secureClientMap.values()) {
+		for (ClientConnection client_ : secureClientMap.
+				values().toArray(EMPTY_CONNECTIONS)) {
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Closed, " + client_.toString(false));
 			}
