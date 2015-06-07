@@ -350,7 +350,6 @@ class ClientConnection implements Connection, HttpStatus {
 }
 
 public class ProxyConnection implements Connection, HttpStatus {
-	public static final String SESSION_KEY = ConnectionSession.class.getName();
 	public static final String PROXY_CHAIN_KEY =
 			ProxyConnection.class.getName() + ".PROXY_CHAIN";
 	public static final String PROXY_AUTH_KEY =
@@ -396,11 +395,11 @@ public class ProxyConnection implements Connection, HttpStatus {
 	}
 
 	void onResponse(HttpPacket response) {
-		context.onResponse(bindings, response);
+		context.onResponse(this, response);
 	}
 
 	void onComplete() {
-		context.onComplete(bindings);
+		context.onComplete(this);
 		bindings.clear();
 	}
 
@@ -442,9 +441,8 @@ public class ProxyConnection implements Connection, HttpStatus {
 			return;
 		}
 
-		bindings.put(SESSION_KEY, session);
 		try {
-			context.onRequest(bindings, request);
+			context.onRequest(this, request);
 		} catch (RequestException e) {
 			HttpPacket response = e.getResponse();
 			if (connectionClose || !request.isComplete()) {
@@ -766,6 +764,14 @@ public class ProxyConnection implements Connection, HttpStatus {
 			}
 		}
 		disconnect();
+	}
+
+	public ConnectionSession getSession() {
+		return session;
+	}
+
+	public HashMap<String, Object> getBindings() {
+		return bindings;
 	}
 
 	public void disconnect() {
