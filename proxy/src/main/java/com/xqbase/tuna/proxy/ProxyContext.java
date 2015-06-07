@@ -6,7 +6,6 @@ import java.lang.reflect.Modifier;
 import java.net.InetSocketAddress;
 import java.security.GeneralSecurityException;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
@@ -98,10 +97,10 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 	private SSLContext sslc = defaultSSLContext;
 	private BiPredicate<String, String> auth = (t, u) -> true;
 	private UnaryOperator<String> lookup = t -> t;
-	private BiConsumerEx<Map<String, Object>, HttpPacket, RequestException>
+	private BiConsumerEx<ProxyConnection, HttpPacket, RequestException>
 			onRequest = (t, u) -> {/**/};
-	private BiConsumer<Map<String, Object>, HttpPacket> onResponse = (t, u) -> {/**/};
-	private Consumer<Map<String, Object>> onComplete = t -> {/**/};
+	private BiConsumer<ProxyConnection, HttpPacket> onResponse = (t, u) -> {/**/};
+	private Consumer<ProxyConnection> onComplete = t -> {/**/};
 	private IntFunction<byte[]> errorPages = ProxyContext::getDefaultErrorPage;
 	private String realm = null;
 	private boolean enableReverse = false;
@@ -147,16 +146,15 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 		this.lookup = lookup;
 	}
 
-	public void setOnRequest(BiConsumerEx<Map<String, Object>,
-			HttpPacket, RequestException> onRequest) {
+	public void setOnRequest(BiConsumerEx<ProxyConnection, HttpPacket, RequestException> onRequest) {
 		this.onRequest = onRequest;
 	}
 
-	public void setOnResponse(BiConsumer<Map<String, Object>, HttpPacket> onResponse) {
+	public void setOnResponse(BiConsumer<ProxyConnection, HttpPacket> onResponse) {
 		this.onResponse = onResponse;
 	}
 
-	public void setOnComplete(Consumer<Map<String, Object>> onComplete) {
+	public void setOnComplete(Consumer<ProxyConnection> onComplete) {
 		this.onComplete = onComplete;
 	}
 
@@ -192,16 +190,15 @@ public class ProxyContext implements Connector, EventQueue, Executor {
 		return lookup.apply(host);
 	}
 
-	public void onRequest(Map<String, Object> bindings,
-			HttpPacket request) throws RequestException {
+	public void onRequest(ProxyConnection bindings, HttpPacket request) throws RequestException {
 		onRequest.accept(bindings, request);
 	}
 
-	public void onResponse(Map<String, Object> bindings, HttpPacket response) {
+	public void onResponse(ProxyConnection bindings, HttpPacket response) {
 		onResponse.accept(bindings, response);
 	}
 
-	public void onComplete(Map<String, Object> bindings) {
+	public void onComplete(ProxyConnection bindings) {
 		onComplete.accept(bindings);
 	}
 
