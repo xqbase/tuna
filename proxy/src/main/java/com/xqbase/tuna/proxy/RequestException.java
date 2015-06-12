@@ -13,8 +13,8 @@ public class RequestException extends Exception {
 	}
 
 	public RequestException(int status, String... headPairs) {
-		this(status, ProxyContext.getReason(status),
-				ProxyContext.getDefaultErrorPage(status), headPairs);
+		this(status, ProxyConnection.getReason(status),
+				ProxyConnection.getDefaultErrorPage(status), headPairs);
 	}
 
 	public HttpPacket getResponse() {

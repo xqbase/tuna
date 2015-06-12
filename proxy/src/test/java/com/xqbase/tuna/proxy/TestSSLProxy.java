@@ -26,11 +26,11 @@ public class TestSSLProxy {
 			SSLContext sslc = SSLContext.getInstance("TLS");
 			sslc.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
 
-			ProxyContext context = new ProxyContext(connector, connector, connector);
+			ProxyServer context = new ProxyServer(connector, connector, connector);
 			context.setLookup(t -> "localhost");
 			context.setEnableReverse(true);
-			context.setForwardedType(ProxyContext.FORWARDED_ON);
-			context.setLogLevel(ProxyContext.LOG_DEBUG);
+			context.setForwardedType(ProxyConnection.FORWARDED_ON);
+			context.setLogLevel(ProxyConnection.LOG_DEBUG);
 			ServerConnection server = () -> new ProxyConnection(context);
 			connector.add(server.appendFilter(() -> new SSLFilter(connector,
 					connector, sslc, SSLFilter.SERVER_WANT_AUTH)), 8443);
