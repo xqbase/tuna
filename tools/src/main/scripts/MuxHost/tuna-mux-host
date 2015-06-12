@@ -5,7 +5,7 @@
 PID_FILE=/var/run/tuna-mux-host.pid
 case "$1" in
 	start)
-		/usr/share/java/bin/java -Xms16m -Xmx32m -cp /usr/local/tuna/lib/tuna-tools.jar com.xqbase.tuna.cli.MuxHost 8341 &
+		/usr/java/default/bin/java -Xms16m -Xmx32m -cp /usr/local/tuna/lib/tuna-tools.jar com.xqbase.tuna.cli.MuxHost 8341 &
 		echo $! > $PID_FILE
 		;;
 	stop)

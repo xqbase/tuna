@@ -108,10 +108,10 @@ public class TunaProxy {
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
 
-			ProxyContext context = new ProxyContext(connector, connector, connector);
+			ProxyServer server = new ProxyServer(connector, connector, connector);
 			if (authEnabled) {
 				HashMap<String, String> authMap = new HashMap<>();
-				context.setAuth((t, u) -> {
+				server.setAuth((t, u) -> {
 					if (t == null) {
 						return false;
 					}
@@ -126,19 +126,19 @@ public class TunaProxy {
 			}
 			if (lookupEnabled) {
 				HashMap<String, String> lookupMap = new HashMap<>();
-				context.setLookup(lookupMap::get);
+				server.setLookup(lookupMap::get);
 				connector.scheduleDelayed(() -> {
 					lookupMap.clear();
 					Conf.load("Lookup").forEach((k, v) ->
 							lookupMap.put((String) k, (String) v));
 				}, 0, 10000);
 			}
-			context.setRealm(realm);
-			context.setEnableReverse(enableReverse);
-			context.setForwardedType(forwardedType);
-			context.setLogLevel(logLevel);
-			ServerConnection server = () -> new ProxyConnection(context);
+			server.setRealm(realm);
+			server.setEnableReverse(enableReverse);
+			server.setForwardedType(forwardedType);
+			server.setLogLevel(logLevel);
 
+			ServerConnection server_;
 			if (Conf.getBoolean(p.getProperty("mux"), false)) {
 				String authPhrase = p.getProperty("mux.auth_phrase");
 				Predicate<byte[]> muxAuth;
@@ -150,16 +150,18 @@ public class TunaProxy {
 				}
 				int queueLimit = Numbers.parseInt(p.
 						getProperty("mux.queue_limit"), 1048576);
-				server = new OriginServer(server, new MuxContext(connector,
+				server_ = new OriginServer(server, new MuxContext(connector,
 						muxAuth, queueLimit, logLevel));
+			} else {
+				server_ = server;
 			}
 
 			if (Conf.getBoolean(p.getProperty("ssl"), false)) {
 				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
-				connector.add(server.appendFilter(() -> new SSLFilter(connector,
+				connector.add(server_.appendFilter(() -> new SSLFilter(connector,
 						connector, sslcServer, SSLFilter.SERVER_NO_AUTH)), host, port);
 			} else {
-				connector.add(server, host, port);
+				connector.add(server_, host, port);
 			}
 			Log.i("HTTP Proxy Started on " + host + ":" + port);
 			connector.doEvents();
