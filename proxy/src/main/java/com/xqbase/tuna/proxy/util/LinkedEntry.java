@@ -11,10 +11,6 @@ public class LinkedEntry {
 		return prev;
 	}
 
-	public boolean isEmpty() {
-		return next == this;
-	}
-
 	public void remove() {
 		prev.next = next;
 		next.prev = prev;
