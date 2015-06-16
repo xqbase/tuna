@@ -99,6 +99,7 @@ public class TunaProxy {
 		boolean lookupEnabled = Conf.getBoolean(p.getProperty("lookup"), false);
 		String realm = p.getProperty("realm");
 		boolean enableReverse = Conf.getBoolean(p.getProperty("reverse"), false);
+		int keepAlive = Numbers.parseInt(p.getProperty("keep_alive"), (int) Time.MINUTE);
 		String forwardedValue = p.getProperty("forwarded");
 		int forwardedType = forwardedValue == null ? 0 :
 				FORWARDED_VALUE.indexOf(forwardedValue.toLowerCase()) + 1;
@@ -135,8 +136,10 @@ public class TunaProxy {
 			}
 			server.setRealm(realm);
 			server.setEnableReverse(enableReverse);
+			server.setKeepAlive(keepAlive);
 			server.setForwardedType(forwardedType);
 			server.setLogLevel(logLevel);
+			connector.scheduleDelayed(server.getSchedule(), 10000, 10000);
 
 			ServerConnection server_;
 			if (Conf.getBoolean(p.getProperty("mux"), false)) {
