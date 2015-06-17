@@ -93,24 +93,13 @@ public class ProxyConnection implements Connection, HttpStatus {
 	private ProxyServer server;
 	private ConnectionHandler handler;
 	private ConnectionSession session;
-	private String remote = null;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket request = new HttpPacket();
 	private HashMap<String, Object> bindings = new HashMap<>();
-	private PeerConnection peer = null;
-	private ClientConnection client = null;
 
-	boolean isCurrentClient(ClientConnection client_) {
-		return client == client_;
-	}
-
-	void clearCurrentClient() {
-		client = null;
-	}
-
-	String getRemote() {
-		return remote;
-	}
+	String remote = null;
+	ClientConnection client = null;
+	ConnectConnection connect = null;
 
 	void sendError(int status) {
 		byte[] body = server.getErrorPage(status);
@@ -151,7 +140,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			response.write(handler, true, false);
 			disconnect();
 			if (logLevel >= LOG_DEBUG) {
-				Log.d("Auth Failed, " + getRemote());
+				Log.d("Auth Failed, " + remote);
 			}
 			return;
 		}
@@ -189,7 +178,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 				if (uri == null) {
 					if (logLevel >= LOG_DEBUG) {
 						Log.d("Connection to \"" + request.getUri() +
-								"\" is Forbidden, " + getRemote());
+								"\" is Forbidden, " + remote);
 					}
 					sendError(SC_FORBIDDEN);
 					disconnect();
@@ -224,17 +213,17 @@ public class ProxyConnection implements Connection, HttpStatus {
 				request.write(body, true, false);
 				proxyChain = true;
 			}
-			peer = new PeerConnection(this, handler, proxyChain, logLevel, host, port);
+			connect = new ConnectConnection(this, proxyChain, host, port, logLevel);
 			try {
-				server.connector.connect(peer, host, port);
+				server.connector.connect(connect, host, port);
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", host);
 			}
 			if (body.length() > 0) {
-				peer.getHandler().send(body.array(), body.offset(), body.length());
+				connect.handler.send(body.array(), body.offset(), body.length());
 			}
 			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Connection Created, " + peer.toString(false));
+				Log.v("Connection Created, " + connect.toString(false));
 			}
 			return;
 		}
@@ -257,7 +246,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 					secure = true;
 				} else if (!proto.equals("http")) {
 					if (logLevel >= LOG_DEBUG) {
-						Log.d("\"" + proto + "\" Not Implemented, " + getRemote());
+						Log.d("\"" + proto + "\" Not Implemented, " + remote);
 					}
 					sendError(SC_NOT_IMPLEMENTED);
 					disconnect();
@@ -285,7 +274,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			if (host == null) {
 				if (logLevel >= LOG_DEBUG) {
 					Log.d("Request to \"" + originalHost +
-							"\" is Forbidden, " + getRemote());
+							"\" is Forbidden, " + remote);
 				}
 				sendError(SC_FORBIDDEN);
 				disconnect();
@@ -408,9 +397,9 @@ public class ProxyConnection implements Connection, HttpStatus {
 			readEx();
 		} catch (HttpPacketException e) {
 			if (logLevel >= LOG_DEBUG) {
-				Log.d(e.getMessage() + ", " + getRemote());
+				Log.d(e.getMessage() + ", " + remote);
 			}
-			if (client == null || !client.isBegun()) {
+			if (client == null || !client.begun) {
 				String type = e.getType();
 				sendError(type == HttpPacketException.HEADER_SIZE ?
 						SC_REQUEST_ENTITY_TOO_LARGE :
@@ -433,8 +422,8 @@ public class ProxyConnection implements Connection, HttpStatus {
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		if (peer != null) {
-			peer.getHandler().send(b, off, len);
+		if (connect != null) {
+			connect.handler.send(b, off, len);
 			return;
 		}
 
@@ -443,7 +432,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			handler.setBufferSize(0);
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Request Blocked due to Complete Request but Incomplete Response, " +
-						(client == null ? getRemote() : client.toString(false)));
+						(client == null ? remote : client.toString(false)));
 			}
 		} else {
 			read();
@@ -452,14 +441,14 @@ public class ProxyConnection implements Connection, HttpStatus {
 
 	@Override
 	public void onQueue(int size) {
-		if (peer != null) {
-			peer.getHandler().setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
+		if (connect != null) {
+			connect.handler.setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v((size == 0 ? "Connection Unblocked, " :
-						"Connection Blocked (" + size + "), ") + peer.toString(true));
+						"Connection Blocked (" + size + "), ") + connect.toString(true));
 			}
 		} else if (client != null) {
-			client.getHandler().setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
+			client.handler.setBufferSize(size == 0 ? MAX_BUFFER_SIZE : 0);
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v((size == 0 ? "Response Unblocked, " :
 						"Response Blocked (" + size + "), ") + client.toString(true));
@@ -476,13 +465,13 @@ public class ProxyConnection implements Connection, HttpStatus {
 
 	@Override
 	public void onDisconnect() {
-		if (peer != null) {
-			peer.getHandler().disconnect();
+		if (connect != null) {
+			connect.handler.disconnect();
 			if (logLevel >= LOG_VERBOSE) {
-				Log.v("Connection Closed, " + peer.toString(false));
+				Log.v("Connection Closed, " + connect.toString(false));
 			}
 		} else if (client != null) {
-			client.getHandler().disconnect();
+			client.handler.disconnect();
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Proxy Connection Closed, " + client.toString(false));
 			}

@@ -18,6 +18,7 @@ import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.http.HttpPacket;
+import com.xqbase.tuna.proxy.util.LinkedEntry;
 import com.xqbase.tuna.ssl.SSLManagers;
 import com.xqbase.util.Log;
 import com.xqbase.util.Time;
@@ -53,15 +54,17 @@ public class ProxyServer implements ServerConnection {
 	private IntFunction<byte[]> errorPages = ProxyConnection::getDefaultErrorPage;
 	private String realm = null;
 	private boolean enableReverse = false;
-	private int keepAlive = (int) Time.MINUTE,
+	private int
+			keepAlive = (int) Time.MINUTE,
 			forwardedType = ProxyConnection.FORWARDED_TRANSPARENT,
 			logLevel = ProxyConnection.LOG_NONE;
-	private HashMap<String, ClientConnection> plainClientMap = new HashMap<>(),
+	private HashMap<String, LinkedEntry<ClientConnection>>
+			plainClientMap = new HashMap<>(),
 			secureClientMap = new HashMap<>();
-	private TimeoutEntry timeoutQueue = new TimeoutEntry(null, 0);
+	private LinkedEntry<ClientConnection> timeoutQueue = new LinkedEntry<>(null);
 
 	private void disconnect(ClientConnection client) {
-		client.getHandler().disconnect();
+		client.handler.disconnect();
 		removeClient(client);
 		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
 			Log.v("Client Keep-Alive Expired, " + client.toString(false));
@@ -69,43 +72,40 @@ public class ProxyServer implements ServerConnection {
 	}
 
 	ClientConnection borrowClient(String host, boolean secure) {
-		HashMap<String, ClientConnection> clientMap =
+		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
 				secure ? secureClientMap : plainClientMap;
-		ClientConnection queue = clientMap.get(host);
+		LinkedEntry<ClientConnection> queue = clientMap.get(host);
 		if (queue == null) {
 			return null;
 		}
-		ClientConnection client = queue.getNext();
-		if (client != null) {
-			removeClient(client);
-		}
-		return client;
+		LinkedEntry<ClientConnection> entry = queue.getNext();
+		removeClient(entry.getObject());
+		return entry.getObject();
 	}
 
 	void returnClient(ClientConnection client) {
-		TimeoutEntry timeoutEntry = new TimeoutEntry(client,
-				System.currentTimeMillis() + keepAlive);
-		client.setTimeoutEntry(timeoutEntry);
-		HashMap<String, ClientConnection> clientMap =
-				client.isSecure() ? secureClientMap : plainClientMap;
-		ClientConnection queue = clientMap.get(client.getHost());
+		client.expire = System.currentTimeMillis() + keepAlive;
+		client.linkedEntry = new LinkedEntry<>(client);
+		client.timeoutEntry = new LinkedEntry<>(client);
+		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
+				client.secure ? secureClientMap : plainClientMap;
+		LinkedEntry<ClientConnection> queue = clientMap.get(client.host);
 		if (queue == null) {
-			queue = new ClientConnection(null, null, null, false, false, null, 0);
-			clientMap.put(client.getHost(), queue);
+			queue = new LinkedEntry<>(null);
+			clientMap.put(client.host, queue);
 		}
-		queue.addNext(client);
-		timeoutQueue.addNext(timeoutEntry);
+		queue.addNext(client.linkedEntry);
+		timeoutQueue.addNext(client.timeoutEntry);
 	}
 
 	void removeClient(ClientConnection client) {
-		client.remove();
-		client.getTimeoutEntry().remove();
-		String host = client.getHost();
-		HashMap<String, ClientConnection> clientMap =
-				client.isSecure() ? secureClientMap : plainClientMap;
-		ClientConnection queue = clientMap.get(host);
+		client.linkedEntry.remove();
+		client.timeoutEntry.remove();
+		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
+				client.secure ? secureClientMap : plainClientMap;
+		LinkedEntry<ClientConnection> queue = clientMap.get(client.host);
 		if (queue != null && queue.getNext() == queue) {
-			clientMap.remove(host);
+			clientMap.remove(client.host);
 		}
 	}
 
@@ -127,12 +127,12 @@ public class ProxyServer implements ServerConnection {
 	public Runnable getSchedule() {
 		return () -> {
 			long now = System.currentTimeMillis();
-			TimeoutEntry timeout = timeoutQueue.getPrev();
-			while (timeout != timeoutQueue && timeout.expire < now) {
+			LinkedEntry<ClientConnection> timeoutEntry = timeoutQueue.getPrev();
+			while (timeoutEntry != timeoutQueue && timeoutEntry.getObject().expire < now) {
 				// disconnect breaks queue
-				TimeoutEntry timeout_ = timeout.getPrev();
-				disconnect(timeout.client);
-				timeout = timeout_;
+				LinkedEntry<ClientConnection> entry = timeoutEntry.getPrev();
+				disconnect(timeoutEntry.getObject());
+				timeoutEntry = entry;
 			}
 			if (logLevel < ProxyConnection.LOG_VERBOSE) {
 				return;
@@ -141,14 +141,15 @@ public class ProxyServer implements ServerConnection {
 			StringWriter sw = new StringWriter();
 			PrintWriter out = new PrintWriter(sw);
 			out.println("Dump Client Pool ...");
-			BiConsumer<String, ClientConnection> action = (host, queue) -> {
+			BiConsumer<String, LinkedEntry<ClientConnection>> action = (host, queue) -> {
 				StringBuilder sb = new StringBuilder();
 				sb.append(host).append("=[");
-				ClientConnection client = queue.getNext();
-				while (client != queue) {
+				LinkedEntry<ClientConnection> entry = queue.getNext();
+				while (entry != queue) {
+					ClientConnection client = entry.getObject();
 					sb.append(Integer.toHexString(client.hashCode())).append("/").
 							append(client.toString(false)).append(", ");
-					client = client.getNext();
+					entry = entry.getNext();
 				}
 				out.println(sb.substring(0, sb.length() - 2) + "]");
 			};
@@ -158,11 +159,12 @@ public class ProxyServer implements ServerConnection {
 			secureClientMap.forEach(action);
 			out.println("Timeout Queue:");
 			StringBuilder sb = new StringBuilder();
-			timeout = timeoutQueue.getNext();
-			while (timeout != timeoutQueue) {
-				sb.append(Integer.toHexString(timeout.client.hashCode())).append("/").
-						append(Time.toTimeString(timeout.expire, true)).append(", ");
-				timeout = timeout.getNext();
+			LinkedEntry<ClientConnection> entry = timeoutQueue.getNext();
+			while (entry != timeoutQueue) {
+				ClientConnection client = entry.getObject();
+				sb.append(Integer.toHexString(client.hashCode())).append("/").
+						append(Time.toTimeString(client.expire, true)).append(", ");
+				entry = entry.getNext();
 			}
 			out.print(sb.length() == 0 ? "<empty>" :
 					"[" + sb.substring(0, sb.length() - 2) + "]");
@@ -171,12 +173,12 @@ public class ProxyServer implements ServerConnection {
 	}
 
 	public void disconnectAll() {
-		TimeoutEntry timeout = timeoutQueue.getPrev();
-		while (timeout != timeoutQueue) {
+		LinkedEntry<ClientConnection> timeoutEntry = timeoutQueue.getPrev();
+		while (timeoutEntry != timeoutQueue) {
 			// disconnect breaks queue
-			TimeoutEntry timeout_ = timeout.getPrev();
-			disconnect(timeout.client);
-			timeout = timeout_;
+			LinkedEntry<ClientConnection> entry = timeoutEntry.getPrev();
+			disconnect(timeoutEntry.getObject());
+			timeoutEntry = entry;
 		}
 		for (ProxyConnection proxy : connections.toArray(EMPTY_PROXIES)) {
 			proxy.disconnect();
