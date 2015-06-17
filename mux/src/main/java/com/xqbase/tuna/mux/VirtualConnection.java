@@ -11,7 +11,7 @@ class VirtualConnection extends ConnectionWrapper implements ConnectionHandler {
 	private static final int LOG_DEBUG = MuxContext.LOG_DEBUG;
 	private static final int LOG_VERBOSE = MuxContext.LOG_VERBOSE;
 
-	private int logLevel;
+	private int bufferSize = MAX_BUFFER_SIZE, logLevel;
 
 	MuxServerConnection mux;
 	int cid;
@@ -34,6 +34,10 @@ class VirtualConnection extends ConnectionWrapper implements ConnectionHandler {
 
 	@Override
 	public void setBufferSize(int bufferSize) {
+		if (bufferSize == this.bufferSize) {
+			return;
+		}
+		this.bufferSize = bufferSize;
 		byte[] b = new byte[HEAD_SIZE + 2];
 		Bytes.setShort(bufferSize, b, HEAD_SIZE);
 		MuxPacket.send(mux.handler, b, MuxPacket.HANDLER_BUFFER, cid);
