@@ -1,0 +1,22 @@
+[*] --> IDLE
+IDLE --> IDLE : send(), empty
+BUSY_1 : OP_CONNECT
+IDLE --> BUSY_1 : connect()
+BUSY_1 --> IDLE : onConnect(), empty
+BUSY_1 --> BUSY_1 : send()
+BUSY_2 : OP_WRITE
+IDLE --> BUSY_2 : send(), queued
+BUSY_2 --> IDLE : empty
+BUSY_2 --> BUSY_2 : send()
+BUSY_1 --> BUSY_2 : onConnect(), queued
+DISCONNECTING_1 : OP_CONNECT
+BUSY_1 --> DISCONNECTING_1 : disconnect()
+DISCONNECTING_1 --> DISCONNECTING_1 : send()
+DISCONNECTING_1 --> CLOSED : onConnect(), empty
+DISCONNECTING_2 : OP_WRITE
+BUSY_2 --> DISCONNECTING_2 : disconnect()
+DISCONNECTING_2 --> DISCONNECTING_2 : send()
+DISCONNECTING_2 --> CLOSED : empty
+DISCONNECTING_1 --> DISCONNECTING_2 : onConnect(), queued
+IDLE --> CLOSED : disconnect()
+CLOSED --> [*]

@@ -28,18 +28,14 @@ import com.xqbase.tuna.util.ByteArrayQueue;
  */
 class Client {
 	private static final int
-			STATUS_IDLE = 0,
-			STATUS_BUSY = 1,
-			STATUS_DISCONNECTING = 2,
-			STATUS_CLOSED = 3;
-
-	private static final int
-			CHANNEL_NONE = 0,
-			CHANNEL_READY = 1,
-			CHANNEL_CONNECTED = 2;
+			STATUS_CLOSED = 0,
+			STATUS_IDLE = 1,
+			STATUS_BUSY = 2,
+			STATUS_DISCONNECTING = 3;
 
 	int bufferSize = Connection.MAX_BUFFER_SIZE;
-	int status = STATUS_IDLE, channelStatus = CHANNEL_NONE;
+	int status = STATUS_IDLE;
+	boolean resolving = false;
 	ByteArrayQueue queue = new ByteArrayQueue();
 	SocketChannel socketChannel;
 	SelectionKey selectionKey;
@@ -91,6 +87,7 @@ class Client {
 	 * @see ConnectorImpl#connect(Connection, String, int)
 	 */
 	void connect(Selector selector, InetSocketAddress socketAddress) {
+		resolving = false;
 		try {
 			socketChannel = SocketChannel.open();
 			socketChannel.configureBlocking(false);
@@ -100,19 +97,15 @@ class Client {
 		try {
 			socketChannel.connect(socketAddress);
 			add(selector, SelectionKey.OP_CONNECT);
-			channelStatus = CHANNEL_READY;
 		} catch (IOException e) {
 			// May throw "Network is unreachable"
-			try {
-				socketChannel.close();
-			} catch (IOException e_) {/**/}
 			startClose();
 		}
 	}
 
 	void interestOps() {
-		// setBufferSize may be called before connection
-		if (channelStatus == CHANNEL_CONNECTED) {
+		// setBufferSize may be called before resolve
+		if (!resolving) {
 			selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
 					(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
 		}
@@ -170,7 +163,6 @@ class Client {
 	}
 
 	void finishConnect() {
-		channelStatus = CHANNEL_CONNECTED;
 		InetSocketAddress local = ((InetSocketAddress) socketChannel.
 				socket().getLocalSocketAddress());
 		InetSocketAddress remote = ((InetSocketAddress) socketChannel.
@@ -179,32 +171,26 @@ class Client {
 	}
 
 	void startClose() {
-		if (status == STATUS_CLOSED) {
-			return;
+		if (status != STATUS_CLOSED) {
+			finishClose();
+			// Call "close()" before "onDisconnect()"
+			// to avoid recursive "disconnect()".
+			connection.onDisconnect();
 		}
-		finishClose();
-		// Call "close()" before "onDisconnect()"
-		// to avoid recursive "disconnect()".
-		connection.onDisconnect();
 	}
 
 	void finishClose() {
-		status = STATUS_CLOSED;
-		if (channelStatus == CHANNEL_NONE) {
-			return;
+		if (!resolving) {
+			selectionKey.cancel();
+			try {
+				socketChannel.close();
+			} catch (IOException e) {/**/}
 		}
-		selectionKey.cancel();
-		try {
-			socketChannel.close();
-		} catch (IOException e) {/**/}
-	}
-
-	boolean isOpen() {
-		return status != STATUS_CLOSED;
+		status = STATUS_CLOSED;
 	}
 
 	boolean isBusy() {
-		return status != STATUS_IDLE;
+		return status >= STATUS_IDLE;
 	}
 }
 
@@ -301,6 +287,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 					new InetSocketAddress(InetAddress.getByName(host), port));
 			return;
 		}
+		client.resolving = true;
 		execute(() -> {
 			try {
 				// Resolve in Executor then Connect later
@@ -427,13 +414,12 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 						continue;
 					}
 				}
-				// may be both isReadable() and isWritable() ?
 				if (key.isWritable()) {
 					client.write();
 				} else if (key.isConnectable() && client.socketChannel.finishConnect()) {
 					client.finishConnect();
 					// "onConnect()" might call "disconnect()"
-					if (client.isOpen() && client.isBusy()) {
+					if (client.isBusy()) {
 						client.write();
 					}
 				}
