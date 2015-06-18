@@ -57,7 +57,8 @@ class Client {
 				boolean toBlock = bufferSize <= 0;
 				Client.this.bufferSize = Math.max(0,
 						Math.min(bufferSize, Connection.MAX_BUFFER_SIZE));
-				if (status != STATUS_CLOSED && (blocked ^ toBlock)) {
+				if ((blocked ^ toBlock) && !resolving && status != STATUS_CLOSED) {
+					// may be called before resolve
 					interestOps();
 				}
 			}
@@ -65,6 +66,7 @@ class Client {
 			@Override
 			public void disconnect() {
 				if (status == STATUS_IDLE) {
+					// must be resolved
 					finishClose();
 				} else if (status == STATUS_BUSY) {
 					status = STATUS_DISCONNECTING;
@@ -104,11 +106,8 @@ class Client {
 	}
 
 	void interestOps() {
-		// setBufferSize may be called before resolve
-		if (!resolving) {
-			selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
-					(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
-		}
+		selectionKey.interestOps((bufferSize == 0 ? 0 : SelectionKey.OP_READ) |
+				(status == STATUS_IDLE ? 0 : SelectionKey.OP_WRITE));
 	}
 
 	void write() throws IOException {
@@ -180,12 +179,10 @@ class Client {
 	}
 
 	void finishClose() {
-		if (!resolving) {
-			selectionKey.cancel();
-			try {
-				socketChannel.close();
-			} catch (IOException e) {/**/}
-		}
+		selectionKey.cancel();
+		try {
+			socketChannel.close();
+		} catch (IOException e) {/**/}
 		status = STATUS_CLOSED;
 	}
 
