@@ -10,20 +10,22 @@ abstract class PeerConnection implements Connection {
 			LOG_DEBUG	= ProxyConnection.LOG_DEBUG,
 			LOG_VERBOSE	= ProxyConnection.LOG_VERBOSE;
 
+	ProxyServer server;
 	ProxyConnection proxy;
 	ConnectionHandler proxyHandler, handler;
-	boolean connected;
+	boolean connected, disconnected = false;
 	int logLevel;
 	String remote, local = " / 0.0.0.0:0";
 
-	PeerConnection(ProxyConnection proxy, int logLevel) {
+	PeerConnection(ProxyServer server, ProxyConnection proxy, int logLevel) {
+		this.server = server;
 		this.proxy = proxy;
 		this.logLevel = logLevel;
 		proxyHandler = proxy.getHandler();
 	}
 
 	String toString(boolean resp) {
-		return (proxy == null ? "0.0.0.0:0 " : proxy.remote) +
+		return (proxy == null ? "0.0.0.0:0" : proxy.remote) +
 				local + (resp ? " <= " : " => ") + remote;
 	}
 
@@ -44,9 +46,26 @@ abstract class PeerConnection implements Connection {
 	@Override
 	public void onConnect(ConnectionSession session) {
 		connected = true;
-		local = " / " + session.getLocalAddr() + ":" + session.getLocalPort() + " ";
+		local = " / " + session.getLocalAddr() + ":" + session.getLocalPort();
 		if (logLevel >= LOG_VERBOSE) {
 			Log.v("Connection Established, " + toString(false));
+		}
+	}
+
+	@Override
+	public void onDisconnect() {
+		decPeers();
+	}
+
+	void disconnect() {
+		handler.disconnect();
+		decPeers();
+	}
+
+	private void decPeers() {
+		if (!disconnected) {
+			disconnected = true;
+			server.decPeers();
 		}
 	}
 }

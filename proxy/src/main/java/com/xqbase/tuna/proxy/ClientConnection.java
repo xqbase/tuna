@@ -14,13 +14,12 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 	String host;
 	boolean secure, begun = false;
 
-	private ProxyServer server;
 	private HttpPacket request, response = new HttpPacket();
 	private boolean chunked = false, requestClose = false, responseClose = false;
 
 	ClientConnection(ProxyServer server, ProxyConnection proxy, HttpPacket request,
 			boolean proxyChain, boolean secure, String host, int logLevel) {
-		super(proxy, logLevel);
+		super(server, proxy, logLevel);
 		this.server = server;
 		this.request = request;
 		this.host = host;
@@ -55,7 +54,7 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 				Log.d("Unexpected Response in Keep-Alive: \"" +
 						new String(b, off, len) + "\", " + toString(true));
 			}
-			handler.disconnect();
+			disconnect();
 			server.removeClient(this);
 			return;
 		}
@@ -64,7 +63,7 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 				Log.d("Unexpected Response: \"" + new String(b, off, len) +
 						"\", " + toString(true));
 			}
-			handler.disconnect();
+			disconnect();
 			proxy.client = null;
 			proxy.disconnect();
 			return;
@@ -78,11 +77,10 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 					Log.d(e.getMessage() + ", " + toString(true));
 				}
 				// Disconnect for a Bad Response
-				handler.disconnect();
+				disconnect();
 				if (response.isCompleteHeader()) {
-					proxy.client = null;
-					proxy.disconnect();
 					onComplete();
+					proxy.disconnect();
 				} else {
 					proxy.sendError(SC_BAD_GATEWAY);
 					reset(true);
@@ -144,6 +142,7 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 
 	@Override
 	public void onDisconnect() {
+		super.onDisconnect();
 		if (proxy == null) {
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Lost in Keep-Alive, " + toString(true));
@@ -172,9 +171,8 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 		if (connected) {
 			// Just disconnect because request is not saved.
 			// Most browsers will retry request.
-			proxy.client = null;
-			proxy.disconnect();
 			onComplete();
+			proxy.disconnect();
 		} else {
 			proxy.sendError(SC_GATEWAY_TIMEOUT);
 			reset(true);
@@ -203,6 +201,7 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 	private void onComplete() {
 		server.onComplete(proxy);
 		proxy.getBindings().clear();
+		proxy.client = null;
 	}
 
 	private void sendResponse(boolean begin) {
@@ -220,7 +219,7 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 			return;
 		}
 		if (responseClose) {
-			handler.disconnect();
+			disconnect();
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Response Sent and Client Closed due to HTTP/1.0 or " +
 						"\"Connection: close\" in Response, " + toString(true));
@@ -237,7 +236,6 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 	}
 
 	private void reset(boolean closed) {
-		// TODO Disconnect or Return ?
 		onComplete();
 		proxyHandler.setBufferSize(MAX_BUFFER_SIZE);
 		request.reset();
@@ -246,11 +244,12 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 					" and Request Unblocked due to Complete Request and Response, " +
 					toString(false));
 		}
+		ProxyConnection proxy_ = proxy;
+		setProxy(null, null, false);
 		if (!closed) {
 			response.reset();
-			setProxy(null, null, false);
 			server.returnClient(this);
 		}
-		proxy.read();
+		proxy_.read();
 	}
 }
