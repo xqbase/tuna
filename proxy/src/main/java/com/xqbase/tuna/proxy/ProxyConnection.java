@@ -213,9 +213,10 @@ public class ProxyConnection implements Connection, HttpStatus {
 				request.write(body, true, false);
 				proxyChain = true;
 			}
-			connect = new ConnectConnection(this, proxyChain, host, port, logLevel);
+			connect = new ConnectConnection(server, this, proxyChain, host, port, logLevel);
 			try {
 				server.connector.connect(connect, host, port);
+				server.incPeers();
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", host);
 			}
@@ -374,6 +375,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			}
 			try {
 				server.connector.connect(connection, connectHost, port);
+				server.incPeers();
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", connectHost);
 			}
@@ -466,15 +468,17 @@ public class ProxyConnection implements Connection, HttpStatus {
 	@Override
 	public void onDisconnect() {
 		if (connect != null) {
-			connect.handler.disconnect();
+			connect.disconnect();
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Connection Closed, " + connect.toString(false));
 			}
+			connect = null;
 		} else if (client != null) {
-			client.handler.disconnect();
+			client.disconnect();
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Proxy Connection Closed, " + client.toString(false));
 			}
+			client = null;
 		}
 		server.getConnections().remove(this);
 	}

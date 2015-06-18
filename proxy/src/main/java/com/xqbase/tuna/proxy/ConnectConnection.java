@@ -11,8 +11,9 @@ class ConnectConnection extends PeerConnection implements HttpStatus {
 
 	private boolean proxyChain;
 
-	ConnectConnection(ProxyConnection proxy, boolean proxyChain, String host, int port, int logLevel) {
-		super(proxy, logLevel);
+	ConnectConnection(ProxyServer server, ProxyConnection proxy,
+			boolean proxyChain, String host, int port, int logLevel) {
+		super(server, proxy, logLevel);
 		this.proxyChain = proxyChain;
 		remote = host + ":" + port;
 	}
@@ -32,6 +33,7 @@ class ConnectConnection extends PeerConnection implements HttpStatus {
 
 	@Override
 	public void onDisconnect() {
+		super.onDisconnect();
 		if (!connected) {
 			if (logLevel >= LOG_DEBUG) {
 				Log.d("Connection Failed, " + toString(false));

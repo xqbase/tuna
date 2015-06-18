@@ -57,18 +57,27 @@ public class ProxyServer implements ServerConnection {
 	private int
 			keepAlive = (int) Time.MINUTE,
 			forwardedType = ProxyConnection.FORWARDED_TRANSPARENT,
-			logLevel = ProxyConnection.LOG_NONE;
+			logLevel = ProxyConnection.LOG_NONE,
+			totalPeers = 0, idlePeers = 0;
 	private HashMap<String, LinkedEntry<ClientConnection>>
 			plainClientMap = new HashMap<>(),
 			secureClientMap = new HashMap<>();
 	private LinkedEntry<ClientConnection> timeoutQueue = new LinkedEntry<>(null);
 
 	private void disconnect(ClientConnection client) {
-		client.handler.disconnect();
+		client.disconnect();
 		removeClient(client);
 		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
 			Log.v("Client Keep-Alive Expired, " + client.toString(false));
 		}
+	}
+
+	void incPeers() {
+		totalPeers ++;
+	}
+
+	void decPeers() {
+		totalPeers --;
 	}
 
 	ClientConnection borrowClient(String host, boolean secure) {
@@ -96,6 +105,7 @@ public class ProxyServer implements ServerConnection {
 		}
 		queue.addNext(client.linkedEntry);
 		timeoutQueue.addNext(client.timeoutEntry);
+		idlePeers ++;
 	}
 
 	void removeClient(ClientConnection client) {
@@ -107,6 +117,7 @@ public class ProxyServer implements ServerConnection {
 		if (queue != null && queue.getNext() == queue) {
 			clientMap.remove(client.host);
 		}
+		idlePeers --;
 	}
 
 	public ProxyServer(Connector connector, EventQueue eventQueue, Executor executor) {
@@ -124,6 +135,14 @@ public class ProxyServer implements ServerConnection {
 		return connections;
 	}
 
+	public int getTotalPeers() {
+		return totalPeers;
+	}
+
+	public int getIdlePeers() {
+		return idlePeers;
+	}
+
 	public Runnable getSchedule() {
 		return () -> {
 			long now = System.currentTimeMillis();
@@ -138,6 +157,7 @@ public class ProxyServer implements ServerConnection {
 				return;
 			}
 			// Dump Pool Info
+			Log.v("Total Peers: " + totalPeers + ", Idle Peers: " + idlePeers);
 			StringWriter sw = new StringWriter();
 			PrintWriter out = new PrintWriter(sw);
 			out.println("Dump Client Pool ...");
