@@ -102,7 +102,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 	ConnectConnection connect = null;
 
 	void sendError(int status) {
-		byte[] body = server.getErrorPage(status);
+		byte[] body = server.errorPages.apply(status);
 		new HttpPacket(status, getReason(status), body,
 				"Connection", "close").write(handler, true, false);
 	}
@@ -130,11 +130,11 @@ public class ProxyConnection implements Connection, HttpStatus {
 				password = basic.substring(colon + 1);
 			}
 		}
-		if (!server.auth(username, password)) {
+		if (!server.auth.test(username, password)) {
 			int status = SC_PROXY_AUTHENTICATION_REQUIRED;
-			String realm = server.getRealm();
+			String realm = server.realm;
 			HttpPacket response = new HttpPacket(status,
-					getReason(status), server.getErrorPage(status),
+					getReason(status), server.errorPages.apply(status),
 					"Proxy-Authenticate", realm == null || realm.isEmpty() ? "Basic" :
 					"Basic realm=\"" + realm + "\"", "Connection", "close");
 			response.write(handler, true, false);
@@ -146,7 +146,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 		}
 
 		try {
-			server.onRequest(this, request);
+			server.onRequest.accept(this, request);
 		} catch (RequestException e) {
 			HttpPacket response = e.getResponse();
 			if (connectionClose || !request.isComplete()) {
@@ -174,7 +174,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			int port;
 			boolean proxyChain;
 			if (host == null) {
-				String uri = server.lookup(request.getUri().toLowerCase());
+				String uri = server.lookup.apply(request.getUri().toLowerCase());
 				if (uri == null) {
 					if (logLevel >= LOG_DEBUG) {
 						Log.d("Connection to \"" + request.getUri() +
@@ -260,7 +260,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 				uri = (uri == null || uri.isEmpty() ? "/" : uri) +
 						(query == null || query.isEmpty() ? "" : "?" + query);
 			} catch (IOException e) {
-				if (!server.isEnableReverse()) {
+				if (!server.enableReverse) {
 					throw new HttpPacketException("Invalid URI", uri);
 				}
 				// Use "Host" in headers if "Reverse" enabled and "host:port" not in URI
@@ -271,7 +271,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			}
 
 			String originalHost = host;
-			host = server.lookup(originalHost.toLowerCase());
+			host = server.lookup.apply(originalHost.toLowerCase());
 			if (host == null) {
 				if (logLevel >= LOG_DEBUG) {
 					Log.d("Request to \"" + originalHost +
@@ -316,8 +316,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			proxyChain = true;
 		}
 
-		int forwardedType = server.getForwardedType();
-		switch (forwardedType) {
+		switch (server.forwardedType) {
 		case FORWARDED_DELETE:
 			request.removeHeader("X-FORWARDED-FOR");
 			break;
@@ -327,7 +326,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 		case FORWARDED_TRUNCATE:
 		case FORWARDED_ON:
 			String remoteAddr = session.getRemoteAddr();
-			if (forwardedType == FORWARDED_ON) {
+			if (server.forwardedType == FORWARDED_ON) {
 				String xff = request.getHeader("X-FORWARDED-FOR");
 				if (xff != null && !xff.isEmpty()) {
 					remoteAddr = xff + ", " + remoteAddr;
@@ -368,8 +367,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			Connection connection;
 			if (secure) {
 				connection = client.appendFilter(new SSLFilter(server.eventQueue,
-						server.executor, server.getSSLContext(),
-						SSLFilter.CLIENT, connectHost, port));
+						server.executor, server.sslc, SSLFilter.CLIENT, connectHost, port));
 			} else {
 				connection = client;
 			}
@@ -414,7 +412,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 
 	public ProxyConnection(ProxyServer server) {
 		this.server = server;
-		logLevel = server.getLogLevel();
+		logLevel = server.logLevel;
 	}
 
 	@Override

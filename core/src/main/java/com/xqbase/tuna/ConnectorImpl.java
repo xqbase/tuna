@@ -101,6 +101,8 @@ class Client {
 			add(selector, SelectionKey.OP_CONNECT);
 		} catch (IOException e) {
 			// May throw "Network is unreachable"
+			// finishClose() will cancel selectKey, so register in case NPE
+			add(selector, 0);
 			startClose();
 		}
 	}
@@ -112,22 +114,17 @@ class Client {
 
 	void write() throws IOException {
 		int len = queue.length();
-		int originalLen = len;
+		int fromLen = len;
 		while (len > 0) {
 			int bytesWritten = socketChannel.write(ByteBuffer.wrap(queue.array(),
-					queue.offset(), queue.length()));
+					queue.offset(), len));
 			if (bytesWritten == 0) {
-				if (len < originalLen) {
-					connection.onQueue(len);
-				}
-				interestOps();
+				unblock(len, fromLen);
 				return;
 			}
 			len = queue.remove(bytesWritten).length();
 		}
-		if (len < originalLen) {
-			connection.onQueue(len);
-		}
+		unblock(len, fromLen);
 		if (status == STATUS_DISCONNECTING) {
 			finishClose();
 		} else {
@@ -138,8 +135,8 @@ class Client {
 
 	void write(byte[] b, int off, int len) {
 		if (status != STATUS_IDLE) {
-			queue.add(b, off, len);
-			connection.onQueue(queue.length());
+			int fromLen = queue.length();
+			block(queue.add(b, off, len).length(), fromLen);
 			return;
 		}
 		int bytesWritten;
@@ -150,8 +147,8 @@ class Client {
 			return;
 		}
 		if (len > bytesWritten) {
-			queue.add(b, off + bytesWritten, len - bytesWritten);
-			connection.onQueue(queue.length());
+			int fromLen = queue.length();
+			block(queue.add(b, off + bytesWritten, len - bytesWritten).length(), fromLen);
 			status = STATUS_BUSY;
 			interestOps();
 		}
@@ -188,6 +185,27 @@ class Client {
 
 	boolean isBusy() {
 		return status >= STATUS_IDLE;
+	}
+
+	private boolean blocking = false;
+
+	private void block(int len, int fromLen) {
+		if (fromLen > 0) {
+			blocking = true;
+			connection.onQueue(len);
+		}
+	}
+	private void unblock(int len, int fromLen) {
+		if (len == fromLen) {
+			return;
+		}
+		boolean fromBlocking = blocking;
+		if (len == 0) {
+			blocking = false;
+		}
+		if (fromBlocking) {
+			connection.onQueue(len);
+		}
 	}
 }
 

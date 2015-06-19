@@ -42,23 +42,22 @@ public class ProxyServer implements ServerConnection {
 	Connector connector;
 	EventQueue eventQueue;
 	Executor executor;
-
-	private HashSet<ProxyConnection> connections = new HashSet<>();
-	private SSLContext sslc = defaultSSLContext;
-	private BiPredicate<String, String> auth = (t, u) -> true;
-	private UnaryOperator<String> lookup = t -> t;
-	private BiConsumerEx<ProxyConnection, HttpPacket, RequestException>
+	SSLContext sslc = defaultSSLContext;
+	BiPredicate<String, String> auth = (t, u) -> true;
+	UnaryOperator<String> lookup = t -> t;
+	BiConsumerEx<ProxyConnection, HttpPacket, RequestException>
 			onRequest = (t, u) -> {/**/};
-	private BiConsumer<ProxyConnection, HttpPacket> onResponse = (t, u) -> {/**/};
-	private Consumer<ProxyConnection> onComplete = t -> {/**/};
-	private IntFunction<byte[]> errorPages = ProxyConnection::getDefaultErrorPage;
-	private String realm = null;
-	private boolean enableReverse = false;
-	private int
-			keepAlive = (int) Time.MINUTE,
+	BiConsumer<ProxyConnection, HttpPacket> onResponse = (t, u) -> {/**/};
+	Consumer<ProxyConnection> onComplete = t -> {/**/};
+	IntFunction<byte[]> errorPages = ProxyConnection::getDefaultErrorPage;
+	String realm = null;
+	boolean enableReverse = false;
+	int keepAlive = (int) Time.MINUTE,
 			forwardedType = ProxyConnection.FORWARDED_TRANSPARENT,
 			logLevel = ProxyConnection.LOG_NONE,
 			totalPeers = 0, idlePeers = 0;
+
+	private HashSet<ProxyConnection> connections = new HashSet<>();
 	private HashMap<String, LinkedEntry<ClientConnection>>
 			plainClientMap = new HashMap<>(),
 			secureClientMap = new HashMap<>();
@@ -93,6 +92,7 @@ public class ProxyServer implements ServerConnection {
 	}
 
 	void returnClient(ClientConnection client) {
+		client.clear();
 		client.expire = System.currentTimeMillis() + keepAlive;
 		client.linkedEntry = new LinkedEntry<>(client);
 		client.timeoutEntry = new LinkedEntry<>(client);
@@ -253,6 +253,7 @@ public class ProxyServer implements ServerConnection {
 		this.logLevel = logLevel;
 	}
 
+/*
 	public SSLContext getSSLContext() {
 		return sslc;
 	}
@@ -296,4 +297,5 @@ public class ProxyServer implements ServerConnection {
 	public int getLogLevel() {
 		return logLevel;
 	}
+*/
 }
