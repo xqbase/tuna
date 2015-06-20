@@ -66,8 +66,6 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 				Log.d("Unexpected Response: \"" + new String(b, off, len) +
 						"\", " + toString(true));
 			}
-			disconnect();
-			proxy.client = null;
 			proxy.disconnect();
 			return;
 		}
@@ -81,14 +79,10 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 				}
 				// Disconnect for a Bad Response
 				server.onComplete.accept(proxy);
-				disconnect();
-				if (response.isCompleteHeader()) {
-					proxy.client = null;
-					proxy.disconnect();
-				} else {
+				if (!response.isCompleteHeader()) {
 					proxy.sendError(SC_BAD_GATEWAY);
-					reset(true);
 				}
+				proxy.disconnect();
 				return;
 			}
 			if (begun) {
@@ -162,7 +156,7 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 				Log.v("Client Lost and Proxy Responded a Final Chunk, " +
 						toString(true));
 			}
-			reset(true);
+			proxy.reset(true);
 			return;
 		}
 		if (logLevel >= LOG_DEBUG) {
@@ -173,15 +167,12 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 				Log.v("Client Lost in Response, " + toString(true));
 			}
 		}
-		if (connected) {
-			// Just disconnect because request is not saved.
-			// Most browsers will retry request.
-			proxy.client = null;
-			proxy.disconnect();
-		} else {
+		if (!connected) {
 			proxy.sendError(SC_GATEWAY_TIMEOUT);
-			reset(true);
 		}
+		// Just disconnect because request is not saved.
+		// Most browsers will retry request.
+		proxy.disconnectWithoutClient();
 	}
 
 	void sendRequest(boolean begin) {
@@ -195,7 +186,7 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 		if (response.isComplete()) {
 			// Both "requestClose" and "responseClose" must be "false" 
 			server.onComplete.accept(proxy);
-			reset(false);
+			proxy.reset(false);
 		}
 	}
 
@@ -206,12 +197,11 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 		}
 		if (requestClose) {
 			server.onComplete.accept(proxy);
-			// Must Disconnect "proxy" Before "server.returnClient"
-			proxy.client = null;
-			proxy.disconnect();
 			if (responseClose) {
-				disconnect();
+				proxy.disconnect();
 			} else {
+				// Must Disconnect "proxy" Before "server.returnClient"
+				proxy.disconnectWithoutClient();
 				handler.setBufferSize(MAX_BUFFER_SIZE);
 				if (logLevel >= LOG_VERBOSE) {
 					Log.v("Response Sent and Unblocked, " + toString(true));
@@ -226,17 +216,16 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 		}
 		if (responseClose) {
 			server.onComplete.accept(proxy);
-			disconnect();
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Response Sent and Client Closed due to HTTP/1.0 or " +
 						"\"Connection: close\" in Response, " + toString(true));
 			}
 			if (request.isComplete()) {
 				// Both Request and Response Completed: Keep Alive Proxy
-				reset(true);
+				disconnect();
+				proxy.reset(true);
 			} else {
 				// Request Not Completed: Just Disconnect Proxy
-				proxy.client = null;
 				proxy.disconnect();
 			}
 		} else {
@@ -247,7 +236,7 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 			if (request.isComplete()) {
 				// Both Request and Response Completed: Keep Alive Proxy
 				server.onComplete.accept(proxy);
-				reset(false);
+				proxy.reset(false);
 			}
 			// If Request Not Completed: Just Wait for "sendRequest"
 		}
@@ -257,29 +246,5 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 		String uri = request.getUri();
 		remote = proxyChain ? uri + " via " + host :
 				(secure ? "https://" : "http://") + host + (uri == null ? "" : uri);
-	}
-
-	/**
-	 * Keep <b>Proxy</b> Alive, then return or close <b>Client</b><p>
-	 * Must Follow a "<code>server.onComplete.accept(proxy)</code>"
-	 *
-	 * @param closed <code>false</code> to return Client to pool and <code>true</code> to close Client
-	 */
-	private void reset(boolean closed) {
-		proxy.getBindings().clear();
-		proxy.client = null;
-		proxyHandler.setBufferSize(MAX_BUFFER_SIZE);
-		request.reset();
-		if (logLevel >= LOG_VERBOSE) {
-			Log.v((closed ? "Client Closed" : "Client Kept Alive") +
-					" and Request Unblocked due to Complete Request and Response, " +
-					toString(false));
-		}
-		ProxyConnection proxy_ = proxy;
-		if (!closed) {
-			// "server.returnClient" will set "proxy" to "null"
-			server.returnClient(this);
-		}
-		proxy_.read();
 	}
 }
