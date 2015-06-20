@@ -10,6 +10,7 @@ import java.security.cert.CertificateFactory;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.Set;
 
 import javax.net.ssl.SSLSession;
 
@@ -93,19 +94,12 @@ public class ProxyConnection implements Connection, HttpStatus {
 	private ProxyServer server;
 	private ConnectionHandler handler;
 	private ConnectionSession session;
+	private ConnectConnection connect = null;
+	private ClientConnection client = null;
+	private String remote = null;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket request = new HttpPacket();
-	private HashMap<String, Object> bindings = new HashMap<>();
-
-	String remote = null;
-	ClientConnection client = null;
-	ConnectConnection connect = null;
-
-	void sendError(int status) {
-		byte[] body = server.errorPages.apply(status);
-		new HttpPacket(status, getReason(status), body,
-				"Connection", "close").write(handler, true, false);
-	}
+	private HashMap<String, Object> attributeMap = new HashMap<>();
 
 	private void readEx() throws HttpPacketException {
 		request.read(queue);
@@ -157,7 +151,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 			} else { 
 				response.setHeader("Connection", "keep-alive");
 				response.write(handler, true, false);
-				bindings.clear();
+				attributeMap.clear();
 				request.reset();
 				// No request from peer, so continue reading
 				if (queue.length() > 0) {
@@ -170,7 +164,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 		String method = request.getMethod().toUpperCase();
 		if (method.equals("CONNECT")) {
 			ByteArrayQueue body = request.getBody();
-			String host = (String) bindings.get(PROXY_CHAIN_KEY);
+			String host = (String) attributeMap.get(PROXY_CHAIN_KEY);
 			int port;
 			boolean proxyChain;
 			if (host == null) {
@@ -204,7 +198,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 					port = Numbers.parseInt(host.substring(colon + 1), 3128, 0, 0xFFFF);
 					host = host.substring(0, colon);
 				}
-				proxyAuth = (String) bindings.get(PROXY_AUTH_KEY);
+				proxyAuth = (String) attributeMap.get(PROXY_AUTH_KEY);
 				if (proxyAuth == null) {
 					request.removeHeader("PROXY-AUTHORIZATION");
 				} else {
@@ -232,7 +226,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 		request.removeHeader("PROXY-AUTHORIZATION");
 		request.removeHeader("PROXY-CONNECTION");
 
-		String host = (String) bindings.get(PROXY_CHAIN_KEY);
+		String host = (String) attributeMap.get(PROXY_CHAIN_KEY);
 		String uri = request.getUri();
 		boolean secure = false;
 		boolean proxyChain;
@@ -309,7 +303,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 				connectHost = host.substring(0, colon);
 				port = Numbers.parseInt(host.substring(colon + 1), 3128, 0, 0xFFFF);
 			}
-			proxyAuth = (String) bindings.get(PROXY_AUTH_KEY);
+			proxyAuth = (String) attributeMap.get(PROXY_AUTH_KEY);
 			if (proxyAuth != null) {
 				request.setHeader("Proxy-Authorization", proxyAuth);
 			}
@@ -410,6 +404,48 @@ public class ProxyConnection implements Connection, HttpStatus {
 		}
 	}
 
+	String getRemote() {
+		return remote;
+	}
+
+	void sendError(int status) {
+		byte[] body = server.errorPages.apply(status);
+		new HttpPacket(status, getReason(status), body,
+				"Connection", "close").write(handler, true, false);
+	}
+
+	void disconnectWithoutConnect() {
+		connect = null;
+		disconnect();
+	}
+
+	void disconnectWithoutClient() {
+		client = null;
+		disconnect();
+	}
+
+	/**
+	 * Keep <b>Proxy</b> Alive, then return or close <b>Client</b><p>
+	 * Must Follow a "<code>server.onComplete.accept(proxy)</code>"
+	 *
+	 * @param closed <code>false</code> to return Client to pool and <code>true</code> to close Client
+	 */
+	void reset(boolean closed) {
+		attributeMap.clear();
+		handler.setBufferSize(MAX_BUFFER_SIZE);
+		request.reset();
+		if (logLevel >= LOG_VERBOSE) {
+			Log.v((closed ? "Client Closed" : "Client Kept Alive") +
+					" and Request Unblocked due to Complete Request and Response, " +
+					client.toString(false));
+		}
+		if (!closed) {
+			server.returnClient(client);
+		}
+		client = null;
+		read();
+	}
+
 	public ProxyConnection(ProxyServer server) {
 		this.server = server;
 		logLevel = server.logLevel;
@@ -481,16 +517,28 @@ public class ProxyConnection implements Connection, HttpStatus {
 		server.getConnections().remove(this);
 	}
 
+	public Object getAttribute(String name) {
+		return attributeMap.get(name);
+	}
+
+	public Set<String> getAttributeNames() {
+		return attributeMap.keySet();
+	}
+
+	public void setAttribute(String name, Object value) {
+		attributeMap.put(name, value);
+	}
+
+	public void removeAttribute(String key) {
+		attributeMap.remove(key);
+	}
+
 	public ConnectionHandler getHandler() {
 		return handler;
 	}
 
 	public ConnectionSession getSession() {
 		return session;
-	}
-
-	public HashMap<String, Object> getBindings() {
-		return bindings;
 	}
 
 	public void disconnect() {

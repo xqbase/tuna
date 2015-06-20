@@ -42,7 +42,6 @@ class ConnectConnection extends PeerConnection implements HttpStatus {
 		} else if (logLevel >= LOG_VERBOSE) {
 			Log.v("Connection Lost, " + toString(true));
 		}
-		proxy.connect = null;
-		proxy.disconnect();
+		proxy.disconnectWithoutConnect();
 	}
 }
