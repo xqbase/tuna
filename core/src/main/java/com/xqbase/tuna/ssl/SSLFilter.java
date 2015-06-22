@@ -103,37 +103,42 @@ public class SSLFilter extends ConnectionFilter {
 
 	@Override
 	public void send(byte[] b, int off, int len) {
-		if (hs != HandshakeStatus.FINISHED) {
-			baqToSend.add(b, off, len);
-			return;
-		}
-		try {
+		if (hs == HandshakeStatus.FINISHED) {
 			wrap(b, off, len);
-		} catch (IOException e) {
-			disconnect();
-			onDisconnect();
+		} else {
+			baqToSend.add(b, off, len);
 		}
 	}
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
 		baqRecv.add(b, off, len);
-		if (hs != HandshakeStatus.FINISHED) {
-			if (hs != HandshakeStatus.NEED_TASK) {
-				try {
-					doHandshake();
-				} catch (IOException e) {
-					disconnect();
-					onDisconnect();
-				}
-			}
-			return;
+		if (hs == HandshakeStatus.FINISHED) {
+			unwrap();
+			onRecv();
+		} else if (hs != HandshakeStatus.NEED_TASK) {
+			handshake();
 		}
+	}
+
+	@Override
+	public void onConnect(ConnectionSession session_) {
+		session = session_;
+		handshake();
+	}
+
+	private void onRecv() {
+		if (requestBB.position() > 0) {
+			super.onRecv(requestBytes, 0, requestBB.position());
+			requestBB.clear();
+		}
+	}
+
+	private void unwrap() {
 		SSLEngineResult result;
 		do {
 			try {
-				result = unwrap();
-				// FIXME: may be thrown if connected by FireFox
+				result = unwrapEx();
 			} catch (IOException e) {
 				disconnect();
 				onDisconnect();
@@ -152,21 +157,9 @@ public class SSLFilter extends ConnectionFilter {
 				return;
 			}
 		} while (result.getStatus() != Status.BUFFER_UNDERFLOW);
-		recv();
 	}
 
-	@Override
-	public void onConnect(ConnectionSession session_) {
-		session = session_;
-		try {
-			doHandshake();
-		} catch (IOException e) {
-			disconnect();
-			onDisconnect();
-		}
-	}
-
-	private SSLEngineResult unwrap() throws IOException {
+	private SSLEngineResult unwrapEx() throws IOException {
 		if (requestBB.remaining() < appBBSize) {
 			byte[] newRequestBytes = new byte[requestBytes.length * 2];
 			ByteBuffer bb = ByteBuffer.wrap(newRequestBytes);
@@ -183,7 +176,16 @@ public class SSLFilter extends ConnectionFilter {
 		return result;
 	}
 
-	private SSLEngineResult wrap(byte[] b, int off, int len) throws IOException {
+	private void wrap(byte[] b, int off, int len) {
+		try {
+			wrapEx(b, off, len);
+		} catch (IOException e) {
+			disconnect();
+			onDisconnect();
+		}
+	}
+
+	private SSLEngineResult wrapEx(byte[] b, int off, int len) throws IOException {
 		ByteBuffer srcBB = ByteBuffer.wrap(b, off, len);
 		byte[] outNetBytes = null;
 		SSLEngineResult result;
@@ -209,20 +211,24 @@ public class SSLFilter extends ConnectionFilter {
 		}
 		eventQueue.invokeLater(() -> {
 			hs = ssle.getHandshakeStatus();
-			try {
-				doHandshake();
-			} catch (IOException e) {
-				disconnect();
-				onDisconnect();
-			}
+			handshake();
 		});
 	}
 
-	private void doHandshake() throws IOException {
+	private void handshake() {
+		try {
+			handshakeEx();
+		} catch (IOException e) {
+			disconnect();
+			onDisconnect();
+		}
+	}
+
+	private void handshakeEx() throws IOException {
 		while (hs != HandshakeStatus.FINISHED) {
 			switch (hs) {
 			case NEED_UNWRAP:
-				SSLEngineResult result = unwrap();
+				SSLEngineResult result = unwrapEx();
 				hs = result.getHandshakeStatus();
 				switch (result.getStatus()) {
 				case OK:
@@ -247,7 +253,7 @@ public class SSLFilter extends ConnectionFilter {
 				}
 				break;
 			case NEED_WRAP:
-				result = wrap(Bytes.EMPTY_BYTES, 0, 0);
+				result = wrapEx(Bytes.EMPTY_BYTES, 0, 0);
 				hs = result.getHandshakeStatus();
 				if (hs == HandshakeStatus.NEED_TASK) {
 					executor.execute(this::doTask);
@@ -263,20 +269,13 @@ public class SSLFilter extends ConnectionFilter {
 		// hs == HandshakeStatus.FINISHED
 		super.onConnect(new SSLConnectionSession(session.getLocalSocketAddress(),
 				session.getRemoteSocketAddress(), ssle.getSession()));
-		recv();
 		if (baqRecv.length() > 0) {
-			onRecv(baqRecv.array(), baqRecv.offset(), baqRecv.length());
+			unwrap();
 		}
+		onRecv();
 		if (baqToSend.length() > 0) {
-			send(baqToSend.array(), baqToSend.offset(), baqToSend.length());
+			wrap(baqToSend.array(), baqToSend.offset(), baqToSend.length());
 		}
 		baqToSend = null;
-	}
-
-	private void recv() {
-		if (requestBB.position() > 0) {
-			super.onRecv(requestBytes, 0, requestBB.position());
-			requestBB.clear();
-		}
 	}
 }

@@ -9,7 +9,6 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 
 import com.xqbase.tuna.ConnectorImpl;
-import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.mux.EdgeServer;
 import com.xqbase.tuna.mux.MuxContext;
 import com.xqbase.tuna.mux.OriginServer;
@@ -31,12 +30,12 @@ public class TestSSLMuxEdge {
 			SSLContext sslc = SSLContext.getInstance("TLS");
 			sslc.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
 
-			ProxyServer context = new ProxyServer(connector, connector, connector);
-			context.setLookup(t -> "localhost");
-			context.setEnableReverse(true);
-			context.setForwardedType(ProxyConnection.FORWARDED_ON);
-			context.setLogLevel(ProxyConnection.LOG_DEBUG);
-			ServerConnection server = () -> new ProxyConnection(context);
+			ProxyServer server = new ProxyServer(connector, connector, connector);
+			server.setLookup(t -> "localhost");
+			server.setEnableReverse(true);
+			server.setForwardedType(ProxyConnection.FORWARDED_ON);
+			server.setLogLevel(ProxyConnection.LOG_DEBUG);
+			connector.scheduleDelayed(server.getSchedule(), 10000, 10000);
 
 			MuxContext mc = new MuxContext(connector, t -> true, 1048576, MuxContext.LOG_VERBOSE);
 			connector.add(new OriginServer(server, mc), 8341);

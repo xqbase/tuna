@@ -46,7 +46,7 @@ public class ProxyConnection implements Connection, HttpStatus {
 
 	private static final String ERROR_PAGE_FORMAT = "<!DOCTYPE html><html>" +
 			"<head><title>%d %s</title></head>" +
-			"<body><center><h1>%d %s</h1></center><hr><center>Tuna Proxy/0.1.0</center></body>" +
+			"<body><center><h1>%d %s</h1></center><hr><center>Tuna Proxy/0.1.1</center></body>" +
 			"</html>";
 
 	private static HashMap<Integer, String> reasonMap = new HashMap<>();
@@ -434,12 +434,13 @@ public class ProxyConnection implements Connection, HttpStatus {
 		attributeMap.clear();
 		handler.setBufferSize(MAX_BUFFER_SIZE);
 		request.reset();
-		if (logLevel >= LOG_VERBOSE) {
+		// "proxy" may close or return "client" before reset
+		if (logLevel >= LOG_VERBOSE && client != null) {
 			Log.v((closed ? "Client Closed" : "Client Kept Alive") +
 					" and Request Unblocked due to Complete Request and Response, " +
 					client.toString(false));
 		}
-		if (!closed) {
+		if (!closed && client != null) {
 			server.returnClient(client);
 		}
 		client = null;

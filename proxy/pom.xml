@@ -70,17 +70,17 @@
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-core</artifactId>
-			<version>0.1.0</version>
+			<version>0.1.1</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-http</artifactId>
-			<version>0.1.0</version>
+			<version>0.1.1</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-mux</artifactId>
-			<version>0.1.0</version>
+			<version>0.1.1</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>

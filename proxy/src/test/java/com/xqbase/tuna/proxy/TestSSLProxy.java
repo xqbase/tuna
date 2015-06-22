@@ -9,12 +9,13 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 
 import com.xqbase.tuna.ConnectorImpl;
-import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.ssl.SSLFilter;
+import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 
 public class TestSSLProxy {
 	public static void main(String[] args) {
+		Log.getAndSet(Conf.openLogger("", 16777216, 10));
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			KeyStore ks = KeyStore.getInstance("PKCS12");
 			ks.load(TestSSLProxy.class.getResourceAsStream("/localhost.pfx"),
@@ -26,12 +27,13 @@ public class TestSSLProxy {
 			SSLContext sslc = SSLContext.getInstance("TLS");
 			sslc.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
 
-			ProxyServer context = new ProxyServer(connector, connector, connector);
-			context.setLookup(t -> "localhost");
-			context.setEnableReverse(true);
-			context.setForwardedType(ProxyConnection.FORWARDED_ON);
-			context.setLogLevel(ProxyConnection.LOG_DEBUG);
-			ServerConnection server = () -> new ProxyConnection(context);
+			ProxyServer server = new ProxyServer(connector, connector, connector);
+			server.setLookup(t -> "localhost");
+			server.setEnableReverse(true);
+			server.setForwardedType(ProxyConnection.FORWARDED_ON);
+			server.setLogLevel(ProxyConnection.LOG_DEBUG);
+			connector.scheduleDelayed(server.getSchedule(), 10000, 10000);
+
 			connector.add(server.appendFilter(() -> new SSLFilter(connector,
 					connector, sslc, SSLFilter.SERVER_WANT_AUTH)), 8443);
 			connector.doEvents();
