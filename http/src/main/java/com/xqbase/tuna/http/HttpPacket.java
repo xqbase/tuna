@@ -1,5 +1,6 @@
 package com.xqbase.tuna.http;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -179,7 +180,7 @@ public class HttpPacket {
 				throw new HttpPacketException(HttpPacketException.
 						HEADER_SIZE, "" + headerLimit);
 			}
-			char c = (char) b[i];
+			char c = (char) (b[i] & 0xFF);
 			if (c == '\n') {
 				queue.remove(i - begin + 1);
 				return true;
@@ -433,10 +434,10 @@ public class HttpPacket {
 			if (size < 1) {
 				continue;
 			}
-			byte[] keyBytes = values.get(0).getBytes();
+			byte[] keyBytes = values.get(0).getBytes(StandardCharsets.ISO_8859_1);
 			for (int i = 1; i < size; i ++) {
-				data.add(keyBytes).add(COLON).
-						add(values.get(i).getBytes()).add(CRLF);
+				data.add(keyBytes).add(COLON).add(values.get(i).
+						getBytes(StandardCharsets.ISO_8859_1)).add(CRLF);
 			}
 		}
 		data.add(CRLF);
@@ -452,13 +453,13 @@ public class HttpPacket {
 	public void write(ByteArrayQueue data, boolean begin, boolean forceChunked) {
 		if (begin) {
 			if (type == TYPE_REQUEST) {
-				data.add(method.getBytes()).add(SPACE).
-						add(uri.getBytes()).add(SPACE).
+				data.add(method.getBytes(StandardCharsets.ISO_8859_1)).add(SPACE).
+						add(uri.getBytes(StandardCharsets.ISO_8859_1)).add(SPACE).
 						add(http10 ? HTTP10 : HTTP11).add(CRLF);
 			} else {
 				data.add(http10 ? HTTP10 : HTTP11).add(SPACE).
 						add(("" + status).getBytes()).add(SPACE).
-						add(reason.getBytes()).add(CRLF);
+						add(reason.getBytes(StandardCharsets.ISO_8859_1)).add(CRLF);
 			}
 			writeHeaders(data);
 		}
