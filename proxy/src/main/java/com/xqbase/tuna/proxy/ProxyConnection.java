@@ -275,6 +275,11 @@ public class ProxyConnection implements Connection, HttpStatus {
 				disconnect();
 				return;
 			}
+			// "lookup" starting with "https://" means a secure host
+			if (host.startsWith("https://")) {
+				host = host.substring(8);
+				secure = true;
+			}
 			int colon = host.lastIndexOf(':');
 			if (colon < 0) {
 				connectHost = host;
@@ -328,8 +333,10 @@ public class ProxyConnection implements Connection, HttpStatus {
 			}
 			request.setHeader("X-Forwarded-For", remoteAddr);
 			if (!(session instanceof SSLConnectionSession)) {
+				request.setHeader("X-Forwarded-Proto", "http");
 				break;
 			}
+			request.setHeader("X-Forwarded-Proto", "https");
 			SSLSession ssls = ((SSLConnectionSession) session).getSSLSession();
 			request.setHeader("X-Forwarded-SSL-Session-ID", Bytes.toHexLower(ssls.getId()));
 			request.setHeader("X-Forwarded-SSL-Cipher", ssls.getCipherSuite());
