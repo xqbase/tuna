@@ -20,7 +20,7 @@ import com.xqbase.tuna.util.LinkedEntry;
 import com.xqbase.tuna.util.TimeoutQueue;
 
 /** An SSL filter which makes a connection secure */
-public class SSLFilter extends ConnectionFilter implements Expirable {
+public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> {
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * NO client authentication desired.
@@ -124,6 +124,16 @@ public class SSLFilter extends ConnectionFilter implements Expirable {
 	}
 
 	@Override
+	public void setExpire(long expire) {
+		this.expire = expire;
+	}
+
+	@Override
+	public void setTimeoutEntry(LinkedEntry<SSLFilter> timeoutEntry) {
+		this.timeoutEntry = timeoutEntry;
+	}
+
+	@Override
 	public void send(byte[] b, int off, int len) {
 		if (hs == HandshakeStatus.FINISHED) {
 			wrap(b, off, len);
@@ -146,8 +156,7 @@ public class SSLFilter extends ConnectionFilter implements Expirable {
 	@Override
 	public void onConnect(ConnectionSession session_) {
 		if (ssltq != null) {
-			expire = System.currentTimeMillis() + ssltq.getTimeout();
-			timeoutEntry = ssltq.addNext(this);
+			ssltq.offer(this);
 		}
 		session = session_;
 		handshake();
