@@ -25,7 +25,7 @@ abstract class PeerConnection implements Connection {
 	}
 
 	String toString(boolean resp) {
-		return (proxy == null ? "0.0.0.0:0" : proxy.getRemote()) +
+		return (proxy == null ? "0.0.0.0:0" : proxy.remote) +
 				local + (resp ? " <= " : " => ") + remote;
 	}
 

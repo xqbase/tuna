@@ -10,6 +10,7 @@ import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.misc.DumpFilter;
 import com.xqbase.tuna.misc.ForwardServer;
 import com.xqbase.tuna.ssl.SSLFilter;
+import com.xqbase.tuna.util.TimeoutQueue;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -38,14 +39,17 @@ public class SSLDump {
 		int port = args.length < 3 ? 443 : Numbers.parseInt(args[2], 443, 1, 65535);
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
+
+			TimeoutQueue<SSLFilter> ssltq = SSLFilter.getTimeoutQueue(60000);
+			connector.scheduleDelayed(ssltq, 10000, 10000);
 			SSLContext sslcServer = SSLContexts.get("CN=" + hostName, Time.WEEK * 520);
 			SSLContext sslcClient = SSLContexts.get(null, 0);
 			ForwardServer server = new ForwardServer(connector, hostAddr, port);
 			server.appendRemoteFilter(() -> new SSLFilter(connector,
-					connector, sslcClient, SSLFilter.CLIENT));
+					connector, ssltq, sslcClient, SSLFilter.CLIENT));
 			connector.add(server.appendFilter(() -> new DumpFilter().setDumpText(true)).
 					appendFilter(() -> new SSLFilter(connector,
-					connector, sslcServer, SSLFilter.SERVER_NO_AUTH)), 443);
+					connector, ssltq, sslcServer, SSLFilter.SERVER_NO_AUTH)), 443);
 			Log.i(String.format("SSLDump Started (%s:%s->%s:%s)",
 					hostName, "" + port, hostAddr, "" + port));
 			connector.doEvents();

@@ -32,10 +32,10 @@ public class TestSSLProxy {
 			server.setEnableReverse(true);
 			server.setForwardedType(ProxyConnection.FORWARDED_ON);
 			server.setLogLevel(ProxyConnection.LOG_DEBUG);
-			connector.scheduleDelayed(server.getSchedule(), 10000, 10000);
+			connector.scheduleDelayed(server, 10000, 10000);
 
 			connector.add(server.appendFilter(() -> new SSLFilter(connector,
-					connector, sslc, SSLFilter.SERVER_WANT_AUTH)), 8443);
+					connector, server.ssltq, sslc, SSLFilter.SERVER_WANT_AUTH)), 8443);
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());

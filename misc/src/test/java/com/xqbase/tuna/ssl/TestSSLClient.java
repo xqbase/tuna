@@ -9,6 +9,7 @@ import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.util.Bytes;
+import com.xqbase.tuna.util.TimeoutQueue;
 
 public class TestSSLClient {
 	static boolean connected = false;
@@ -33,11 +34,12 @@ public class TestSSLClient {
 
 	public static void main(String[] args) throws Exception {
 		try (ConnectorImpl connector = new ConnectorImpl()) {
+			TimeoutQueue<SSLFilter> ssltq = SSLFilter.getTimeoutQueue(10000);
 			SSLContext sslc = SSLUtil.getSSLContext(null, null);
 			SSLFilter sslf1 = new SSLFilter(connector, connector,
-					sslc, SSLFilter.CLIENT, "localhost", 2323);
+					ssltq, sslc, SSLFilter.CLIENT, "localhost", 2323);
 			SSLFilter sslf2 = new SSLFilter(connector, connector,
-					sslc, SSLFilter.CLIENT, "localhost", 2323);
+					ssltq, sslc, SSLFilter.CLIENT, "localhost", 2323);
 			Connection connection1 = new Connection() {
 				@Override
 				public void onConnect(ConnectionSession session) {
@@ -54,6 +56,7 @@ public class TestSSLClient {
 					} catch (IOException e) {/**/}
 				}
 			};
+			connector.scheduleDelayed(ssltq, 1000, 1000);
 			connector.connect(connection2.appendFilter(sslf2), "localhost", 2323);
 			while (!connected) {
 				connector.doEvents(-1);

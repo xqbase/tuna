@@ -24,10 +24,12 @@ import com.xqbase.tuna.ssl.SSLConnectionSession;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.tuna.util.Bytes;
+import com.xqbase.tuna.util.Expirable;
+import com.xqbase.tuna.util.LinkedEntry;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
 
-public class ProxyConnection implements Connection, HttpStatus {
+public class ProxyConnection implements Connection, Expirable, HttpStatus {
 	public static final int
 			FORWARDED_TRANSPARENT = 0,
 			FORWARDED_DELETE = 1,
@@ -90,13 +92,16 @@ public class ProxyConnection implements Connection, HttpStatus {
 		return errorPage == null ? Bytes.EMPTY_BYTES : errorPage;
 	}
 
+	LinkedEntry<ProxyConnection> timeoutEntry = null;
+	long expire = 0;
+	String remote = null;
+
 	private int logLevel;
 	private ProxyServer server;
-	private ConnectionHandler handler;
 	private ConnectionSession session;
+	private ConnectionHandler handler = null;
 	private ConnectConnection connect = null;
 	private ClientConnection client = null;
-	private String remote = null;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket request = new HttpPacket();
 	private HashMap<String, Object> attributeMap = new HashMap<>();
@@ -109,6 +114,10 @@ public class ProxyConnection implements Connection, HttpStatus {
 		}
 		if (!request.isCompleteHeader()) {
 			return;
+		}
+		if (timeoutEntry != null) {
+			timeoutEntry.remove();
+			timeoutEntry = null;
 		}
 
 		boolean connectionClose = request.isHttp10() ||
@@ -368,7 +377,8 @@ public class ProxyConnection implements Connection, HttpStatus {
 			Connection connection;
 			if (secure) {
 				connection = client.appendFilter(new SSLFilter(server.eventQueue,
-						server.executor, server.sslc, SSLFilter.CLIENT, connectHost, port));
+						server.executor, server.ssltq, server.sslc,
+						SSLFilter.CLIENT, connectHost, port));
 			} else {
 				connection = client;
 			}
@@ -411,10 +421,6 @@ public class ProxyConnection implements Connection, HttpStatus {
 		}
 	}
 
-	String getRemote() {
-		return remote;
-	}
-
 	void sendError(int status) {
 		byte[] body = server.errorPages.apply(status);
 		new HttpPacket(status, getReason(status), body,
@@ -439,8 +445,12 @@ public class ProxyConnection implements Connection, HttpStatus {
 	 */
 	void reset(boolean closed) {
 		attributeMap.clear();
-		handler.setBufferSize(MAX_BUFFER_SIZE);
 		request.reset();
+		// "proxy" may be disconnected before reset
+		if (handler != null) {
+			handler.setBufferSize(MAX_BUFFER_SIZE);
+			server.offerProxy(this);
+		}
 		// "proxy" may close or return "client" before reset
 		if (logLevel >= LOG_VERBOSE && client != null) {
 			Log.v((closed ? "Client Closed" : "Client Kept Alive") +
@@ -451,7 +461,9 @@ public class ProxyConnection implements Connection, HttpStatus {
 			server.returnClient(client);
 		}
 		client = null;
-		read();
+		if (handler != null) {
+			read();
+		}
 	}
 
 	public ProxyConnection(ProxyServer server) {
@@ -505,10 +517,12 @@ public class ProxyConnection implements Connection, HttpStatus {
 		session = session_;
 		remote = session.getRemoteAddr() + ":" + session.getRemotePort();
 		server.getConnections().add(this);
+		server.offerProxy(this);
 	}
 
 	@Override
 	public void onDisconnect() {
+		handler = null;
 		if (connect != null) {
 			connect.disconnect();
 			if (logLevel >= LOG_VERBOSE) {
@@ -522,7 +536,15 @@ public class ProxyConnection implements Connection, HttpStatus {
 			}
 			client = null;
 		}
-		server.getConnections().remove(this);
+		if (server.getConnections().remove(this) && timeoutEntry != null) {
+			timeoutEntry.remove();
+			timeoutEntry = null;
+		}
+	}
+
+	@Override
+	public long getExpire() {
+		return expire;
 	}
 
 	public Object getAttribute(String name) {
@@ -550,7 +572,9 @@ public class ProxyConnection implements Connection, HttpStatus {
 	}
 
 	public void disconnect() {
-		handler.disconnect();
-		onDisconnect();
+		if (handler != null) {
+			handler.disconnect();
+			onDisconnect();
+		}
 	}
 }

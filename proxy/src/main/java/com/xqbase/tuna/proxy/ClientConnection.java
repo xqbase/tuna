@@ -3,12 +3,13 @@ package com.xqbase.tuna.proxy;
 import com.xqbase.tuna.http.HttpPacket;
 import com.xqbase.tuna.http.HttpPacketException;
 import com.xqbase.tuna.http.HttpStatus;
-import com.xqbase.tuna.proxy.util.LinkedEntry;
 import com.xqbase.tuna.util.ByteArrayQueue;
+import com.xqbase.tuna.util.Expirable;
+import com.xqbase.tuna.util.LinkedEntry;
 import com.xqbase.util.Log;
 
 /** Connection for request except <b>CONNECT</b> */
-class ClientConnection extends PeerConnection implements HttpStatus {
+class ClientConnection extends PeerConnection implements Expirable, HttpStatus {
 	LinkedEntry<ClientConnection> linkedEntry = null, timeoutEntry = null;
 	long expire;
 	String host;
@@ -48,6 +49,11 @@ class ClientConnection extends PeerConnection implements HttpStatus {
 				HttpPacket.TYPE_RESPONSE_HTTP10 : HttpPacket.TYPE_RESPONSE);
 		requestClose = connectionClose;
 		sendRequest(true);
+	}
+
+	@Override
+	public long getExpire() {
+		return expire;
 	}
 
 	@Override
