@@ -9,7 +9,8 @@ import com.xqbase.tuna.util.LinkedEntry;
 import com.xqbase.util.Log;
 
 /** Connection for request except <b>CONNECT</b> */
-class ClientConnection extends PeerConnection implements Expirable, HttpStatus {
+class ClientConnection extends PeerConnection
+		implements Expirable<ClientConnection>, HttpStatus {
 	LinkedEntry<ClientConnection> linkedEntry = null, timeoutEntry = null;
 	long expire;
 	String host;
@@ -54,6 +55,16 @@ class ClientConnection extends PeerConnection implements Expirable, HttpStatus {
 	@Override
 	public long getExpire() {
 		return expire;
+	}
+
+	@Override
+	public void setExpire(long expire) {
+		this.expire = expire;
+	}
+
+	@Override
+	public void setTimeoutEntry(LinkedEntry<ClientConnection> timeoutEntry) {
+		this.timeoutEntry = timeoutEntry;
 	}
 
 	@Override

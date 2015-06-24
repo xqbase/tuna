@@ -2,7 +2,7 @@ package com.xqbase.tuna.util;
 
 import java.util.function.Consumer;
 
-public class TimeoutQueue<T extends Expirable>
+public class TimeoutQueue<T extends Expirable<T>>
 		extends LinkedEntry<T> implements Runnable {
 	private Consumer<T> action;
 	private int timeout;
@@ -13,12 +13,13 @@ public class TimeoutQueue<T extends Expirable>
 		this.timeout = timeout;
 	}
 
-	public int getTimeout() {
-		return timeout;
-	}
-
 	public void setTimeout(int timeout) {
 		this.timeout = timeout;
+	}
+
+	public void offer(T t) {
+		t.setExpire(System.currentTimeMillis() + timeout);
+		t.setTimeoutEntry(addNext(t));
 	}
 
 	@Override

@@ -29,7 +29,8 @@ import com.xqbase.tuna.util.LinkedEntry;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
 
-public class ProxyConnection implements Connection, Expirable, HttpStatus {
+public class ProxyConnection
+		implements Connection, Expirable<ProxyConnection>, HttpStatus {
 	public static final int
 			FORWARDED_TRANSPARENT = 0,
 			FORWARDED_DELETE = 1,
@@ -219,7 +220,7 @@ public class ProxyConnection implements Connection, Expirable, HttpStatus {
 			connect = new ConnectConnection(server, this, proxyChain, host, port, logLevel);
 			try {
 				server.connector.connect(connect, host, port);
-				server.incPeers();
+				server.totalPeers ++;
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", host);
 			}
@@ -384,7 +385,7 @@ public class ProxyConnection implements Connection, Expirable, HttpStatus {
 			}
 			try {
 				server.connector.connect(connection, connectHost, port);
-				server.incPeers();
+				server.totalPeers ++;
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", connectHost);
 			}
@@ -449,7 +450,7 @@ public class ProxyConnection implements Connection, Expirable, HttpStatus {
 		// "proxy" may be disconnected before reset
 		if (handler != null) {
 			handler.setBufferSize(MAX_BUFFER_SIZE);
-			server.offerProxy(this);
+			server.proxyTimeoutQueue.offer(this);
 		}
 		// "proxy" may close or return "client" before reset
 		if (logLevel >= LOG_VERBOSE && client != null) {
@@ -517,7 +518,7 @@ public class ProxyConnection implements Connection, Expirable, HttpStatus {
 		session = session_;
 		remote = session.getRemoteAddr() + ":" + session.getRemotePort();
 		server.getConnections().add(this);
-		server.offerProxy(this);
+		server.proxyTimeoutQueue.offer(this);
 	}
 
 	@Override
@@ -545,6 +546,16 @@ public class ProxyConnection implements Connection, Expirable, HttpStatus {
 	@Override
 	public long getExpire() {
 		return expire;
+	}
+
+	@Override
+	public void setExpire(long expire) {
+		this.expire = expire;
+	}
+
+	@Override
+	public void setTimeoutEntry(LinkedEntry<ProxyConnection> timeoutEntry) {
+		this.timeoutEntry = timeoutEntry;
 	}
 
 	public Object getAttribute(String name) {

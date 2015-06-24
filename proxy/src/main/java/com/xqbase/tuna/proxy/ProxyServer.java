@@ -56,10 +56,15 @@ public class ProxyServer implements ServerConnection, Runnable {
 	IntFunction<byte[]> errorPages = ProxyConnection::getDefaultErrorPage;
 	String realm = null;
 	boolean enableReverse = false;
-	int keepAlive = (int) Time.MINUTE,
-			forwardedType = ProxyConnection.FORWARDED_TRANSPARENT,
+	int forwardedType = ProxyConnection.FORWARDED_TRANSPARENT,
 			logLevel = ProxyConnection.LOG_NONE,
 			totalPeers = 0, idlePeers = 0;
+	TimeoutQueue<ProxyConnection> proxyTimeoutQueue = new TimeoutQueue<>(proxy -> {
+		proxy.disconnect();
+		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+			Log.v("Proxy Connection Expired, " + proxy.remote);
+		}
+	}, DEFAULT_TIMEOUT);
 
 	private HashSet<ProxyConnection> connections = new HashSet<>();
 	private HashMap<String, LinkedEntry<ClientConnection>>
@@ -67,12 +72,6 @@ public class ProxyServer implements ServerConnection, Runnable {
 			secureClientMap = new HashMap<>();
 	private TimeoutQueue<ClientConnection> clientTimeoutQueue =
 			new TimeoutQueue<>(client -> disconnect(client), DEFAULT_TIMEOUT);
-	private TimeoutQueue<ProxyConnection> proxyTimeoutQueue = new TimeoutQueue<>(proxy -> {
-		proxy.disconnect();
-		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
-			Log.v("Proxy Connection Expired, " + proxy.remote);
-		}
-	}, DEFAULT_TIMEOUT);
 
 	private void disconnect(ClientConnection client) {
 		client.disconnect();
@@ -80,14 +79,6 @@ public class ProxyServer implements ServerConnection, Runnable {
 		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
 			Log.v("Client Keep-Alive Expired, " + client.toString(false));
 		}
-	}
-
-	void incPeers() {
-		totalPeers ++;
-	}
-
-	void decPeers() {
-		totalPeers --;
 	}
 
 	ClientConnection borrowClient(String host, boolean secure) {
@@ -104,7 +95,6 @@ public class ProxyServer implements ServerConnection, Runnable {
 
 	void returnClient(ClientConnection client) {
 		client.clear();
-		client.expire = System.currentTimeMillis() + keepAlive;
 		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
 				client.secure ? secureClientMap : plainClientMap;
 		LinkedEntry<ClientConnection> queue = clientMap.get(client.host);
@@ -113,7 +103,7 @@ public class ProxyServer implements ServerConnection, Runnable {
 			clientMap.put(client.host, queue);
 		}
 		client.linkedEntry = queue.addNext(client);
-		client.timeoutEntry = clientTimeoutQueue.addNext(client);
+		clientTimeoutQueue.offer(client);
 		idlePeers ++;
 	}
 
@@ -127,11 +117,6 @@ public class ProxyServer implements ServerConnection, Runnable {
 			clientMap.remove(client.host);
 		}
 		idlePeers --;
-	}
-
-	void offerProxy(ProxyConnection proxy) {
-		proxy.expire = System.currentTimeMillis() + keepAlive;
-		proxy.timeoutEntry = proxyTimeoutQueue.addNext(proxy);
 	}
 
 	public ProxyServer(Connector connector, EventQueue eventQueue, Executor executor) {
@@ -248,7 +233,6 @@ public class ProxyServer implements ServerConnection, Runnable {
 	}
 
 	public void setKeepAlive(int keepAlive) {
-		this.keepAlive = keepAlive;
 		ssltq.setTimeout(keepAlive);
 		clientTimeoutQueue.setTimeout(keepAlive);
 		proxyTimeoutQueue.setTimeout(keepAlive);

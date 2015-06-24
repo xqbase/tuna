@@ -65,7 +65,7 @@ abstract class PeerConnection implements Connection {
 	private void decPeers() {
 		if (!disconnected) {
 			disconnected = true;
-			server.decPeers();
+			server.totalPeers --;
 		}
 	}
 }
