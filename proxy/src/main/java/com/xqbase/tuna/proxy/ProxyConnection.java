@@ -423,9 +423,11 @@ public class ProxyConnection
 	}
 
 	void sendError(int status) {
-		byte[] body = server.errorPages.apply(status);
-		new HttpPacket(status, getReason(status), body,
-				"Connection", "close").write(handler, true, false);
+		if (handler != null) {
+			byte[] body = server.errorPages.apply(status);
+			new HttpPacket(status, getReason(status), body,
+					"Connection", "close").write(handler, true, false);
+		}
 	}
 
 	void disconnectWithoutConnect() {
