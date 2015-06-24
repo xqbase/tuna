@@ -15,44 +15,57 @@ import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.tuna.util.Bytes;
+import com.xqbase.tuna.util.Expirable;
+import com.xqbase.tuna.util.LinkedEntry;
+import com.xqbase.tuna.util.TimeoutQueue;
 
 /** An SSL filter which makes a connection secure */
-public class SSLFilter extends ConnectionFilter {
+public class SSLFilter extends ConnectionFilter implements Expirable {
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * NO client authentication desired.
 	 *
-	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int)
-	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int, String, int)
+	 * @see #SSLFilter(EventQueue, Executor, TimeoutQueue, SSLContext, int)
+	 * @see #SSLFilter(EventQueue, Executor, TimeoutQueue, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_NO_AUTH = 0;
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * client authentication REQUESTED.
 	 *
-	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int)
-	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int, String, int)
+	 * @see #SSLFilter(EventQueue, Executor, TimeoutQueue, SSLContext, int)
+	 * @see #SSLFilter(EventQueue, Executor, TimeoutQueue, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_WANT_AUTH = 1;
 	/**
 	 * Indicates that SSLFilter is created in server mode with
 	 * client authentication REQUIRED.
 	 *
-	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int)
-	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int, String, int)
+	 * @see #SSLFilter(EventQueue, Executor, TimeoutQueue, SSLContext, int)
+	 * @see #SSLFilter(EventQueue, Executor, TimeoutQueue, SSLContext, int, String, int)
 	 */
 	public static final int SERVER_NEED_AUTH = 2;
 	/**
 	 * Indicates that SSLFilter is created in client mode.
 	 *
-	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int)
-	 * @see #SSLFilter(EventQueue, Executor, SSLContext, int, String, int)
+	 * @see #SSLFilter(EventQueue, Executor, TimeoutQueue, SSLContext, int)
+	 * @see #SSLFilter(EventQueue, Executor, TimeoutQueue, SSLContext, int, String, int)
 	 */
 	public static final int CLIENT = 3;
 
+	public static TimeoutQueue<SSLFilter> getTimeoutQueue(int timeout) {
+		return new TimeoutQueue<>(sslf -> {
+			sslf.disconnect();
+			sslf.onDisconnect();
+		}, timeout);
+	}
+
 	private EventQueue eventQueue;
 	private Executor executor;
+	private TimeoutQueue<SSLFilter> ssltq;
 	private SSLEngine ssle;
+	private LinkedEntry<SSLFilter> timeoutEntry = null;
+	private long expire = 0;
 	private int appBBSize;
 	private byte[] requestBytes;
 	private ByteBuffer requestBB;
@@ -64,26 +77,30 @@ public class SSLFilter extends ConnectionFilter {
 	/**
 	 * Creates an SSLFilter with the given {@link Executor},
 	 * {@link SSLContext} and mode
+	 *
 	 * @param mode - SSL mode, must be {@link #SERVER_NO_AUTH},
 	 *        {@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
 	 */
-	public SSLFilter(EventQueue eventQueue,
-			Executor executor, SSLContext sslc, int mode) {
-		this(eventQueue, executor, sslc, mode, null, 0);
+	public SSLFilter(EventQueue eventQueue, Executor executor,
+			TimeoutQueue<SSLFilter> ssltq, SSLContext sslc, int mode) {
+		this(eventQueue, executor, ssltq, sslc, mode, null, 0);
 	}
 
 	/**
 	 * Creates an SSLFilter with the given {@link Executor},
 	 * {@link SSLContext}, mode and advisory peer information
+	 *
 	 * @param mode - SSL mode, must be {@link #SERVER_NO_AUTH},
 	 *        {@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
 	 * @param peerHost - Advisory peer information.
 	 * @param peerPort - Advisory peer information.
 	 */
 	public SSLFilter(EventQueue eventQueue, Executor executor,
-			SSLContext sslc, int mode, String peerHost, int peerPort) {
+			TimeoutQueue<SSLFilter> ssltq, SSLContext sslc, int mode,
+			String peerHost, int peerPort) {
 		this.eventQueue = eventQueue;
 		this.executor = executor;
+		this.ssltq = ssltq;
 		if (peerHost == null) {
 			ssle = sslc.createSSLEngine();
 		} else {
@@ -99,6 +116,11 @@ public class SSLFilter extends ConnectionFilter {
 		appBBSize = ssle.getSession().getApplicationBufferSize();
 		requestBytes = new byte[appBBSize];
 		requestBB = ByteBuffer.wrap(requestBytes);
+	}
+
+	@Override
+	public long getExpire() {
+		return expire;
 	}
 
 	@Override
@@ -123,8 +145,31 @@ public class SSLFilter extends ConnectionFilter {
 
 	@Override
 	public void onConnect(ConnectionSession session_) {
+		if (ssltq != null) {
+			expire = System.currentTimeMillis() + ssltq.getTimeout();
+			timeoutEntry = ssltq.addNext(this);
+		}
 		session = session_;
 		handshake();
+	}
+
+	@Override
+	public void onDisconnect() {
+		super.onDisconnect();
+		removeTimeout();
+	}
+
+	@Override
+	public void disconnect() {
+		super.disconnect();
+		removeTimeout();
+	}
+
+	private void removeTimeout() {
+		if (timeoutEntry != null) {
+			timeoutEntry.remove();
+			timeoutEntry = null;
+		}
 	}
 
 	private void onRecv() {
@@ -267,6 +312,7 @@ public class SSLFilter extends ConnectionFilter {
 			}
 		}
 		// hs == HandshakeStatus.FINISHED
+		removeTimeout();
 		super.onConnect(new SSLConnectionSession(session.getLocalSocketAddress(),
 				session.getRemoteSocketAddress(), ssle.getSession()));
 		if (baqRecv.length() > 0) {

@@ -9,6 +9,7 @@ import javax.net.ssl.SSLContext;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.misc.ForwardServer;
 import com.xqbase.tuna.ssl.SSLFilter;
+import com.xqbase.tuna.util.TimeoutQueue;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -48,18 +49,21 @@ public class SSLForward {
 		}
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
+
+			TimeoutQueue<SSLFilter> ssltq = SSLFilter.getTimeoutQueue(60000);
+			connector.scheduleDelayed(ssltq, 10000, 10000);
 			ForwardServer server = new ForwardServer(connector, remoteHost, remotePort);
 			if (localHost == null) {
 				SSLContext sslc = SSLContexts.get(null, 0);
 				server.appendRemoteFilter(() -> new SSLFilter(connector,
-						connector, sslc, SSLFilter.CLIENT));
+						connector, ssltq, sslc, SSLFilter.CLIENT));
 				connector.add(server, localPort);
 				Log.i(String.format("SSLForward Started in Client mode (%s->%s:%s)",
 						"" + localPort, remoteHost, "" + remotePort));
 			} else {
 				SSLContext sslc = SSLContexts.get("CN=" + localHost, Time.WEEK * 520);
 				connector.add(server.appendFilter(() -> new SSLFilter(connector,
-						connector, sslc, SSLFilter.SERVER_NO_AUTH)), localPort);
+						connector, ssltq, sslc, SSLFilter.SERVER_NO_AUTH)), localPort);
 				Log.i(String.format("SSLForward Started in Server mode (%s:%s->%s:%s)",
 						localHost, "" + localPort, remoteHost, "" + remotePort));
 			}

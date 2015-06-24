@@ -16,6 +16,7 @@ import com.xqbase.tuna.misc.ForwardServer;
 import com.xqbase.tuna.mux.GuestServer;
 import com.xqbase.tuna.mux.MuxContext;
 import com.xqbase.tuna.ssl.SSLFilter;
+import com.xqbase.tuna.util.TimeoutQueue;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -96,8 +97,10 @@ class GuestLoop implements Runnable {
 		});
 		try {
 			if (ssl) {
+				TimeoutQueue<SSLFilter> ssltq = SSLFilter.getTimeoutQueue(60000);
+				connector.scheduleDelayed(ssltq, 10000, 10000);
 				connection = connection.appendFilter(new SSLFilter(connector,
-						connector, sslc, SSLFilter.CLIENT));
+						connector, ssltq, sslc, SSLFilter.CLIENT));
 			}
 			connector.connect(connection, muxHost, muxPort);
 		} catch (IOException e) {

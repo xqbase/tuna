@@ -9,6 +9,7 @@ import javax.net.ssl.SSLContext;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.misc.ForwardServer;
 import com.xqbase.tuna.ssl.SSLFilter;
+import com.xqbase.tuna.util.TimeoutQueue;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -40,9 +41,11 @@ public class Forward {
 			service.addShutdownHook(connector::interrupt);
 			ForwardServer server = new ForwardServer(connector, remoteHost, remotePort);
 			if (ssl) {
+				TimeoutQueue<SSLFilter> ssltq = SSLFilter.getTimeoutQueue(10000);
+				connector.scheduleDelayed(ssltq, 1000, 1000);
 				SSLContext sslc = SSLContexts.get(null, 0);
 				server.appendRemoteFilter(() -> new SSLFilter(connector,
-						connector, sslc, SSLFilter.CLIENT));
+						connector, ssltq, sslc, SSLFilter.CLIENT));
 			}
 			connector.add(server, port);
 			Log.i(String.format("Forward Started (%s->%s:%s%s)",

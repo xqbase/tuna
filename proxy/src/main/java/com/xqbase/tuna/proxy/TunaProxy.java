@@ -139,7 +139,7 @@ public class TunaProxy {
 			server.setKeepAlive(keepAlive);
 			server.setForwardedType(forwardedType);
 			server.setLogLevel(logLevel);
-			connector.scheduleDelayed(server.getSchedule(), 10000, 10000);
+			connector.scheduleDelayed(server, 10000, 10000);
 
 			ServerConnection server_;
 			if (Conf.getBoolean(p.getProperty("mux"), false)) {
@@ -162,11 +162,12 @@ public class TunaProxy {
 			if (Conf.getBoolean(p.getProperty("ssl"), false)) {
 				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
 				connector.add(server_.appendFilter(() -> new SSLFilter(connector,
-						connector, sslcServer, SSLFilter.SERVER_NO_AUTH)), host, port);
+						connector, server.ssltq, sslcServer,
+						SSLFilter.SERVER_NO_AUTH)), host, port);
 			} else {
 				connector.add(server_, host, port);
 			}
-			Log.i("HTTP Proxy Started on " + host + ":" + port);
+			Log.i("Tuna Proxy Started on " + host + ":" + port);
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());
@@ -174,7 +175,7 @@ public class TunaProxy {
 			Log.e(e);
 		}
 
-		Log.i("HTTP Proxy Stopped");
+		Log.i("Tuna Proxy Stopped");
 		Conf.closeLogger(Log.getAndSet(logger));
 		service.shutdown();
 	}

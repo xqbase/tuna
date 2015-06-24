@@ -18,13 +18,16 @@ import com.xqbase.tuna.Connector;
 import com.xqbase.tuna.EventQueue;
 import com.xqbase.tuna.ServerConnection;
 import com.xqbase.tuna.http.HttpPacket;
-import com.xqbase.tuna.proxy.util.LinkedEntry;
+import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.ssl.SSLManagers;
+import com.xqbase.tuna.util.LinkedEntry;
+import com.xqbase.tuna.util.TimeoutQueue;
 import com.xqbase.util.Log;
 import com.xqbase.util.Time;
 import com.xqbase.util.function.BiConsumerEx;
 
-public class ProxyServer implements ServerConnection {
+public class ProxyServer implements ServerConnection, Runnable {
+	private static final int DEFAULT_TIMEOUT = (int) Time.MINUTE;
 	private static final ProxyConnection[] EMPTY_PROXIES = {/**/};
 
 	private static SSLContext defaultSSLContext;
@@ -42,6 +45,7 @@ public class ProxyServer implements ServerConnection {
 	Connector connector;
 	EventQueue eventQueue;
 	Executor executor;
+	TimeoutQueue<SSLFilter> ssltq = SSLFilter.getTimeoutQueue(DEFAULT_TIMEOUT);
 	SSLContext sslc = defaultSSLContext;
 	BiPredicate<String, String> auth = (t, u) -> true;
 	UnaryOperator<String> lookup = t -> t;
@@ -61,7 +65,14 @@ public class ProxyServer implements ServerConnection {
 	private HashMap<String, LinkedEntry<ClientConnection>>
 			plainClientMap = new HashMap<>(),
 			secureClientMap = new HashMap<>();
-	private LinkedEntry<ClientConnection> timeoutQueue = new LinkedEntry<>(null);
+	private TimeoutQueue<ClientConnection> clientTimeoutQueue =
+			new TimeoutQueue<>(client -> disconnect(client), DEFAULT_TIMEOUT);
+	private TimeoutQueue<ProxyConnection> proxyTimeoutQueue = new TimeoutQueue<>(proxy -> {
+		proxy.disconnect();
+		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+			Log.v("Proxy Connection Expired, " + proxy.remote);
+		}
+	}, DEFAULT_TIMEOUT);
 
 	private void disconnect(ClientConnection client) {
 		client.disconnect();
@@ -86,16 +97,14 @@ public class ProxyServer implements ServerConnection {
 		if (queue == null) {
 			return null;
 		}
-		LinkedEntry<ClientConnection> entry = queue.getNext();
-		removeClient(entry.getObject());
-		return entry.getObject();
+		ClientConnection client = queue.getNext();
+		removeClient(client);
+		return client;
 	}
 
 	void returnClient(ClientConnection client) {
 		client.clear();
 		client.expire = System.currentTimeMillis() + keepAlive;
-		client.linkedEntry = new LinkedEntry<>(client);
-		client.timeoutEntry = new LinkedEntry<>(client);
 		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
 				client.secure ? secureClientMap : plainClientMap;
 		LinkedEntry<ClientConnection> queue = clientMap.get(client.host);
@@ -103,8 +112,8 @@ public class ProxyServer implements ServerConnection {
 			queue = new LinkedEntry<>(null);
 			clientMap.put(client.host, queue);
 		}
-		queue.addNext(client.linkedEntry);
-		timeoutQueue.addNext(client.timeoutEntry);
+		client.linkedEntry = queue.addNext(client);
+		client.timeoutEntry = clientTimeoutQueue.addNext(client);
 		idlePeers ++;
 	}
 
@@ -114,10 +123,15 @@ public class ProxyServer implements ServerConnection {
 		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
 				client.secure ? secureClientMap : plainClientMap;
 		LinkedEntry<ClientConnection> queue = clientMap.get(client.host);
-		if (queue != null && queue.getNext() == queue) {
+		if (queue != null && queue.isEmpty()) {
 			clientMap.remove(client.host);
 		}
 		idlePeers --;
+	}
+
+	void offerProxy(ProxyConnection proxy) {
+		proxy.expire = System.currentTimeMillis() + keepAlive;
+		proxy.timeoutEntry = proxyTimeoutQueue.addNext(proxy);
 	}
 
 	public ProxyServer(Connector connector, EventQueue eventQueue, Executor executor) {
@@ -129,6 +143,53 @@ public class ProxyServer implements ServerConnection {
 	@Override
 	public ProxyConnection get() {
 		return new ProxyConnection(this);
+	}
+
+	@Override
+	public void run() {
+		ssltq.run();
+		clientTimeoutQueue.run();
+		proxyTimeoutQueue.run();
+		if (logLevel < ProxyConnection.LOG_VERBOSE) {
+			return;
+		}
+
+		// Dump Pool Info
+		Log.v("Total Peers: " + totalPeers + ", Idle Peers: " + idlePeers);
+		StringWriter sw = new StringWriter();
+		PrintWriter out = new PrintWriter(sw);
+
+		out.println("Dump Client Pool ...");
+		BiConsumer<String, LinkedEntry<ClientConnection>> action = (host, queue) -> {
+			StringBuilder sb = new StringBuilder();
+			sb.append(host).append("=[");
+			queue.iterateNext(client -> true, client ->
+					sb.append(Integer.toHexString(client.hashCode())).append(": ").
+					append(client.toString(false)).append(", "));
+			out.println(sb.substring(0, sb.length() - 2) + "]");
+		};
+		out.println("Plain Client Map:");
+		plainClientMap.forEach(action);
+		out.println("Secure Client Map:");
+		secureClientMap.forEach(action);
+
+		out.println("Client Timeout Queue:");
+		StringBuilder sbClients = new StringBuilder();
+		clientTimeoutQueue.iterateNext(client -> true, client ->
+				sbClients.append(Integer.toHexString(client.hashCode())).append('/').
+				append(Time.toTimeString(client.expire, true)).append(", "));
+		out.println(sbClients.length() == 0 ? "<empty>" :
+				"[" + sbClients.substring(0, sbClients.length() - 2) + "]");
+
+		out.println("Proxy Timeout Queue:");
+		StringBuilder sbProxies = new StringBuilder();
+		proxyTimeoutQueue.iterateNext(proxy -> true, proxy ->
+				sbProxies.append(proxy.remote).append('/').
+				append(Time.toTimeString(proxy.expire, true)).append(", "));
+		out.print(sbProxies.length() == 0 ? "<empty>" :
+			"[" + sbProxies.substring(0, sbProxies.length() - 2) + "]");
+
+		Log.v(sw.toString());
 	}
 
 	public HashSet<ProxyConnection> getConnections() {
@@ -143,63 +204,8 @@ public class ProxyServer implements ServerConnection {
 		return idlePeers;
 	}
 
-	public Runnable getSchedule() {
-		return () -> {
-			long now = System.currentTimeMillis();
-			LinkedEntry<ClientConnection> timeoutEntry = timeoutQueue.getPrev();
-			while (timeoutEntry != timeoutQueue && timeoutEntry.getObject().expire < now) {
-				// disconnect breaks queue
-				LinkedEntry<ClientConnection> entry = timeoutEntry.getPrev();
-				disconnect(timeoutEntry.getObject());
-				timeoutEntry = entry;
-			}
-			if (logLevel < ProxyConnection.LOG_VERBOSE) {
-				return;
-			}
-			// Dump Pool Info
-			Log.v("Total Peers: " + totalPeers + ", Idle Peers: " + idlePeers);
-			StringWriter sw = new StringWriter();
-			PrintWriter out = new PrintWriter(sw);
-			out.println("Dump Client Pool ...");
-			BiConsumer<String, LinkedEntry<ClientConnection>> action = (host, queue) -> {
-				StringBuilder sb = new StringBuilder();
-				sb.append(host).append("=[");
-				LinkedEntry<ClientConnection> entry = queue.getNext();
-				while (entry != queue) {
-					ClientConnection client = entry.getObject();
-					sb.append(Integer.toHexString(client.hashCode())).append("/").
-							append(client.toString(false)).append(", ");
-					entry = entry.getNext();
-				}
-				out.println(sb.substring(0, sb.length() - 2) + "]");
-			};
-			out.println("Plain Client Map:");
-			plainClientMap.forEach(action);
-			out.println("Secure Client Map:");
-			secureClientMap.forEach(action);
-			out.println("Timeout Queue:");
-			StringBuilder sb = new StringBuilder();
-			LinkedEntry<ClientConnection> entry = timeoutQueue.getNext();
-			while (entry != timeoutQueue) {
-				ClientConnection client = entry.getObject();
-				sb.append(Integer.toHexString(client.hashCode())).append("/").
-						append(Time.toTimeString(client.expire, true)).append(", ");
-				entry = entry.getNext();
-			}
-			out.print(sb.length() == 0 ? "<empty>" :
-					"[" + sb.substring(0, sb.length() - 2) + "]");
-			Log.v(sw.toString());
-		};
-	}
-
 	public void disconnectAll() {
-		LinkedEntry<ClientConnection> timeoutEntry = timeoutQueue.getPrev();
-		while (timeoutEntry != timeoutQueue) {
-			// disconnect breaks queue
-			LinkedEntry<ClientConnection> entry = timeoutEntry.getPrev();
-			disconnect(timeoutEntry.getObject());
-			timeoutEntry = entry;
-		}
+		clientTimeoutQueue.iteratePrev(client -> true, client -> disconnect(client));
 		for (ProxyConnection proxy : connections.toArray(EMPTY_PROXIES)) {
 			proxy.disconnect();
 		}
@@ -243,6 +249,9 @@ public class ProxyServer implements ServerConnection {
 
 	public void setKeepAlive(int keepAlive) {
 		this.keepAlive = keepAlive;
+		ssltq.setTimeout(keepAlive);
+		clientTimeoutQueue.setTimeout(keepAlive);
+		proxyTimeoutQueue.setTimeout(keepAlive);
 	}
 
 	public void setForwardedType(int forwardedType) {
@@ -252,50 +261,4 @@ public class ProxyServer implements ServerConnection {
 	public void setLogLevel(int logLevel) {
 		this.logLevel = logLevel;
 	}
-
-/*
-	public SSLContext getSSLContext() {
-		return sslc;
-	}
-
-	public boolean auth(String username, String password) {
-		return auth.test(username, password);
-	}
-
-	public String lookup(String host) {
-		return lookup.apply(host);
-	}
-
-	public void onRequest(ProxyConnection proxy, HttpPacket request) throws RequestException {
-		onRequest.accept(proxy, request);
-	}
-
-	public void onResponse(ProxyConnection proxy, HttpPacket response) {
-		onResponse.accept(proxy, response);
-	}
-
-	public void onComplete(ProxyConnection proxy) {
-		onComplete.accept(proxy);
-	}
-
-	public byte[] getErrorPage(int status) {
-		return errorPages.apply(status);
-	}
-
-	public String getRealm() {
-		return realm;
-	}
-
-	public boolean isEnableReverse() {
-		return enableReverse;
-	}
-
-	public int getForwardedType() {
-		return forwardedType;
-	}
-
-	public int getLogLevel() {
-		return logLevel;
-	}
-*/
 }

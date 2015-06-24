@@ -35,13 +35,13 @@ public class TestSSLMuxEdge {
 			server.setEnableReverse(true);
 			server.setForwardedType(ProxyConnection.FORWARDED_ON);
 			server.setLogLevel(ProxyConnection.LOG_DEBUG);
-			connector.scheduleDelayed(server.getSchedule(), 10000, 10000);
+			connector.scheduleDelayed(server, 10000, 10000);
 
 			MuxContext mc = new MuxContext(connector, t -> true, 1048576, MuxContext.LOG_VERBOSE);
 			connector.add(new OriginServer(server, mc), 8341);
 			EdgeServer edge = new EdgeServer(mc, null);
 			connector.add(edge.appendFilter(() -> new SSLFilter(connector,
-					connector, sslc, SSLFilter.SERVER_NO_AUTH)), 8443);
+					connector, server.ssltq, sslc, SSLFilter.SERVER_NO_AUTH)), 8443);
 			connector.connect(edge.getMuxConnection(), "localhost", 8341);
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
