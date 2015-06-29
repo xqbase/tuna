@@ -285,11 +285,6 @@ public class ProxyConnection
 				disconnect();
 				return;
 			}
-			// "lookup" starting with "https://" means a secure host
-			if (host.startsWith("https://")) {
-				host = host.substring(8);
-				secure = true;
-			}
 			int colon = host.lastIndexOf(':');
 			if (colon < 0) {
 				connectHost = host;
@@ -423,11 +418,9 @@ public class ProxyConnection
 	}
 
 	void sendError(int status) {
-		if (handler != null) {
-			byte[] body = server.errorPages.apply(status);
-			new HttpPacket(status, getReason(status), body,
-					"Connection", "close").write(handler, true, false);
-		}
+		byte[] body = server.errorPages.apply(status);
+		new HttpPacket(status, getReason(status), body,
+				"Connection", "close").write(handler, true, false);
 	}
 
 	void disconnectWithoutConnect() {
@@ -449,11 +442,8 @@ public class ProxyConnection
 	void reset(boolean closed) {
 		attributeMap.clear();
 		request.reset();
-		// "proxy" may be disconnected before reset
-		if (handler != null) {
-			handler.setBufferSize(MAX_BUFFER_SIZE);
-			server.proxyTimeoutQueue.offer(this);
-		}
+		handler.setBufferSize(MAX_BUFFER_SIZE);
+		server.proxyTimeoutQueue.offer(this);
 		// "proxy" may close or return "client" before reset
 		if (logLevel >= LOG_VERBOSE && client != null) {
 			Log.v((closed ? "Client Closed" : "Client Kept Alive") +
@@ -464,9 +454,7 @@ public class ProxyConnection
 			server.returnClient(client);
 		}
 		client = null;
-		if (handler != null) {
-			read();
-		}
+		read();
 	}
 
 	public ProxyConnection(ProxyServer server) {
@@ -525,7 +513,6 @@ public class ProxyConnection
 
 	@Override
 	public void onDisconnect() {
-		handler = null;
 		if (connect != null) {
 			connect.disconnect();
 			if (logLevel >= LOG_VERBOSE) {
@@ -585,9 +572,7 @@ public class ProxyConnection
 	}
 
 	public void disconnect() {
-		if (handler != null) {
-			handler.disconnect();
-			onDisconnect();
-		}
+		handler.disconnect();
+		onDisconnect();
 	}
 }
