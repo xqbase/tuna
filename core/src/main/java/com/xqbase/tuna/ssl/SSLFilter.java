@@ -189,8 +189,8 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 	}
 
 	private void unwrap() {
-		SSLEngineResult result;
-		do {
+		while (true) {
+			SSLEngineResult result;
 			try {
 				result = unwrapEx();
 			} catch (IOException e) {
@@ -199,18 +199,27 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 				return;
 			}
 			switch (result.getStatus()) {
-			case OK:
-			case BUFFER_UNDERFLOW: // Wait for next onRecv
-				break;
+			case BUFFER_UNDERFLOW:
+				// Wait for next onRecv
+				return;
 			case BUFFER_OVERFLOW:
 				appBBSize = ssle.getSession().getApplicationBufferSize();
+				// Retry unwrapEx
 				break;
-			default:
+			case OK:
+				if (result.getHandshakeStatus() == HandshakeStatus.NOT_HANDSHAKING) {
+					// Continue unwrapEx
+					break;
+				}
+				disconnect();
+				onDisconnect();
+				return;
+			case CLOSED:
 				disconnect();
 				onDisconnect();
 				return;
 			}
-		} while (result.getStatus() != Status.BUFFER_UNDERFLOW);
+		}
 	}
 
 	private SSLEngineResult unwrapEx() throws IOException {
