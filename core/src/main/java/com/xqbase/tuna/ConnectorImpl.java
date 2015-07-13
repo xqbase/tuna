@@ -100,10 +100,13 @@ class Client {
 			socketChannel.connect(socketAddress);
 			add(selector, SelectionKey.OP_CONNECT);
 		} catch (IOException e) {
-			// May throw "Network is unreachable"
-			// finishClose() will cancel selectKey, so register in case NPE
-			add(selector, 0);
-			startClose();
+			// May throw "Network is unreachable", and then socketChannel will be closed
+			// selectionKey not created
+			try {
+				socketChannel.close();
+			} catch (IOException e_) {/**/}
+			status = STATUS_CLOSED;
+			connection.onDisconnect();
 		}
 	}
 
