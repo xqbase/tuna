@@ -44,7 +44,7 @@ import com.xqbase.util.Time;
 public class TunaProxy {
 	private static final List<String> LOG_VALUE = Arrays.asList("debug", "verbose");
 	private static final List<String> FORWARDED_VALUE =
-			Arrays.asList("transparent", "off", "delete", "truncate", "on");
+			Arrays.asList("off", "delete", "truncate", "on");
 
 	private static SSLContext getSSLContext(String dn, long expire)
 			throws IOException, GeneralSecurityException {
