@@ -17,4 +17,5 @@ hs_err_pid*
 /mux/target
 /tools/target
 /http/target
+/ldap/target
 /proxy/target
