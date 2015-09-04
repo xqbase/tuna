@@ -17,7 +17,7 @@ public class DerFilter extends PacketFilter {
 			return 2 + length;
 		}
 		int lenlen = length & 0x7F;
-		if (lenlen > 3) {
+		if (lenlen > 4) {
 			throw new PacketException("Too Large");
 		}
 		length = 0;
