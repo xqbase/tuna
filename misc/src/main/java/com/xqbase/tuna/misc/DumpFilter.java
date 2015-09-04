@@ -129,18 +129,19 @@ public class DumpFilter extends ConnectionFilter {
 	@Override
 	public void send(byte[] b, int off, int len) {
 		super.send(b, off, len);
+		// Dump After Consume
 		dump(b, off, len, useClientMode);
 	}
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		super.onRecv(b, off, len);
 		dump(b, off, len, !useClientMode);
+		// Dump Before Consume
+		super.onRecv(b, off, len);
 	}
 
 	@Override
 	public void onConnect(ConnectionSession session) {
-		super.onConnect(session);
 		if (useClientMode) {
 			host = session.getLocalAddr();
 			port = session.getLocalPort();
@@ -158,17 +159,21 @@ public class DumpFilter extends ConnectionFilter {
 			}
 		}
 		printfln("[%s:%s Connected at %s]", host, "" + port, now());
+		// Dump Before Consume
+		super.onConnect(session);
 	}
 
 	@Override
 	public void onDisconnect() {
-		super.onDisconnect();
 		disconnect(!useClientMode);
+		// Dump Before Consume
+		super.onDisconnect();
 	}
 
 	@Override
 	public void disconnect() {
 		super.disconnect();
+		// Dump After Consume
 		disconnect(useClientMode);
 	}
 
