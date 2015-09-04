@@ -49,5 +49,12 @@
 			<artifactId>xqbase-util</artifactId>
 			<version>0.2.7</version>
 		</dependency>
+
+		<dependency>
+			<groupId>com.xqbase</groupId>
+			<artifactId>tuna-misc</artifactId>
+			<version>0.1.2</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 </project>
