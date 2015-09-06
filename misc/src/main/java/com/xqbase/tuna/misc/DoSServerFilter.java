@@ -25,10 +25,10 @@ public class DoSServerFilter implements Supplier<ConnectionFilter> {
 		@Override
 		public void onRecv(byte[] b, int off, int len) {
 			checkTimeout();
-			int[] requests_ = getData(requestsMap, 2);
-			requests_[1] += len;
-			if (bytes > 0 && requests_[1] > bytes) {
-				onBlock(this, requests_[0], requests_[1], 0);
+			int[] requests__ = getData(requestsMap, 2);
+			requests__[1] += len;
+			if (bytes_ > 0 && requests__[1] > bytes_) {
+				onBlock(this, remoteAddr, requests__[0], requests__[1], 0);
 			} else {
 				super.onRecv(b, off, len);
 			}
@@ -47,14 +47,14 @@ public class DoSServerFilter implements Supplier<ConnectionFilter> {
 		public void onConnect(ConnectionSession session) {
 			remoteAddr = session.getRemoteAddr();
 			connected = true;
-			int[] connections_ = getData(connectionsMap, 1);
-			connections_[0] ++;
+			int[] connections__ = getData(connectionsMap, 1);
+			connections__[0] ++;
 			checkTimeout();
-			int[] requests_ = getData(requestsMap, 2);
-			requests_[0] ++;
-			if ((connections > 0 && connections_[0] > connections) ||
-					(requests > 0 && requests_[0] > requests)) {
-				onBlock(this, connections_[0], requests_[0], 0);
+			int[] requests__ = getData(requestsMap, 2);
+			requests__[0] ++;
+			if ((connections_ > 0 && connections__[0] > connections_) ||
+					(requests_ > 0 && requests__[0] > requests_)) {
+				onBlock(this, remoteAddr, connections__[0], requests__[0], 0);
 			} else {
 				super.onConnect(session);
 			}
@@ -87,19 +87,21 @@ public class DoSServerFilter implements Supplier<ConnectionFilter> {
 	}
 
 	/**
-	 * Called when bytes, requests or connections reached to the limit.
+	 * Called when connections, requests or bytes reach to the limit.
 	 *
-	 * @param connections_
-	 * @param requests_
-	 * @param bytes_
+	 * @param remoteAddr
+	 * @param connections
+	 * @param requests
+	 * @param bytes
 	 */
-	protected void onBlock(ConnectionFilter filter, int connections_, int requests_, int bytes_) {
+	protected void onBlock(ConnectionFilter filter, String remoteAddr,
+			int connections, int requests, int bytes) {
 		filter.disconnect();
 		filter.onDisconnect();
 	}
 
 	long accessed = System.currentTimeMillis();
-	int period, bytes, requests, connections;
+	int period, connections_, requests_, bytes_;
 
 	/**
 	 * Creates an DoSServerFilter with the given parameters
@@ -123,9 +125,9 @@ public class DoSServerFilter implements Supplier<ConnectionFilter> {
 	 */
 	public void setParameters(int period, int connections, int requests, int bytes) {
 		this.period = period;
-		this.connections = connections;
-		this.requests = requests;
-		this.bytes = bytes;
+		this.connections_ = connections;
+		this.requests_ = requests;
+		this.bytes_ = bytes;
 	}
 
 	@Override
