@@ -42,7 +42,6 @@
 		<module>mux</module>
 		<module>tools</module>
 		<module>http</module>
-		<module>ldap</module>
 		<module>proxy</module>
 	</modules>
 </project>
