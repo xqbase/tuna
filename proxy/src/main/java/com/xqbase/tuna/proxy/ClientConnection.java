@@ -45,7 +45,8 @@ class ClientConnection extends PeerConnection
 	}
 
 	void begin(boolean head, boolean connectionClose) {
-		begun = chunked = false;
+		begun = false;
+		chunked = false;
 		response.setType(head ? HttpPacket.TYPE_RESPONSE_HEAD : request.isHttp10() ?
 				HttpPacket.TYPE_RESPONSE_HTTP10 : HttpPacket.TYPE_RESPONSE);
 		requestClose = connectionClose;
@@ -178,7 +179,7 @@ class ClientConnection extends PeerConnection
 		}
 		if (logLevel >= LOG_DEBUG) {
 			if (!begun) {
-				Log.d((connected ? "Incomplete Header, " :
+				Log.d((connected ? "No Response or Incomplete Header, " :
 						"Client Connection Failed, ") + toString(true));
 			} else if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Lost in Response, " + toString(true));
