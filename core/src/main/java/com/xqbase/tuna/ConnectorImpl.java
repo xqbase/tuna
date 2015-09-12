@@ -287,7 +287,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 	}
 
-	/** @throws IOException if no IP address for the <code>host</code> could be found*/
+	/** @throws IOException if no IP address for the <code>host</code> could be found */
 	@Override
 	public void connect(Connection connection,
 			InetSocketAddress socketAddress) throws IOException {
