@@ -188,6 +188,7 @@ public class ProxyConnection
 					disconnect();
 					return;
 				}
+				// TODO Check IPv6 Host
 				int colon = uri.lastIndexOf(':');
 				if (colon < 0) {
 					throw new HttpPacketException("Invalid Destination", uri);
@@ -201,6 +202,7 @@ public class ProxyConnection
 				proxyChain = false;
 			} else {
 				port = 3128;
+				// TODO Check IPv6 Host
 				int colon = host.lastIndexOf(':');
 				if (colon < 0) {
 					port = 3128;
@@ -224,6 +226,8 @@ public class ProxyConnection
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", host);
 			}
+			// connector.connect() may cause onDisconnect()
+			// TODO Check "connect"
 			if (body.length() > 0) {
 				connect.handler.send(body.array(), body.offset(), body.length());
 			}
@@ -384,6 +388,8 @@ public class ProxyConnection
 			} catch (IOException e) {
 				throw new HttpPacketException("Invalid Host", connectHost);
 			}
+			// connector.connect() may cause onDisconnect()
+			// TODO Check "client"
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Created, " + client.toString(false));
 			}
