@@ -87,8 +87,10 @@ class Client {
 	 * registers a {@link Client} and connects to a remote address
 	 *
 	 * @see ConnectorImpl#connect(Connection, String, int)
+	 * @throws IOException may throw "Network is unreachable" or "Protocol family unavailable",
+	 *		   and then socketChannel will be closed, and selectionKey will not be created
 	 */
-	void connect(Selector selector, InetSocketAddress socketAddress) {
+	void connect(Selector selector, InetSocketAddress socketAddress) throws IOException {
 		resolving = false;
 		try {
 			socketChannel = SocketChannel.open();
@@ -100,13 +102,13 @@ class Client {
 			socketChannel.connect(socketAddress);
 			add(selector, SelectionKey.OP_CONNECT);
 		} catch (IOException e) {
-			// May throw "Network is unreachable", and then socketChannel will be closed
-			// selectionKey not created
+			// May throw "Network is unreachable" or "Protocol family unavailable",
+			// and then socketChannel will be closed, and selectionKey will not be created
 			try {
 				socketChannel.close();
 			} catch (IOException e_) {/**/}
 			status = STATUS_CLOSED;
-			connection.onDisconnect();
+			throw e;
 		}
 	}
 
@@ -310,9 +312,16 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 			try {
 				// Resolve in Executor then Connect later
 				InetAddress addr = InetAddress.getByName(host);
-				invokeLater(() -> client.connect(selector,
-						new InetSocketAddress(addr, port)));
+				invokeLater(() -> {
+					try {
+						client.connect(selector, new InetSocketAddress(addr, port));
+					} catch (IOException e) {
+						// Call "onDisconnect()" when Connecting Failure
+						connection.onDisconnect();
+					}
+				});
 			} catch (IOException e) {
+				// Call "onDisconnect()" when Resolving Failure
 				invokeLater(connection::onDisconnect);
 			}
 		});

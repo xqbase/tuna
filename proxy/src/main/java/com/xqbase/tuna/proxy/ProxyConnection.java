@@ -93,6 +93,27 @@ public class ProxyConnection
 		return errorPage == null ? Bytes.EMPTY_BYTES : errorPage;
 	}
 
+	private static String parseHost(String uri, int[] port) throws HttpPacketException {
+		if (uri.isEmpty()) {
+			throw new HttpPacketException("Invalid Host", uri);
+		}
+		if (uri.charAt(0) == '[' && uri.charAt(uri.length() - 1) == ']') {
+			// "host" is an IPv6 Address
+			return uri;
+		}
+		int colon = uri.lastIndexOf(':');
+		if (colon < 0) {
+			return uri;
+		}
+		String host = uri.substring(0, colon);
+		String value = uri.substring(colon + 1);
+		port[0] = Numbers.parseInt(value, -1);
+		if (port[0] < 0 || port[0] > 0xFFFF) {
+			throw new HttpPacketException("Invalid Port", value);
+		}
+		return host;
+	}
+
 	LinkedEntry<ProxyConnection> timeoutEntry = null;
 	long expire = 0;
 	String remote = null;
@@ -174,10 +195,10 @@ public class ProxyConnection
 		String method = request.getMethod().toUpperCase();
 		if (method.equals("CONNECT")) {
 			ByteArrayQueue body = request.getBody();
-			String host = (String) attributeMap.get(PROXY_CHAIN_KEY);
+			String proxyChain = (String) attributeMap.get(PROXY_CHAIN_KEY);
+			String host;
 			int port;
-			boolean proxyChain;
-			if (host == null) {
+			if (proxyChain == null) {
 				String uri = server.lookup.apply(request.getUri().toLowerCase());
 				if (uri == null) {
 					if (logLevel >= LOG_DEBUG) {
@@ -188,28 +209,13 @@ public class ProxyConnection
 					disconnect();
 					return;
 				}
-				// TODO Check IPv6 Host
-				int colon = uri.lastIndexOf(':');
-				if (colon < 0) {
-					throw new HttpPacketException("Invalid Destination", uri);
-				}
-				host = uri.substring(0, colon);
-				String value = uri.substring(colon + 1);
-				port = Numbers.parseInt(value, -1);
-				if (port < 0 || port > 0xFFFF) {
-					throw new HttpPacketException("Invalid Port", value);
-				}
-				proxyChain = false;
+				int[] port_ = {443};
+				host = parseHost(uri, port_);
+				port = port_[0];
 			} else {
-				port = 3128;
-				// TODO Check IPv6 Host
-				int colon = host.lastIndexOf(':');
-				if (colon < 0) {
-					port = 3128;
-				} else {
-					port = Numbers.parseInt(host.substring(colon + 1), 3128, 0, 0xFFFF);
-					host = host.substring(0, colon);
-				}
+				int[] port_ = {3128};
+				host = parseHost(proxyChain, port_);
+				port = port_[0];
 				proxyAuth = (String) attributeMap.get(PROXY_AUTH_KEY);
 				if (proxyAuth == null) {
 					request.removeHeader("PROXY-AUTHORIZATION");
@@ -217,17 +223,17 @@ public class ProxyConnection
 					request.setHeader("Proxy-Authorization", proxyAuth);
 				}
 				request.write(body, true, false);
-				proxyChain = true;
 			}
-			connect = new ConnectConnection(server, this, proxyChain, host, port, logLevel);
+			connect = new ConnectConnection(server, this,
+					proxyChain != null, host, port, logLevel);
 			try {
-				server.connector.connect(connect, host, port);
 				server.totalPeers ++;
+				// onDisconnect() will never be called here in tuna-core-0.1.2
+				server.connector.connect(connect, host, port);
 			} catch (IOException e) {
-				throw new HttpPacketException("Invalid Host", host);
+				throw new HttpPacketException("Unreachable Host",
+						e.getMessage() + ": " + host);
 			}
-			// connector.connect() may cause onDisconnect()
-			// TODO Check "connect"
 			if (body.length() > 0) {
 				connect.handler.send(body.array(), body.offset(), body.length());
 			}
@@ -240,13 +246,13 @@ public class ProxyConnection
 		request.removeHeader("PROXY-AUTHORIZATION");
 		request.removeHeader("PROXY-CONNECTION");
 
-		String host = (String) attributeMap.get(PROXY_CHAIN_KEY);
+		String proxyChain = (String) attributeMap.get(PROXY_CHAIN_KEY);
 		String uri = request.getUri();
 		boolean secure = false;
-		boolean proxyChain;
 		String connectHost;
+		String host;
 		int port;
-		if (host == null) {
+		if (proxyChain == null) {
 			try {
 				// Use "host:port" in URI
 				URL url = new URL(uri);
@@ -289,39 +295,24 @@ public class ProxyConnection
 				disconnect();
 				return;
 			}
-			int colon = host.lastIndexOf(':');
-			if (colon < 0) {
-				connectHost = host;
-				port = secure ? 443 : 80;
-			} else {
-				connectHost = host.substring(0, colon);
-				String value = host.substring(colon + 1);
-				port = Numbers.parseInt(value, -1);
-				if (port < 0 || port > 0xFFFF) {
-					throw new HttpPacketException("Invalid Port", value);
-				}
-			}
+			int[] port_ = {secure ? 443 : 80};
+			connectHost = parseHost(host, port_);
+			port = port_[0];
 
 			request.setUri(uri);
 			if (request.getHeader("HOST") == null) {
 				request.setHeader("Host", originalHost);
 			}
-			proxyChain = false;
 
 		} else {
-			int colon = host.lastIndexOf(':');
-			if (colon < 0) {
-				connectHost = host;
-				port = 3128;
-			} else {
-				connectHost = host.substring(0, colon);
-				port = Numbers.parseInt(host.substring(colon + 1), 3128, 0, 0xFFFF);
-			}
+			host = proxyChain;
+			int[] port_ = {3128};
+			connectHost = parseHost(host, port_);
+			port = port_[0];
 			proxyAuth = (String) attributeMap.get(PROXY_AUTH_KEY);
 			if (proxyAuth != null) {
 				request.setHeader("Proxy-Authorization", proxyAuth);
 			}
-			proxyChain = true;
 		}
 
 		switch (server.forwardedType) {
@@ -372,8 +363,8 @@ public class ProxyConnection
 
 		client = server.borrowClient(host, secure);
 		if (client == null) {
-			client = new ClientConnection(server,
-					this, request, proxyChain, secure, host, logLevel);
+			client = new ClientConnection(server, this, request,
+					proxyChain != null, secure, host, logLevel);
 			Connection connection;
 			if (secure) {
 				connection = client.appendFilter(new SSLFilter(server.eventQueue,
@@ -383,18 +374,18 @@ public class ProxyConnection
 				connection = client;
 			}
 			try {
-				server.connector.connect(connection, connectHost, port);
 				server.totalPeers ++;
+				// onDisconnect() will never be called here in tuna-core-0.1.2
+				server.connector.connect(connection, connectHost, port);
 			} catch (IOException e) {
-				throw new HttpPacketException("Invalid Host", connectHost);
+				throw new HttpPacketException("Unreachable Host",
+						e.getMessage() + ": " + connectHost);
 			}
-			// connector.connect() may cause onDisconnect()
-			// TODO Check "client"
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Created, " + client.toString(false));
 			}
 		} else {
-			client.setProxy(this, request, proxyChain);
+			client.setProxy(this, request, proxyChain != null);
 			if (logLevel >= LOG_VERBOSE) {
 				Log.v("Client Reused, " + client.toString(false));
 			}
