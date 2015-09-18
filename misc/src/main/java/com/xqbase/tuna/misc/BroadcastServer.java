@@ -60,7 +60,7 @@ public class BroadcastServer implements ServerConnection {
 	 * Creates a BroadcastServer
 	 *
 	 * @param noEcho - <code>true</code> if received data is not allowed to
-	 *        send back to the original connection.
+	 *			send back to the original connection.
 	 */
 	public BroadcastServer(boolean noEcho) {
 		this.noEcho = noEcho;

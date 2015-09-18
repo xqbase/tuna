@@ -56,9 +56,10 @@ public class ProxyServer implements ServerConnection, Runnable {
 	IntFunction<byte[]> errorPages = ProxyConnection::getDefaultErrorPage;
 	String realm = null;
 	boolean enableReverse = false;
-	int forwardedType = ProxyConnection.FORWARDED_TRANSPARENT,
-			logLevel = ProxyConnection.LOG_NONE,
-			totalPeers = 0, idlePeers = 0;
+	int forwardedType = ProxyConnection.FORWARDED_TRANSPARENT;
+	int logLevel = ProxyConnection.LOG_NONE;
+	int totalPeers = 0;
+	int idlePeers = 0;
 	TimeoutQueue<ProxyConnection> proxyTimeoutQueue = new TimeoutQueue<>(proxy -> {
 		proxy.disconnect();
 		if (logLevel >= ProxyConnection.LOG_VERBOSE) {
@@ -67,9 +68,8 @@ public class ProxyServer implements ServerConnection, Runnable {
 	}, DEFAULT_TIMEOUT);
 
 	private HashSet<ProxyConnection> connections = new HashSet<>();
-	private HashMap<String, LinkedEntry<ClientConnection>>
-			plainClientMap = new HashMap<>(),
-			secureClientMap = new HashMap<>();
+	private HashMap<String, LinkedEntry<ClientConnection>> plainClientMap = new HashMap<>();
+	private HashMap<String, LinkedEntry<ClientConnection>> secureClientMap = new HashMap<>();
 	private TimeoutQueue<ClientConnection> clientTimeoutQueue =
 			new TimeoutQueue<>(client -> disconnect(client), DEFAULT_TIMEOUT);
 

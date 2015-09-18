@@ -79,7 +79,7 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 	 * {@link SSLContext} and mode
 	 *
 	 * @param mode - SSL mode, must be {@link #SERVER_NO_AUTH},
-	 *        {@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
+	 *			{@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
 	 */
 	public SSLFilter(EventQueue eventQueue, Executor executor,
 			TimeoutQueue<SSLFilter> ssltq, SSLContext sslc, int mode) {
@@ -91,7 +91,7 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 	 * {@link SSLContext}, mode and advisory peer information
 	 *
 	 * @param mode - SSL mode, must be {@link #SERVER_NO_AUTH},
-	 *        {@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
+	 *			{@link #SERVER_WANT_AUTH}, {@link #SERVER_NEED_AUTH} or {@link #CLIENT}.
 	 * @param peerHost - Advisory peer information.
 	 * @param peerPort - Advisory peer information.
 	 */

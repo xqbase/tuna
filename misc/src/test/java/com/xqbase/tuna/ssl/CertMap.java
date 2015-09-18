@@ -173,8 +173,7 @@ public class CertMap extends HashMap<X500Principal, X509Certificate> {
 		} catch (GeneralSecurityException e) {
 			return false;
 		}
-		// 3. Return "true" if the issuer is a self-sign certificate,
-		//     no need to verify
+		// 3. Return "true" if the issuer is a self-sign certificate, no need to verify
 		// 4. Otherwise, verify the issuer recursively
 		return isRoot(certIssuer) || verifyRecursive(certIssuer);
 	}

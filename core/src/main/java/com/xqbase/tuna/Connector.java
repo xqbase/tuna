@@ -15,8 +15,8 @@ public interface Connector {
 	 *
 	 * @param serverConnection
 	 * @return a {@link Closeable} that will unregister the <code>serverConnection</code>.
-	 *         The connector will automatically unregister all
-	 *         <code>serverConnection</code>s when closing.
+	 *			The connector will automatically unregister all
+	 *			<code>serverConnection</code>s when closing.
 	 */
 	public default Closeable add(ServerConnection serverConnection,
 			String host, int port) throws IOException {
@@ -27,8 +27,8 @@ public interface Connector {
 	 * Registers a {@link ServerConnection}
 	 *
 	 * @return a {@link Closeable} that will unregister the <code>serverConnection</code>.
-	 *         The connector will automatically unregister all
-	 *         <code>serverConnection</code>s when closing.
+	 *			The connector will automatically unregister all
+	 *			<code>serverConnection</code>s when closing.
 	 */
 	public default Closeable add(ServerConnection serverConnection,
 			int port) throws IOException {
@@ -39,8 +39,8 @@ public interface Connector {
 	 * Registers a {@link ServerConnection}
 	 *
 	 * @return a {@link Closeable} that will unregister the <code>serverConnection</code>.
-	 *         The connector will automatically unregister all
-	 *         <code>serverConnection</code>s when closing.
+	 *			The connector will automatically unregister all
+	 *			<code>serverConnection</code>s when closing.
 	 */
 	public Closeable add(ServerConnection serverConnection,
 			InetSocketAddress socketAddress) throws IOException;
