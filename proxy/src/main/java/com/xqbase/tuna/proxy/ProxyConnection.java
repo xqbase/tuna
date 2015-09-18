@@ -31,16 +31,15 @@ import com.xqbase.util.Numbers;
 
 public class ProxyConnection
 		implements Connection, Expirable<ProxyConnection>, HttpStatus {
-	public static final int
-			FORWARDED_TRANSPARENT = 0,
-			FORWARDED_DELETE = 1,
-			FORWARDED_OFF = 2,
-			FORWARDED_TRUNCATE = 3,
-			FORWARDED_ON = 4;
-	public static final int
-			LOG_NONE = 0,
-			LOG_DEBUG = 1,
-			LOG_VERBOSE = 2;
+	public static final int FORWARDED_TRANSPARENT = 0;
+	public static final int FORWARDED_DELETE = 1;
+	public static final int FORWARDED_OFF = 2;
+	public static final int FORWARDED_TRUNCATE = 3;
+	public static final int FORWARDED_ON = 4;
+
+	public static final int LOG_NONE = 0;
+	public static final int LOG_DEBUG = 1;
+	public static final int LOG_VERBOSE = 2;
 
 	public static final String PROXY_CHAIN_KEY =
 			ProxyConnection.class.getName() + ".PROXY_CHAIN";

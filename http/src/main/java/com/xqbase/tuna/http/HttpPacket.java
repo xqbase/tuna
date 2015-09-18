@@ -10,33 +10,38 @@ import com.xqbase.tuna.ConnectionHandler;
 import com.xqbase.tuna.util.ByteArrayQueue;
 
 public class HttpPacket {
-	public static final int
-			TYPE_REQUEST = 0,
-			TYPE_RESPONSE = 1,
-			TYPE_RESPONSE_HEAD = 2,
-			TYPE_RESPONSE_HTTP10 = 3;
-	private static final int
-			PHASE_START = 0,
-			PHASE_HEADER = 1,
-			PHASE_BODY = 2,
-			PHASE_CHUNK_SIZE = 3,
-			PHASE_CHUNK_DATA = 4,
-			PHASE_CHUNK_CRLF = 5,
-			PHASE_TRAILER = 6,
-			PHASE_END_CHUNK = 7,
-			PHASE_END = 8;
-	private static final byte[]
-			SPACE = {' '},
-			COLON = {':', ' '},
-			CRLF = {'\r', '\n'},
-			HTTP10 = "HTTP/1.0".getBytes(),
-			HTTP11 = "HTTP/1.1".getBytes(),
-			FINAL_CRLF = {'0', '\r', '\n'};
+	public static final int TYPE_REQUEST = 0;
+	public static final int TYPE_RESPONSE = 1;
+	public static final int TYPE_RESPONSE_HEAD = 2;
+	public static final int TYPE_RESPONSE_HTTP10 = 3;
 
-	private int type = TYPE_REQUEST, phase = PHASE_START,
-			headerLimit = 32768, headerSize = 0, status = 0, bytesToRead = 0;
+	private static final int PHASE_START = 0;
+	private static final int PHASE_HEADER = 1;
+	private static final int PHASE_BODY = 2;
+	private static final int PHASE_CHUNK_SIZE = 3;
+	private static final int PHASE_CHUNK_DATA = 4;
+	private static final int PHASE_CHUNK_CRLF = 5;
+	private static final int PHASE_TRAILER = 6;
+	private static final int PHASE_END_CHUNK = 7;
+	private static final int PHASE_END = 8;
+
+	private static final byte[] SPACE = {' '};
+	private static final byte[] COLON = {':', ' '};
+	private static final byte[] CRLF = {'\r', '\n'};
+	private static final byte[] HTTP10 = "HTTP/1.0".getBytes();
+	private static final byte[] HTTP11 = "HTTP/1.1".getBytes();
+	private static final byte[] FINAL_CRLF = {'0', '\r', '\n'};
+
+	private int type = TYPE_REQUEST;
+	private int phase = PHASE_START;
+	private int headerLimit = 32768;
+	private int headerSize = 0;
+	private int status = 0;
+	private int bytesToRead = 0;
 	private boolean http10 = false;
-	private String method = null, uri = null, reason = null;
+	private String method = null;
+	private String uri = null;
+	private String reason = null;
 	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
 	private ByteArrayQueue body = new ByteArrayQueue();
 	private StringBuilder line = new StringBuilder();
@@ -85,7 +90,7 @@ public class HttpPacket {
 
 	/**
 	 * @param type {@link #TYPE_REQUEST}, {@link #TYPE_RESPONSE},
-	 *        {@link #TYPE_RESPONSE_HEAD} or {@link #TYPE_RESPONSE_HTTP10}
+	 *			{@link #TYPE_RESPONSE_HEAD} or {@link #TYPE_RESPONSE_HTTP10}
 	 */
 	public void setType(int type) {
 		this.type = type;
@@ -98,7 +103,7 @@ public class HttpPacket {
 
 	/**
 	 * @param http10 <code>true</code> to write body in HTTP/1.0 mode,
-	 *         regardless "Transfer-Encoding"
+	 *			regardless "Transfer-Encoding"
 	 */
 	public void setHttp10(boolean http10) {
 		this.http10 = http10;
@@ -446,8 +451,8 @@ public class HttpPacket {
 	/**
 	 * @param data {@link ByteArrayQueue} to write into
 	 * @param begin <code>true</code> to write entire Request or Response,
-	 *        including Start Line and Headers,
-	 *        and <code>false</code> to write Body and Trailers (if available) only
+	 *			including Start Line and Headers,
+	 *			and <code>false</code> to write Body and Trailers (if available) only
 	 * @param forceChunked <code>true</code> to force to write in Chunked mode
 	 */
 	public void write(ByteArrayQueue data, boolean begin, boolean forceChunked) {
@@ -486,8 +491,8 @@ public class HttpPacket {
 	/**
 	 * @param handler {@link ConnectionHandler} to write into
 	 * @param begin <code>true</code> to write entire Request or Response,
-	 *        including Start Line and Headers,
-	 *        and <code>false</code> to write Body and Trailers (if available) only
+	 *			including Start Line and Headers,
+	 *			and <code>false</code> to write Body and Trailers (if available) only
 	 * @param forceChunked <code>true</code> to force to write in Chunked mode
 	 */
 	public void write(ConnectionHandler handler, boolean begin, boolean forceChunked) {

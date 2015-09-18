@@ -27,11 +27,10 @@ import com.xqbase.tuna.util.ByteArrayQueue;
  * which corresponds to a TCP Socket.
  */
 class Client {
-	private static final int
-			STATUS_CLOSED = 0,
-			STATUS_IDLE = 1,
-			STATUS_BUSY = 2,
-			STATUS_DISCONNECTING = 3;
+	private static final int STATUS_CLOSED = 0;
+	private static final int STATUS_IDLE = 1;
+	private static final int STATUS_BUSY = 2;
+	private static final int STATUS_DISCONNECTING = 3;
 
 	int bufferSize = Connection.MAX_BUFFER_SIZE;
 	int status = STATUS_IDLE;
@@ -383,10 +382,10 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	 * including network events (accept/connect/read/write) and user-defined events.<p>
 	 *
 	 * @param timeout Block for up to timeout milliseconds, or -1 to block indefinitely,
-	 *        or 0 without blocking.
+	 *			or 0 without blocking.
 	 * @return <b>true</b> if NETWORK events consumed;<br>
-	 *         <b>false</b> if no NETWORK events raised,
-	 *         whether or not user-defined events raised.<br>
+	 *			<b>false</b> if no NETWORK events raised,
+	 *			whether or not user-defined events raised.<br>
 	 */
 	public boolean doEvents(long timeout) {
 		int keySize;

@@ -5,13 +5,12 @@ import java.io.IOException;
 public class HttpPacketException extends IOException {
 	private static final long serialVersionUID = 1L;
 
-	public static final String
-			HEADER_SIZE = "Header Size Exceeds Limit",
-			START_LINE = "Invalid Start Line",
-			VERSION = "Unrecognized Version",
-			STATUS = "Invalid Status",
-			CONTENT_LENGTH = "Invalid Content-Length",
-			CHUNK_SIZE = "Invalid Chunk Size";
+	public static final String HEADER_SIZE = "Header Size Exceeds Limit";
+	public static final String START_LINE = "Invalid Start Line";
+	public static final String VERSION = "Unrecognized Version";
+	public static final String STATUS = "Invalid Status";
+	public static final String CONTENT_LENGTH = "Invalid Content-Length";
+	public static final String CHUNK_SIZE = "Invalid Chunk Size";
 
 	private String type, value;
 

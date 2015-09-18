@@ -13,7 +13,7 @@ public class PacketException extends IOException {
 	 * Creates a PacketException with the specified detail message.
 	 *
 	 * @param message - The detail message (which is saved for later retrieval
-	 *        by the {@link Throwable#getMessage()} method).
+	 *			by the {@link Throwable#getMessage()} method).
 	 */
 	public PacketException(String message) {
 		super(message);
