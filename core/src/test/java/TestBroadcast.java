@@ -1,28 +1,3 @@
-# Tuna
-
-A Lightweight and High Performance Java Network Framework with the following features:
-
-- High Performance and High Scalability
-- Server / Client Connections
-- Event and Filter Support
-- SSL Support
-- Non-Blocking NIO
-- Various useful components, including debug, compression, DoS filter, HTTP support, proxy, multiplex, ...
-- Single-Thread, Easy Programming
-
-Tuna can be used as a maven dependency:
-
-```xml
-<dependency>
-    <groupId>com.xqbase</groupId>
-    <artifactId>tuna-core</artifactId>
-    <version>0.1.1</version>
-</dependency>
-```
-
-Here is an example to establish a broadcasting server:
-
-```java
 import java.io.IOException;
 import java.util.HashSet;
 
@@ -75,6 +50,3 @@ public class TestBroadcast {
 		}
 	}
 }
-```
-
-Run this program and type `telnet localhost` in several Command Prompt windows to test it.
