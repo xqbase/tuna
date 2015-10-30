@@ -389,7 +389,8 @@ public class ProxyConnection
 				Log.v("Client Reused, " + client.toString(false));
 			}
 		}
-		client.begin(method.equals("HEAD"), connectionClose);
+		client.head = method.equals("HEAD");
+		client.begin(connectionClose);
 	}
 
 	void read() {
