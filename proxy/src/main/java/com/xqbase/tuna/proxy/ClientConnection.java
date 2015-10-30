@@ -14,7 +14,7 @@ class ClientConnection extends PeerConnection
 	LinkedEntry<ClientConnection> linkedEntry = null, timeoutEntry = null;
 	long expire;
 	String host;
-	boolean secure, begun = false;
+	boolean secure, begun = false, head = false;
 
 	private HttpPacket request, response = new HttpPacket();
 	private boolean chunked = false, requestClose = false, responseClose = false;
@@ -44,7 +44,7 @@ class ClientConnection extends PeerConnection
 		setRemote(proxyChain);
 	}
 
-	void begin(boolean head, boolean connectionClose) {
+	void begin(boolean connectionClose) {
 		begun = false;
 		chunked = false;
 		response.setType(head ? HttpPacket.TYPE_RESPONSE_HEAD : request.isHttp10() ?
@@ -126,12 +126,12 @@ class ClientConnection extends PeerConnection
 			}
 		}
 		begun = true;
-		responseClose = requestClose || response.isHttp10() ||
-				response.testHeader("CONNECTION", "close") ||
-				queue.length() > 0;
-		// Write in Chunked mode when Request is HTTP/1.1 and
-		// Response is HTTP/1.0 and has no Content-Length
-		if (!request.isHttp10() && response.isHttp10() &&
+		boolean connectionClose = response.isHttp10() ||
+				response.testHeader("CONNECTION", "close");
+		responseClose = requestClose || connectionClose || queue.length() > 0;
+		// Write in Chunked mode when Request is HTTP/1.1 and not HEAD and
+		// Response is Connection-Close and has no Content-Length
+		if (!request.isHttp10() && !head && connectionClose &&
 				response.getHeader("CONTENT-LENGTH") == null) {
 			chunked = true;
 			response.setHeader("Transfer-Encoding", "chunked");
