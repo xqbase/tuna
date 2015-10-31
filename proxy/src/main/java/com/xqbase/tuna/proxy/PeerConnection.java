@@ -6,9 +6,8 @@ import com.xqbase.tuna.ConnectionSession;
 import com.xqbase.util.Log;
 
 abstract class PeerConnection implements Connection {
-	static final int
-			LOG_DEBUG	= ProxyConnection.LOG_DEBUG,
-			LOG_VERBOSE	= ProxyConnection.LOG_VERBOSE;
+	static final int LOG_DEBUG = ProxyConnection.LOG_DEBUG;
+	static final int LOG_VERBOSE = ProxyConnection.LOG_VERBOSE;
 
 	ProxyServer server;
 	ProxyConnection proxy;

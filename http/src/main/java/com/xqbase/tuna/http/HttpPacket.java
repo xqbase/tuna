@@ -297,8 +297,10 @@ public class HttpPacket {
 							throw new HttpPacketException(HttpPacketException.
 									CONTENT_LENGTH, contentLength);
 						}
-					} else if (type == TYPE_RESPONSE_HTTP10 ||
-							(type == TYPE_RESPONSE && http10)) {
+					} else if (type == TYPE_RESPONSE_HTTP10) {
+						bytesToRead = -1;
+					} else if (type == TYPE_RESPONSE &&
+							(http10 || testHeader("CONNECTION", "close"))) {
 						bytesToRead = -1;
 					}
 				}
