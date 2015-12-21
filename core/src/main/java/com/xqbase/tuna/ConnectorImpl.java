@@ -18,6 +18,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.IntConsumer;
+import java.util.function.LongConsumer;
 import java.util.regex.Pattern;
 
 import com.xqbase.tuna.util.ByteArrayQueue;
@@ -279,6 +281,8 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	private TreeMap<Timer, Runnable> timerMap = new TreeMap<>();
 	private ConcurrentLinkedQueue<Runnable> eventQueue = new ConcurrentLinkedQueue<>();
 	private ExecutorService executor = Executors.newCachedThreadPool();
+	private LongConsumer onBeginSelect = t -> {/**/};
+	private IntConsumer onEndSelect = t -> {/**/};
 
 	{
 		try {
@@ -343,6 +347,14 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		};
 	}
 
+	public void setOnBeginSelect(LongConsumer onBeginSelect) {
+		this.onBeginSelect = onBeginSelect;
+	}
+
+	public void setOnEndSelect(IntConsumer onEndSelect) {
+		this.onEndSelect = onEndSelect;
+	}
+
 	/** Consume events until interrupted */
 	public void doEvents() {
 		while (!isInterrupted()) {
@@ -388,6 +400,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	 *			whether or not user-defined events raised.<br>
 	 */
 	public boolean doEvents(long timeout) {
+		onBeginSelect.accept(timeout);
 		int keySize;
 		try {
 			keySize = timeout == 0 ? selector.selectNow() :
@@ -395,6 +408,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
+		onEndSelect.accept(keySize);
 		if (keySize == 0) {
 			invokeQueue();
 			return false;

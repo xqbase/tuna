@@ -168,6 +168,14 @@ public class TunaProxy {
 				connector.add(server_, host, port);
 			}
 			Log.i("Tuna Proxy Started on " + host + ":" + port);
+			if (logLevel >= ProxyConnection.LOG_VERBOSE) {
+				connector.setOnBeginSelect(timeout -> {
+					Log.v("onBeginSelect(" + timeout + ")");
+				});
+				connector.setOnEndSelect(keySize -> {
+					Log.v("onEndSelect(" + keySize + ")");
+				});
+			}
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());
