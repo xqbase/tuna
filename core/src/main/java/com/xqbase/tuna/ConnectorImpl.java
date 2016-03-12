@@ -21,7 +21,6 @@ import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 import com.xqbase.tuna.util.ByteArrayQueue;
-import com.xqbase.util.Log;
 
 /**
  * The encapsulation of a {@link SocketChannel} and its {@link SelectionKey},
@@ -389,7 +388,6 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	 *			whether or not user-defined events raised.<br>
 	 */
 	public boolean doEvents(long timeout) {
-		Log.v("Before Select: " + timeout);
 		int keySize;
 		try {
 			keySize = timeout == 0 ? selector.selectNow() :
@@ -397,14 +395,12 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
-		Set<SelectionKey> selectedKeys = selector.selectedKeys();
 		if (keySize == 0) {
-			Log.v("After Select(0): selectedKeys=" + selectedKeys.size() + ", " +
-					"interrupt=" + Thread.interrupted());
 			invokeQueue();
 			return false;
 		}
 
+		Set<SelectionKey> selectedKeys = selector.selectedKeys();
 		for (SelectionKey key : selectedKeys) {
 			if (!key.isValid()) {
 				continue;
@@ -476,7 +472,6 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	public void invokeLater(Runnable runnable) {
 		eventQueue.offer(runnable);
 		selector.wakeup();
-		Log.v("Waken Up.");
 	}
 
 	@Override
