@@ -362,10 +362,11 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		Iterator<Map.Entry<Timer, Runnable>> it = timerMap.entrySet().iterator();
 		while (it.hasNext()) {
 			Map.Entry<Timer, Runnable> entry = it.next();
-			if (entry.getKey().uptime <= now) {
-				runnables.add(entry.getValue());
-				it.remove();
+			if (entry.getKey().uptime > now) {
+				break;
 			}
+			runnables.add(entry.getValue());
+			it.remove();
 		}
 		// call run() after iteration since run() may change timerMap
 		for (Runnable runnable : runnables) {
