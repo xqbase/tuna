@@ -404,6 +404,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		if (keySize == 0) {
 			if (timedOut(timeout, 100) &&
 					!timedOut(System.currentTimeMillis() - now, 10) &&
+					eventQueue.isEmpty() &&
 					!Thread.currentThread().isInterrupted()) {
 				Set<SelectionKey> keys = selector.keys();
 				try {
