@@ -378,6 +378,10 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 	}
 
+	private static boolean timedOut(long millis, long timeout) {
+		return millis < 0 || millis >= timeout;
+	}
+
 	/**
 	 * Consumes all events raised by registered Clients and Servers,
 	 * including network events (accept/connect/read/write) and user-defined events.<p>
@@ -389,6 +393,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	 *			whether or not user-defined events raised.<br>
 	 */
 	public boolean doEvents(long timeout) {
+		long now = System.currentTimeMillis();
 		int keySize;
 		try {
 			keySize = timeout == 0 ? selector.selectNow() :
@@ -397,6 +402,23 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 			throw new RuntimeException(e);
 		}
 		if (keySize == 0) {
+			if (timedOut(timeout, 100) &&
+					!timedOut(System.currentTimeMillis() - now, 10) &&
+					!Thread.currentThread().isInterrupted()) {
+				Set<SelectionKey> keys = selector.keys();
+				try {
+					selector.close();
+				} catch (IOException e) {/**/}
+				try {
+					selector = Selector.open();
+					for (SelectionKey key : keys) {
+						key.channel().register(selector,
+								key.interestOps(), key.attachment());
+					}
+				} catch (IOException e) {
+					throw new RuntimeException(e);
+				}
+			}
 			invokeQueue();
 			return false;
 		}
