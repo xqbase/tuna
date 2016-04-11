@@ -393,7 +393,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	 *			whether or not user-defined events raised.<br>
 	 */
 	public boolean doEvents(long timeout) {
-		long now = System.currentTimeMillis();
+		long t = System.currentTimeMillis();
 		int keySize;
 		try {
 			keySize = timeout == 0 ? selector.selectNow() :
@@ -403,7 +403,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 		if (keySize == 0) {
 			if (timedOut(timeout, 100) &&
-					!timedOut(System.currentTimeMillis() - now, 10) &&
+					!timedOut(System.currentTimeMillis() - t, 10) &&
 					eventQueue.isEmpty() &&
 					!Thread.currentThread().isInterrupted()) {
 				Set<SelectionKey> keys = selector.keys();
