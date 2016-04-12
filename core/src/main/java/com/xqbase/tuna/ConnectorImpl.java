@@ -22,11 +22,15 @@ import java.util.regex.Pattern;
 
 import com.xqbase.tuna.util.ByteArrayQueue;
 
+class Attachment {
+	SelectionKey selectionKey;
+}
+
 /**
  * The encapsulation of a {@link SocketChannel} and its {@link SelectionKey},
  * which corresponds to a TCP Socket.
  */
-class Client {
+class Client extends Attachment {
 	private static final int STATUS_CLOSED = 0;
 	private static final int STATUS_IDLE = 1;
 	private static final int STATUS_BUSY = 2;
@@ -37,12 +41,9 @@ class Client {
 	boolean resolving = false;
 	ByteArrayQueue queue = new ByteArrayQueue();
 	SocketChannel socketChannel;
-	SelectionKey selectionKey;
 	Connection connection;
-	ConnectorImpl connector;
 
-	Client(ConnectorImpl connector, Connection connection) {
-		this.connector = connector;
+	Client(Connection connection) {
 		this.connection = connection;
 		connection.setHandler(new ConnectionHandler() {
 			@Override
@@ -199,6 +200,7 @@ class Client {
 			connection.onQueue(len);
 		}
 	}
+
 	private void unblock(int len, int fromLen) {
 		if (len == fromLen) {
 			return;
@@ -217,20 +219,18 @@ class Client {
  * The encapsulation of a {@link ServerSocketChannel} and its {@link SelectionKey},
  * which corresponds to a TCP Server Socket
  */
-class Server {
+class Server extends Attachment {
 	ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
-	SelectionKey selectionKey;
 	ServerConnection serverConnection;
-	ConnectorImpl connector;
 
 	/**
 	 * Opens a listening port and binds to a given address.
 	 * @param addr - The IP address to bind and the port to listen.
 	 * @throws IOException If an I/O error occurs when opening the port.
 	 */
-	Server(ConnectorImpl connector, ServerConnection serverConnection,
+	Server(ServerConnection serverConnection,
 			InetSocketAddress addr) throws IOException {
-		this.connector = connector;
+		// this.connector = connector;
 		this.serverConnection = serverConnection;
 		serverSocketChannel.configureBlocking(false);
 		try {
@@ -273,7 +273,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	private static Pattern hostName = Pattern.compile("[a-zA-Z]");
 	private static long nextId = 0;
 
-	private Selector selector;
+	private volatile Selector selector;
 	private boolean interrupted = false;
 	private byte[] buffer = new byte[Connection.MAX_BUFFER_SIZE];
 	private TreeMap<Timer, Runnable> timerMap = new TreeMap<>();
@@ -292,7 +292,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	@Override
 	public void connect(Connection connection,
 			InetSocketAddress socketAddress) throws IOException {
-		Client client = new Client(this, connection);
+		Client client = new Client(connection);
 		client.startConnect();
 		if (!socketAddress.isUnresolved()) {
 			client.connect(selector, socketAddress);
@@ -329,7 +329,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	@Override
 	public Connector.Closeable add(ServerConnection serverConnection,
 			InetSocketAddress socketAddress) throws IOException {
-		Server server = new Server(this, serverConnection, socketAddress);
+		Server server = new Server(serverConnection, socketAddress);
 		try {
 			server.selectionKey = server.serverSocketChannel.
 					register(selector, SelectionKey.OP_ACCEPT, server);
@@ -378,8 +378,69 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 	}
 
-	private static boolean timedOut(long millis, long timeout) {
-		return millis < 0 || millis >= timeout;
+	private static boolean shortTime(long millis) {
+		return millis >= 0 && millis < 16;
+	}
+
+	private int epollCount = 0;
+
+	private void checkEpoll(long timeout, long t, int keySize) {
+		if (keySize > 0 || shortTime(timeout) || 
+				!shortTime(System.currentTimeMillis() - t) ||
+				!eventQueue.isEmpty() ||
+				Thread.currentThread().isInterrupted()) {
+			epollCount = 0;
+			return;
+		}
+		Set<SelectionKey> keys = selector.keys();
+		// "select()" may exit immediately due to a Broken Connection
+		for (SelectionKey key : keys) {
+			Object att = key.attachment();
+			if (!(att instanceof Client)) {
+				continue;
+			}
+			Client client = (Client) att;
+			if (!client.socketChannel.isConnected() &&
+					!client.socketChannel.isConnectionPending()) {
+				/* Log.w("Abort Registering New Seletor, timeout = " + timeout +
+						", t0 = " + Time.toString(t, true) + ", t1 = " +
+						Time.toString(System.currentTimeMillis(), true)); */
+				client.startClose();
+				epollCount = 0;
+				return;
+			}
+		}
+		// E-Poll Spin Detected
+		epollCount ++;
+		/* Log.w("Epoll Spin Detected, timeout = " + timeout +
+				", t0 = " + Time.toString(t, true) + ", t1 = " +
+				Time.toString(System.currentTimeMillis(), true) +
+				", epollCount = " + epollCount + ", keys = " + keys.size()); */
+		if (epollCount < 256) {
+			return;
+		}
+		epollCount = 0;
+		// Log.w("Begin Registering New Seletor ...");
+		Selector newSelector;
+		try {
+			newSelector = Selector.open();
+			for (SelectionKey key : keys) {
+				if (!key.isValid()) {
+					// Log.w("Invaid SelectionKey Detected");
+					continue;
+				}
+				Attachment att = (Attachment) key.attachment();
+				att.selectionKey = key.channel().register(newSelector,
+						key.interestOps(), att);
+			}
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+		try {
+			selector.close();
+		} catch (IOException e) {/**/}
+		selector = newSelector;
+		// Log.w("End Registering New Seletor");
 	}
 
 	/**
@@ -401,25 +462,8 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
+		checkEpoll(timeout, t, keySize);
 		if (keySize == 0) {
-			if (timedOut(timeout, 100) &&
-					!timedOut(System.currentTimeMillis() - t, 10) &&
-					eventQueue.isEmpty() &&
-					!Thread.currentThread().isInterrupted()) {
-				Set<SelectionKey> keys = selector.keys();
-				try {
-					selector.close();
-				} catch (IOException e) {/**/}
-				try {
-					selector = Selector.open();
-					for (SelectionKey key : keys) {
-						key.channel().register(selector,
-								key.interestOps(), key.attachment());
-					}
-				} catch (IOException e) {
-					throw new RuntimeException(e);
-				}
-			}
 			invokeQueue();
 			return false;
 		}
@@ -441,7 +485,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
-				Client client = new Client(this, server.serverConnection.get());
+				Client client = new Client(server.serverConnection.get());
 				client.socketChannel = socketChannel;
 				client.add(selector, SelectionKey.OP_READ);
 				client.finishConnect();
@@ -460,7 +504,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 						}
 					} else if (bytesRead < 0) {
 						client.startClose();
-						// Disconnected, so skip onSend and onConnect
+						// Disconnected, so skip onQueue and onConnect
 						continue;
 					}
 				}
