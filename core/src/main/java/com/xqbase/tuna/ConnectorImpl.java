@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedSelectorException;
+import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -21,6 +23,8 @@ import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 import com.xqbase.tuna.util.ByteArrayQueue;
+import com.xqbase.util.Log;
+import com.xqbase.util.Time;
 
 class Attachment {
 	SelectionKey selectionKey;
@@ -265,6 +269,22 @@ class Timer implements Comparable<Timer> {
 	}
 }
 
+class Registrable {
+	private SelectableChannel channel;
+	private int interestOps;
+	private Attachment att;
+
+	Registrable(SelectionKey key) {
+		channel = key.channel();
+		interestOps = key.interestOps();
+		att = (Attachment) key.attachment();
+	}
+
+	void register(Selector selector) throws IOException {
+		att.selectionKey = channel.register(selector, interestOps, att);
+	}
+}
+
 /**
  * The encapsulation of {@link Selector},
  * which makes {@link Client} and {@link Server} working.<p>
@@ -402,9 +422,9 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 			Client client = (Client) att;
 			if (!client.socketChannel.isConnected() &&
 					!client.socketChannel.isConnectionPending()) {
-				/* Log.w("Abort Registering New Seletor, timeout = " + timeout +
+				Log.w("Abort Registering New Selector, timeout = " + timeout +
 						", t0 = " + Time.toString(t, true) + ", t1 = " +
-						Time.toString(System.currentTimeMillis(), true)); */
+						Time.toString(System.currentTimeMillis(), true));
 				client.startClose();
 				epollCount = 0;
 				return;
@@ -420,27 +440,27 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 			return;
 		}
 		epollCount = 0;
-		// Log.w("Begin Registering New Seletor ...");
-		Selector newSelector;
-		try {
-			newSelector = Selector.open();
-			for (SelectionKey key : keys) {
-				if (!key.isValid()) {
-					// Log.w("Invaid SelectionKey Detected");
-					continue;
-				}
-				Attachment att = (Attachment) key.attachment();
-				att.selectionKey = key.channel().register(newSelector,
-						key.interestOps(), att);
+		Log.w("Begin Registering New Selector ...");
+		ArrayList<Registrable> regs = new ArrayList<>();
+		for (SelectionKey key : keys) {
+			if (!key.isValid()) {
+				Log.w("Invaid SelectionKey Detected");
+				continue;
 			}
-		} catch (IOException e) {
-			throw new RuntimeException(e);
+			regs.add(new Registrable(key));
 		}
 		try {
 			selector.close();
 		} catch (IOException e) {/**/}
-		selector = newSelector;
-		// Log.w("End Registering New Seletor");
+		try {
+			selector = Selector.open();
+			for (Registrable reg : regs) {
+				reg.register(selector);
+			}
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+		Log.w("End Registering New Selector");
 	}
 
 	/**
@@ -539,7 +559,9 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	@Override
 	public void invokeLater(Runnable runnable) {
 		eventQueue.offer(runnable);
-		selector.wakeup();
+		try {
+			selector.wakeup();
+		} catch (ClosedSelectorException e) {/**/}
 	}
 
 	@Override
