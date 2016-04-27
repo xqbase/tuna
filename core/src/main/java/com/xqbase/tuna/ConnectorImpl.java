@@ -26,8 +26,15 @@ import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.util.Log;
 import com.xqbase.util.Time;
 
-class Attachment {
+abstract class Attachment {
 	SelectionKey selectionKey;
+
+	abstract void closeChannel();
+
+	void finishClose() {
+		selectionKey.cancel();
+		closeChannel();
+	}
 }
 
 /**
@@ -44,8 +51,8 @@ class Client extends Attachment {
 	int status = STATUS_IDLE;
 	boolean resolving = false;
 	ByteArrayQueue queue = new ByteArrayQueue();
-	SocketChannel socketChannel;
 	Connection connection;
+	SocketChannel socketChannel;
 
 	Client(Connection connection) {
 		this.connection = connection;
@@ -108,10 +115,7 @@ class Client extends Attachment {
 		} catch (IOException e) {
 			// May throw "Network is unreachable" or "Protocol family unavailable",
 			// and then socketChannel will be closed, and selectionKey will not be created
-			try {
-				socketChannel.close();
-			} catch (IOException e_) {/**/}
-			status = STATUS_CLOSED;
+			closeChannel();
 			throw e;
 		}
 	}
@@ -184,8 +188,8 @@ class Client extends Attachment {
 		}
 	}
 
-	void finishClose() {
-		selectionKey.cancel();
+	@Override
+	void closeChannel() {
 		try {
 			socketChannel.close();
 		} catch (IOException e) {/**/}
@@ -224,8 +228,8 @@ class Client extends Attachment {
  * which corresponds to a TCP Server Socket
  */
 class Server extends Attachment {
-	ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
 	ServerConnection serverConnection;
+	ServerSocketChannel serverSocketChannel;
 
 	/**
 	 * Opens a listening port and binds to a given address.
@@ -234,19 +238,27 @@ class Server extends Attachment {
 	 */
 	Server(ServerConnection serverConnection,
 			InetSocketAddress addr) throws IOException {
-		// this.connector = connector;
 		this.serverConnection = serverConnection;
-		serverSocketChannel.configureBlocking(false);
+		bind(addr);
+	}
+
+	void bind(InetSocketAddress addr) throws IOException {
+		try {
+			serverSocketChannel = ServerSocketChannel.open();
+			serverSocketChannel.configureBlocking(false);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 		try {
 			serverSocketChannel.socket().bind(addr);
 		} catch (IOException e) {
-			serverSocketChannel.close();
+			closeChannel();
 			throw e;
 		}
 	}
 
-	void close() {
-		selectionKey.cancel();
+	@Override
+	void closeChannel() {
 		try {
 			serverSocketChannel.close();
 		} catch (IOException e) {/**/}
@@ -274,10 +286,21 @@ class Registrable {
 	private int interestOps;
 	private Attachment att;
 
-	Registrable(SelectionKey key) {
+	/** @throws IOException if ServerSocket fails to Bind again */
+	Registrable(SelectionKey key) throws IOException {
 		channel = key.channel();
 		interestOps = key.interestOps();
 		att = (Attachment) key.attachment();
+		key.cancel(); // Need to cancel ?
+		if (!(att instanceof Server)) {
+			return;
+		}
+		// Rebuild ServerSocketChannel
+		Server server = (Server) att;
+		InetSocketAddress addr = (InetSocketAddress) server.serverSocketChannel.
+				socket().getLocalSocketAddress();
+		server.closeChannel();
+		server.bind(addr);
 	}
 
 	void register(Selector selector) throws IOException {
@@ -358,7 +381,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 		return () -> {
 			if (server.selectionKey.isValid()) {
-				server.close();
+				server.finishClose();
 			}
 		};
 	}
@@ -413,7 +436,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 			return;
 		}
 		Set<SelectionKey> keys = selector.keys();
-		// "select()" may exit immediately due to a Broken Connection
+		// TODO Remove: "select()" may exit immediately due to a Broken Connection ?
 		for (SelectionKey key : keys) {
 			Object att = key.attachment();
 			if (!(att instanceof Client)) {
@@ -432,22 +455,26 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		}
 		// E-Poll Spin Detected
 		epollCount ++;
-		/* Log.w("Epoll Spin Detected, timeout = " + timeout +
-				", t0 = " + Time.toString(t, true) + ", t1 = " +
-				Time.toString(System.currentTimeMillis(), true) +
-				", epollCount = " + epollCount + ", keys = " + keys.size()); */
 		if (epollCount < 256) {
 			return;
 		}
 		epollCount = 0;
-		Log.w("Begin Registering New Selector ...");
+		Log.w("Epoll Spin Detected, timeout = " + timeout +
+				", t0 = " + Time.toString(t, true) + ", t1 = " +
+				Time.toString(System.currentTimeMillis(), true) +
+				", keys = " + keys.size());
+		Log.w("Begin Registering New Selector " + selector + " ...");
 		ArrayList<Registrable> regs = new ArrayList<>();
 		for (SelectionKey key : keys) {
 			if (!key.isValid()) {
 				Log.w("Invaid SelectionKey Detected");
 				continue;
 			}
-			regs.add(new Registrable(key));
+			try {
+				regs.add(new Registrable(key));
+			} catch (IOException e) {
+				// Ignored if ServerSocket fails to Bind again
+			}
 		}
 		try {
 			selector.close();
@@ -460,7 +487,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
-		Log.w("End Registering New Selector");
+		Log.w("End Registering New Selector " + selector);
 	}
 
 	/**
@@ -595,12 +622,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	public void close() {
 		executor.shutdown();
 		for (SelectionKey key : selector.keys()) {
-			Object o = key.attachment();
-			if (o instanceof Server) {
-				((Server) o).close();
-			} else {
-				((Client) o).finishClose();
-			}
+			((Attachment) key.attachment()).finishClose();
 		}
 		try {
 			selector.close();
