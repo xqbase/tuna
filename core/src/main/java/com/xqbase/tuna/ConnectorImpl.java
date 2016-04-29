@@ -301,6 +301,7 @@ class Registrable {
 				socket().getLocalSocketAddress();
 		server.closeChannel();
 		server.bind(addr);
+		channel = server.serverSocketChannel;
 	}
 
 	void register(Selector selector) throws IOException {
