@@ -305,7 +305,13 @@ class Registrable {
 	}
 
 	void register(Selector selector) throws IOException {
-		att.selectionKey = channel.register(selector, interestOps, att);
+		if (att instanceof Server) {
+			att.selectionKey = channel.register(selector, interestOps, att);
+			return;
+		}
+		// TODO Remove
+		Client client = (Client) att;
+		client.startClose();
 	}
 }
 
