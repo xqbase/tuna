@@ -305,13 +305,13 @@ class Registrable {
 	}
 
 	void register(Selector selector) throws IOException {
-		if (att instanceof Server) {
-			att.selectionKey = channel.register(selector, interestOps, att);
+		if ((interestOps & SelectionKey.OP_CONNECT) != 0) {
+			// TODO Remove
+			((Client) att).startClose();
+			Log.w("Removed a Connection-Pending Channel, interestOps = " + interestOps);
 			return;
 		}
-		// TODO Remove
-		Client client = (Client) att;
-		client.startClose();
+		att.selectionKey = channel.register(selector, interestOps, att);
 	}
 }
 
