@@ -68,7 +68,7 @@ class Client extends Attachment {
 				boolean toBlock = bufferSize <= 0;
 				Client.this.bufferSize = Math.max(0,
 						Math.min(bufferSize, Connection.MAX_BUFFER_SIZE));
-				if ((blocked ^ toBlock) && !resolving && status != STATUS_CLOSED) {
+				if ((blocked ^ toBlock) && !resolving && isOpen()) {
 					// may be called before resolve
 					interestOps();
 				}
@@ -180,7 +180,7 @@ class Client extends Attachment {
 	}
 
 	void startClose() {
-		if (status != STATUS_CLOSED) {
+		if (isOpen()) {
 			finishClose();
 			// Call "close()" before "onDisconnect()"
 			// to avoid recursive "disconnect()".
@@ -194,6 +194,10 @@ class Client extends Attachment {
 			socketChannel.close();
 		} catch (IOException e) {/**/}
 		status = STATUS_CLOSED;
+	}
+
+	boolean isOpen() {
+		return status != STATUS_CLOSED;
 	}
 
 	boolean isBusy() {
@@ -305,13 +309,17 @@ class Registrable {
 	}
 
 	void register(Selector selector) throws IOException {
+		Client client = ((Client) att);
 		if ((interestOps & SelectionKey.OP_CONNECT) != 0) {
 			// TODO Remove
-			((Client) att).startClose();
+			client.startClose();
 			Log.w("Removed a Connection-Pending Channel, interestOps = " + interestOps);
 			return;
 		}
-		att.selectionKey = channel.register(selector, interestOps, att);
+		// Client may be closed by closing of Connection-Pending Channel
+		if (client.isOpen()) {
+			att.selectionKey = channel.register(selector, interestOps, att);
+		}
 	}
 }
 
