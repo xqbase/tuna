@@ -309,17 +309,17 @@ class Registrable {
 	}
 
 	void register(Selector selector) throws IOException {
-		Client client = ((Client) att);
 		if ((interestOps & SelectionKey.OP_CONNECT) != 0) {
 			// TODO Remove
-			client.startClose();
+			((Client) att).startClose();
 			Log.w("Removed a Connection-Pending Channel, interestOps = " + interestOps);
 			return;
 		}
 		// Client may be closed by closing of Connection-Pending Channel
-		if (client.isOpen()) {
-			att.selectionKey = channel.register(selector, interestOps, att);
+		if (att instanceof Client && !((Client) att).isOpen()) {
+			return;
 		}
+		att.selectionKey = channel.register(selector, interestOps, att);
 	}
 }
 
