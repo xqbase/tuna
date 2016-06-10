@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.xqbase</groupId>
 	<artifactId>tuna-tools</artifactId>
-	<version>0.1.0</version>
+	<version>0.1.2</version>
 	<packaging>jar</packaging>
 	<name>Tuna Tools</name>
 	<description>a Lightweight and High Performance Java Network Framework - Tools Part</description>
@@ -70,17 +70,17 @@
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-misc</artifactId>
-			<version>0.1.1</version>
+			<version>0.1.2</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-mux</artifactId>
-			<version>0.1.1</version>
+			<version>0.1.2</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>xqbase-util</artifactId>
-			<version>0.2.7</version>
+			<version>0.2.9</version>
 		</dependency>
 	</dependencies>
 </project>

@@ -23,8 +23,6 @@ import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 import com.xqbase.tuna.util.ByteArrayQueue;
-import com.xqbase.util.Log;
-import com.xqbase.util.Time;
 
 abstract class Attachment {
 	SelectionKey selectionKey;
@@ -310,9 +308,8 @@ class Registrable {
 
 	void register(Selector selector) throws IOException {
 		if ((interestOps & SelectionKey.OP_CONNECT) != 0) {
-			// TODO Remove
 			((Client) att).startClose();
-			Log.w("Removed a Connection-Pending Channel, interestOps = " + interestOps);
+			// Log.w("Removed a Connection-Pending Channel, interestOps = " + interestOps);
 			return;
 		}
 		// Client may be closed by closing of Connection-Pending Channel
@@ -451,8 +448,8 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 			return;
 		}
 		Set<SelectionKey> keys = selector.keys();
-		// TODO Remove: "select()" may exit immediately due to a Broken Connection ?
-		for (SelectionKey key : keys) {
+		// "select()" may exit immediately due to a Broken Connection ?
+		/* for (SelectionKey key : keys) {
 			Object att = key.attachment();
 			if (!(att instanceof Client)) {
 				continue;
@@ -467,22 +464,22 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 				epollCount = 0;
 				return;
 			}
-		}
+		} */
 		// E-Poll Spin Detected
 		epollCount ++;
 		if (epollCount < 256) {
 			return;
 		}
 		epollCount = 0;
-		Log.w("Epoll Spin Detected, timeout = " + timeout +
+		/* Log.w("Epoll Spin Detected, timeout = " + timeout +
 				", t0 = " + Time.toString(t, true) + ", t1 = " +
 				Time.toString(System.currentTimeMillis(), true) +
-				", keys = " + keys.size());
-		Log.w("Begin Registering New Selector " + selector + " ...");
+				", keys = " + keys.size()); */
+		// Log.w("Begin Registering New Selector " + selector + " ...");
 		ArrayList<Registrable> regs = new ArrayList<>();
 		for (SelectionKey key : keys) {
 			if (!key.isValid()) {
-				Log.w("Invaid SelectionKey Detected");
+				// Log.w("Invaid SelectionKey Detected");
 				continue;
 			}
 			try {
@@ -502,7 +499,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
-		Log.w("End Registering New Selector " + selector);
+		// Log.w("End Registering New Selector " + selector);
 	}
 
 	/**
