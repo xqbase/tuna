@@ -86,6 +86,17 @@ public class ByteArrayQueue implements Cloneable {
 		shared = false;
 	}
 
+	private int addLength(int len) {
+		int newLength = length + len;
+		if (shared || newLength > array.length) {
+			setCapacity(Math.max(array.length << 1, newLength));
+		} else if (offset + newLength > array.length) {
+			System.arraycopy(array, offset, array, 0, length);
+			offset = 0;
+		}
+		return newLength;
+	}
+
 	/**
 	 * Adds a sequence of bytes into the tail of the queue,
 	 * equivalent to <code>add(b, 0, b.length).</code>
@@ -96,14 +107,16 @@ public class ByteArrayQueue implements Cloneable {
 
 	/** Adds a sequence of bytes into the tail of the queue. */
 	public ByteArrayQueue add(byte[] b, int off, int len) {
-		int newLength = length + len;
-		if (shared || newLength > array.length) {
-			setCapacity(Math.max(array.length << 1, newLength));
-		} else if (offset + newLength > array.length) {
-			System.arraycopy(array, offset, array, 0, length);
-			offset = 0;
-		}
+		int newLength = addLength(len);
 		System.arraycopy(b, off, array, offset + length, len);
+		length = newLength;
+		return this;
+	}
+
+	/** Adds one byte into the tail of the queue. */
+	public ByteArrayQueue add(int b) {
+		int newLength = addLength(1);
+		array[offset + length] = (byte) b;
 		length = newLength;
 		return this;
 	}
@@ -118,7 +131,7 @@ public class ByteArrayQueue implements Cloneable {
 		return new OutputStream() {
 			@Override
 			public void write(int b) {
-				write(new byte[] {(byte) b}, 0, 1);
+				add(b);
 			}
 
 			@Override
@@ -155,6 +168,13 @@ public class ByteArrayQueue implements Cloneable {
 		return this;
 	}
 
+	/** Retrieves one byte from the head of the queue. */
+	public int remove() {
+		int b = array[offset] & 0xFF;
+		remove(1);
+		return b;
+	}
+
 	/**
 	 * @return An {@link InputStream} suitable for reading binary data
 	 *			from the head of the queue.
@@ -165,11 +185,7 @@ public class ByteArrayQueue implements Cloneable {
 		return new InputStream() {
 			@Override
 			public int read() {
-				byte[] b = {0};
-				if (read(b, 0, 1) <= 0) {
-					return -1;
-				}
-				return b[0] & 0xFF;
+				return length() == 0 ? -1 : remove();
 			}
 
 			@Override
