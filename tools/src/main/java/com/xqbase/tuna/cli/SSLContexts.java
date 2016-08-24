@@ -1,12 +1,14 @@
 package com.xqbase.tuna.cli;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.cert.X509Certificate;
 import java.util.Date;
+import java.util.Random;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -25,6 +27,8 @@ import sun.security.x509.X509CertInfo;
 import com.xqbase.tuna.ssl.SSLManagers;
 
 class SSLContexts {
+	private static Random random = new Random();
+
 	static SSLContext get(String dn, long expire)
 			throws IOException, GeneralSecurityException {
 		KeyManager[] kms;
@@ -39,7 +43,7 @@ class SSLContexts {
 			long now = System.currentTimeMillis();
 			X509CertInfo info = new X509CertInfo();
 			info.set("version", new CertificateVersion(2));
-			info.set("serialNumber", new CertificateSerialNumber(0));
+			info.set("serialNumber", new CertificateSerialNumber(new BigInteger(128, random)));
 			info.set("algorithmID",
 					new CertificateAlgorithmId(AlgorithmId.get("SHA1withRSA")));
 			X500Name x500Name = new X500Name(dn);
