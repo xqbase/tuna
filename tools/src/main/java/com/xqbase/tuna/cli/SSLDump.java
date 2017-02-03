@@ -49,7 +49,7 @@ public class SSLDump {
 					connector, ssltq, sslcClient, SSLFilter.CLIENT));
 			connector.add(server.appendFilter(() -> new DumpFilter().setDumpText(true)).
 					appendFilter(() -> new SSLFilter(connector,
-					connector, ssltq, sslcServer, SSLFilter.SERVER_NO_AUTH)), 443);
+					connector, ssltq, sslcServer, SSLFilter.SERVER_NO_AUTH)), port);
 			Log.i(String.format("SSLDump Started (%s:%s->%s:%s)",
 					hostName, "" + port, hostAddr, "" + port));
 			connector.doEvents();
