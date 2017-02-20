@@ -54,10 +54,7 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 	public static final int CLIENT = 3;
 
 	public static TimeoutQueue<SSLFilter> getTimeoutQueue(int timeout) {
-		return new TimeoutQueue<>(sslf -> {
-			sslf.disconnect();
-			sslf.onDisconnect();
-		}, timeout);
+		return new TimeoutQueue<>(sslf -> sslf.disconnectIfClosed(true), timeout);
 	}
 
 	private EventQueue eventQueue;
@@ -136,7 +133,7 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 	@Override
 	public void send(byte[] b, int off, int len) {
 		if (hs == HandshakeStatus.FINISHED) {
-			wrap(b, off, len);
+			disconnectIfClosed(wrap(b, off, len));
 		} else {
 			baqToSend.add(b, off, len);
 		}
@@ -146,8 +143,9 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 	public void onRecv(byte[] b, int off, int len) {
 		baqRecv.add(b, off, len);
 		if (hs == HandshakeStatus.FINISHED) {
-			unwrap();
+			boolean closed = unwrap();
 			onRecv();
+			disconnectIfClosed(closed);
 		} else if (hs != HandshakeStatus.NEED_TASK) {
 			handshake();
 		}
@@ -174,6 +172,13 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 		removeTimeout();
 	}
 
+	private void disconnectIfClosed(boolean closed) {
+		if (closed) {
+			disconnect();
+			onDisconnect();
+		}
+	}
+
 	private void removeTimeout() {
 		if (timeoutEntry != null) {
 			timeoutEntry.remove();
@@ -188,20 +193,19 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 		}
 	}
 
-	private void unwrap() {
+	/** @return true if closed */
+	private boolean unwrap() {
 		while (true) {
 			SSLEngineResult result;
 			try {
 				result = unwrapEx();
 			} catch (IOException e) {
-				disconnect();
-				onDisconnect();
-				return;
+				return true;
 			}
 			switch (result.getStatus()) {
 			case BUFFER_UNDERFLOW:
 				// Wait for next onRecv
-				return;
+				return false;
 			case BUFFER_OVERFLOW:
 				appBBSize = ssle.getSession().getApplicationBufferSize();
 				// Retry unwrapEx
@@ -211,13 +215,9 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 					// Continue unwrapEx
 					break;
 				}
-				disconnect();
-				onDisconnect();
-				return;
+				return true;
 			case CLOSED:
-				disconnect();
-				onDisconnect();
-				return;
+				return true;
 			}
 		}
 	}
@@ -239,12 +239,13 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 		return result;
 	}
 
-	private void wrap(byte[] b, int off, int len) {
+	/** @return true if closed */
+	private boolean wrap(byte[] b, int off, int len) {
 		try {
 			wrapEx(b, off, len);
+			return false;
 		} catch (IOException e) {
-			disconnect();
-			onDisconnect();
+			return true;
 		}
 	}
 
@@ -282,8 +283,7 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 		try {
 			handshakeEx();
 		} catch (IOException e) {
-			disconnect();
-			onDisconnect();
+			disconnectIfClosed(true);
 		}
 	}
 
@@ -333,13 +333,17 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 		removeTimeout();
 		super.onConnect(new SSLConnectionSession(session.getLocalSocketAddress(),
 				session.getRemoteSocketAddress(), ssle.getSession()));
+		boolean closed = false;
 		if (baqRecv.length() > 0) {
-			unwrap();
+			closed = unwrap();
 		}
 		onRecv();
 		if (baqToSend.length() > 0) {
-			wrap(baqToSend.array(), baqToSend.offset(), baqToSend.length());
+			if (wrap(baqToSend.array(), baqToSend.offset(), baqToSend.length())) {
+				closed = true;
+			}
 		}
 		baqToSend = null;
+		disconnectIfClosed(closed);
 	}
 }
