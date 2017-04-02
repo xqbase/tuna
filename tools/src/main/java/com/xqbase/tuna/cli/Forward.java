@@ -7,6 +7,8 @@ import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 
 import com.xqbase.tuna.ConnectorImpl;
+import com.xqbase.tuna.ServerConnection;
+import com.xqbase.tuna.misc.DumpFilter;
 import com.xqbase.tuna.misc.ForwardServer;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.util.TimeoutQueue;
@@ -18,6 +20,10 @@ import com.xqbase.util.Service;
 public class Forward {
 	private static Service service = new Service();
 
+	private static boolean option(String[] args, int position, String expected) {
+		return args.length > position && expected.equalsIgnoreCase(args[position]);
+	}
+
 	public static void main(String[] args) {
 		if (!service.startup(args)) {
 			return;
@@ -25,7 +31,7 @@ public class Forward {
 		if (args.length < 3) {
 			System.out.println("Forward Usage: java -cp tuna-tools.jar " +
 					"com.xqbase.tuna.cli.Forward <local-port> " +
-					"<remote-host> <remote-port> [-s]");
+					"<remote-host> <remote-port> [-s] [-d]");
 			service.shutdown();
 			return;
 		}
@@ -36,7 +42,8 @@ public class Forward {
 		int port = Numbers.parseInt(args[0], 443, 1, 65535);
 		String remoteHost = args[1];
 		int remotePort = Numbers.parseInt(args[2], 443, 1, 65535);
-		boolean ssl = args.length > 3 && "-s".equalsIgnoreCase(args[3]);
+		boolean ssl = option(args, 3, "-s");
+		boolean dump = ssl ? option(args, 4, "-d") : option(args, 3, "-d");
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			service.addShutdownHook(connector::interrupt);
 			ForwardServer server = new ForwardServer(connector, remoteHost, remotePort);
@@ -47,7 +54,10 @@ public class Forward {
 				server.appendRemoteFilter(() -> new SSLFilter(connector,
 						connector, ssltq, sslc, SSLFilter.CLIENT));
 			}
-			connector.add(server, port);
+			ServerConnection server_ = dump ?
+					server.appendFilter(() -> new DumpFilter().setDumpText(true)) :
+					server;
+			connector.add(server_, port);
 			Log.i(String.format("Forward Started (%s->%s:%s%s)",
 					"" + port, remoteHost, "" + remotePort, ssl ? "s" : ""));
 			connector.doEvents();
