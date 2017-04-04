@@ -1,5 +1,6 @@
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.Set;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
@@ -11,7 +12,7 @@ public class TestBroadcast {
 
 	public static void main(String[] args) throws IOException {
 		// All connected handlers
-		HashSet<ConnectionHandler> handlers = new HashSet<>();
+		Set<ConnectionHandler> handlers = new HashSet<>();
 		// Initialize a connector
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			connector.add(() -> {

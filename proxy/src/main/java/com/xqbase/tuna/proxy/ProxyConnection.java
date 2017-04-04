@@ -10,6 +10,7 @@ import java.security.cert.CertificateFactory;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import javax.net.ssl.SSLSession;
@@ -51,8 +52,8 @@ public class ProxyConnection
 			"<body><center><h1>%d %s</h1></center><hr><center>Tuna Proxy/0.1.2</center></body>" +
 			"</html>";
 
-	private static HashMap<Integer, String> reasonMap = new HashMap<>();
-	private static HashMap<Integer, byte[]> errorPageMap = new HashMap<>();
+	private static Map<Integer, String> reasonMap = new HashMap<>();
+	private static Map<Integer, byte[]> errorPageMap = new HashMap<>();
 
 	static {
 		try {
@@ -125,7 +126,7 @@ public class ProxyConnection
 	private ClientConnection client = null;
 	private ByteArrayQueue queue = new ByteArrayQueue();
 	private HttpPacket request = new HttpPacket();
-	private HashMap<String, Object> attributeMap = new HashMap<>();
+	private Map<String, Object> attributeMap = new HashMap<>();
 
 	private void readEx() throws HttpPacketException {
 		request.read(queue);

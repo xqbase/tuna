@@ -1,6 +1,7 @@
 package com.xqbase.tuna.mux;
 
 import java.util.HashMap;
+import java.util.Map;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
@@ -17,7 +18,7 @@ class MuxClientConnection implements Connection {
 	private int[] lastSize = {0};
 	private int logLevel;
 
-	HashMap<Integer, TerminalConnection> connectionMap = new HashMap<>();
+	Map<Integer, TerminalConnection> connectionMap = new HashMap<>();
 	IdPool idPool = new IdPool();
 	String send = "", recv = "";
 	MuxContext context;

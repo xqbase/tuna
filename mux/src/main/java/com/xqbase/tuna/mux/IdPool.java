@@ -1,14 +1,16 @@
 package com.xqbase.tuna.mux;
 
 import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.Set;
 
 class IdPool {
 	private static final int MAX_ID = 65535;
 
 	private int nextId = 0;
-	private ArrayDeque<Integer> returned = new ArrayDeque<>();
-	private HashSet<Integer> borrowed = new HashSet<>();
+	private Deque<Integer> returned = new ArrayDeque<>();
+	private Set<Integer> borrowed = new HashSet<>();
 
 	int borrowId() {
 		Integer i = returned.poll();

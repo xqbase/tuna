@@ -2,6 +2,7 @@ package com.xqbase.tuna.misc;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Supplier;
 
 import com.xqbase.tuna.ConnectionFilter;
@@ -12,7 +13,7 @@ public class DoSServerFilter implements Supplier<ConnectionFilter> {
 	class DoSFilter extends ConnectionFilter {
 		private String remoteAddr;
 
-		private int[] getData(HashMap<String, int[]> map, int length) {
+		private int[] getData(Map<String, int[]> map, int length) {
 			int[] data = map.get(remoteAddr);
 			if (data == null) {
 				data = new int[length];
@@ -74,9 +75,9 @@ public class DoSServerFilter implements Supplier<ConnectionFilter> {
 	}
 
 	/** To record how many connections from one IP. */
-	HashMap<String, int[]> connectionsMap = new HashMap<>();
+	Map<String, int[]> connectionsMap = new HashMap<>();
 	/** To record how many requests and bytes from one IP. */
-	HashMap<String, int[]> requestsMap = new HashMap<>();
+	Map<String, int[]> requestsMap = new HashMap<>();
 
 	void checkTimeout() {
 		long now = System.currentTimeMillis();

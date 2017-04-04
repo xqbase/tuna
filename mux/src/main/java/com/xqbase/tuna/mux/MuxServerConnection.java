@@ -6,6 +6,7 @@ import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
+import java.util.Map;
 
 import javax.net.ssl.SSLSession;
 
@@ -28,7 +29,7 @@ class MuxServerConnection implements Connection {
 	private ServerConnection server;
 	private int logLevel;
 
-	HashMap<Integer, VirtualConnection> connectionMap = new HashMap<>();
+	Map<Integer, VirtualConnection> connectionMap = new HashMap<>();
 	String send = "";
 	MuxContext context;
 	ConnectionHandler handler;

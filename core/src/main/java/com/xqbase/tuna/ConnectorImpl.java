@@ -13,7 +13,9 @@ import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -331,8 +333,8 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 	private volatile Selector selector;
 	private boolean interrupted = false;
 	private byte[] buffer = new byte[Connection.MAX_BUFFER_SIZE];
-	private TreeMap<Timer, Runnable> timerMap = new TreeMap<>();
-	private ConcurrentLinkedQueue<Runnable> eventQueue = new ConcurrentLinkedQueue<>();
+	private Map<Timer, Runnable> timerMap = new TreeMap<>();
+	private Queue<Runnable> eventQueue = new ConcurrentLinkedQueue<>();
 	private ExecutorService executor = Executors.newCachedThreadPool();
 
 	{
@@ -413,7 +415,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 
 	private void invokeQueue() {
 		long now = System.currentTimeMillis();
-		ArrayList<Runnable> runnables = new ArrayList<>();
+		List<Runnable> runnables = new ArrayList<>();
 		Iterator<Map.Entry<Timer, Runnable>> it = timerMap.entrySet().iterator();
 		while (it.hasNext()) {
 			Map.Entry<Timer, Runnable> entry = it.next();
@@ -476,7 +478,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 				Time.toString(System.currentTimeMillis(), true) +
 				", keys = " + keys.size()); */
 		// Log.w("Begin Registering New Selector " + selector + " ...");
-		ArrayList<Registrable> regs = new ArrayList<>();
+		List<Registrable> regs = new ArrayList<>();
 		for (SelectionKey key : keys) {
 			if (!key.isValid()) {
 				// Log.w("Invaid SelectionKey Detected");

@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.List;
 
 import javax.security.auth.x500.X500Principal;
 
@@ -116,7 +117,7 @@ public class CertMap extends HashMap<X500Principal, X509Certificate> {
 	}
 
 	public X509Certificate[] getCertificateChain(X509Certificate... certs) {
-		ArrayList<X509Certificate> certList = new ArrayList<>();
+		List<X509Certificate> certList = new ArrayList<>();
 		if (certs.length > 0) {
 			for (X509Certificate cert : certs) {
 				certList.add(cert);

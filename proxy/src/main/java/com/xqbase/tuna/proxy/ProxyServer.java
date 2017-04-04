@@ -5,6 +5,8 @@ import java.io.StringWriter;
 import java.security.GeneralSecurityException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
@@ -67,9 +69,9 @@ public class ProxyServer implements ServerConnection, Runnable {
 		}
 	}, DEFAULT_TIMEOUT);
 
-	private HashSet<ProxyConnection> connections = new HashSet<>();
-	private HashMap<String, LinkedEntry<ClientConnection>> plainClientMap = new HashMap<>();
-	private HashMap<String, LinkedEntry<ClientConnection>> secureClientMap = new HashMap<>();
+	private Set<ProxyConnection> connections = new HashSet<>();
+	private Map<String, LinkedEntry<ClientConnection>> plainClientMap = new HashMap<>();
+	private Map<String, LinkedEntry<ClientConnection>> secureClientMap = new HashMap<>();
 	private TimeoutQueue<ClientConnection> clientTimeoutQueue =
 			new TimeoutQueue<>(client -> disconnect(client), DEFAULT_TIMEOUT);
 
@@ -82,7 +84,7 @@ public class ProxyServer implements ServerConnection, Runnable {
 	}
 
 	ClientConnection borrowClient(String host, boolean secure) {
-		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
+		Map<String, LinkedEntry<ClientConnection>> clientMap =
 				secure ? secureClientMap : plainClientMap;
 		LinkedEntry<ClientConnection> queue = clientMap.get(host);
 		if (queue == null) {
@@ -95,7 +97,7 @@ public class ProxyServer implements ServerConnection, Runnable {
 
 	void returnClient(ClientConnection client) {
 		client.clear();
-		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
+		Map<String, LinkedEntry<ClientConnection>> clientMap =
 				client.secure ? secureClientMap : plainClientMap;
 		LinkedEntry<ClientConnection> queue = clientMap.get(client.host);
 		if (queue == null) {
@@ -110,7 +112,7 @@ public class ProxyServer implements ServerConnection, Runnable {
 	void removeClient(ClientConnection client) {
 		client.linkedEntry.remove();
 		client.timeoutEntry.remove();
-		HashMap<String, LinkedEntry<ClientConnection>> clientMap =
+		Map<String, LinkedEntry<ClientConnection>> clientMap =
 				client.secure ? secureClientMap : plainClientMap;
 		LinkedEntry<ClientConnection> queue = clientMap.get(client.host);
 		if (queue != null && queue.isEmpty()) {
@@ -177,7 +179,7 @@ public class ProxyServer implements ServerConnection, Runnable {
 		Log.v(sw.toString());
 	}
 
-	public HashSet<ProxyConnection> getConnections() {
+	public Set<ProxyConnection> getConnections() {
 		return connections;
 	}
 

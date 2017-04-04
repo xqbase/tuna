@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.xqbase.tuna.ConnectionHandler;
@@ -42,7 +43,7 @@ public class HttpPacket {
 	private String method = null;
 	private String uri = null;
 	private String reason = null;
-	private LinkedHashMap<String, ArrayList<String>> headers = new LinkedHashMap<>();
+	private Map<String, List<String>> headers = new LinkedHashMap<>();
 	private ByteArrayQueue body = new ByteArrayQueue();
 	private StringBuilder line = new StringBuilder();
 
@@ -165,7 +166,7 @@ public class HttpPacket {
 	}
 
 	/** @return HTTP Headers for request or response */
-	public LinkedHashMap<String, ArrayList<String>> getHeaders() {
+	public Map<String, List<String>> getHeaders() {
 		return headers;
 	}
 
@@ -224,7 +225,7 @@ public class HttpPacket {
 		}
 		String originalKey = line.substring(0, colon);
 		String key = originalKey.toUpperCase();
-		ArrayList<String> values = headers.get(key);
+		List<String> values = headers.get(key);
 		if (values == null) {
 			values = new ArrayList<>();
 			values.add(originalKey);
@@ -382,7 +383,7 @@ public class HttpPacket {
 	 * @param value Field Value in <b>Lower Case</b>
 	 */
 	public boolean testHeader(String key, String value) {
-		ArrayList<String> values = headers.get(key);
+		List<String> values = headers.get(key);
 		if (values == null) {
 			return false;
 		}
@@ -399,7 +400,7 @@ public class HttpPacket {
 
 	/** @param key Field Name in <b>Upper Case</b> */
 	public String getHeader(String key) {
-		ArrayList<String> values = headers.get(key);
+		List<String> values = headers.get(key);
 		return values == null || values.size() != 2 ? null : values.get(1);
 	}
 
@@ -414,7 +415,7 @@ public class HttpPacket {
 	 */
 	public void setHeader(String key, String value) {
 		String key_ = key.toUpperCase();
-		ArrayList<String> values = headers.get(key_);
+		List<String> values = headers.get(key_);
 		if (values == null) {
 			values = new ArrayList<>();
 			headers.put(key_, values);
@@ -431,12 +432,12 @@ public class HttpPacket {
 	}
 
 	public void writeHeaders(ByteArrayQueue data) {
-		Iterator<Map.Entry<String, ArrayList<String>>> it =
+		Iterator<Map.Entry<String, List<String>>> it =
 				headers.entrySet().iterator();
 		while (it.hasNext()) {
-			Map.Entry<String, ArrayList<String>> entry = it.next();
+			Map.Entry<String, List<String>> entry = it.next();
 			it.remove();
-			ArrayList<String> values = entry.getValue();
+			List<String> values = entry.getValue();
 			int size = values.size();
 			if (size < 1) {
 				continue;

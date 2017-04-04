@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.function.Predicate;
 import java.util.logging.Logger;
@@ -111,7 +112,7 @@ public class TunaProxy {
 
 			ProxyServer server = new ProxyServer(connector, connector, connector);
 			if (authEnabled) {
-				HashMap<String, String> authMap = new HashMap<>();
+				Map<String, String> authMap = new HashMap<>();
 				server.setAuth((t, u) -> {
 					if (t == null) {
 						return false;
@@ -126,7 +127,7 @@ public class TunaProxy {
 				}, 0, 10000);
 			}
 			if (lookupEnabled) {
-				HashMap<String, String> lookupMap = new HashMap<>();
+				Map<String, String> lookupMap = new HashMap<>();
 				server.setLookup(lookupMap::get);
 				connector.scheduleDelayed(() -> {
 					lookupMap.clear();

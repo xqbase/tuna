@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.xqbase</groupId>
 	<artifactId>tuna-proxy</artifactId>
-	<version>0.1.2</version>
+	<version>0.1.4-SNAPSHOT</version>
 	<packaging>jar</packaging>
 	<name>Tuna Proxy</name>
 	<description>a Lightweight and High Performance Java Network Framework - Proxy Part</description>
@@ -70,17 +70,17 @@
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-core</artifactId>
-			<version>0.1.3</version>
+			<version>0.1.4-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-http</artifactId>
-			<version>0.1.2</version>
+			<version>0.1.4-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-mux</artifactId>
-			<version>0.1.2</version>
+			<version>0.1.4-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>

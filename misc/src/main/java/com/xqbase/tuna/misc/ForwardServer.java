@@ -2,6 +2,7 @@ package com.xqbase.tuna.misc;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Supplier;
 
 import com.xqbase.tuna.Connection;
@@ -76,7 +77,7 @@ public class ForwardServer implements ServerConnection {
 	Connector connector;
 	String host;
 	int port;
-	ArrayList<Supplier<? extends ConnectionFilter>> serverFilters = new ArrayList<>();
+	List<Supplier<? extends ConnectionFilter>> serverFilters = new ArrayList<>();
 
 	@Override
 	public Connection get() {

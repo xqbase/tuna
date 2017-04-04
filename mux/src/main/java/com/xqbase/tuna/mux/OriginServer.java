@@ -2,6 +2,7 @@ package com.xqbase.tuna.mux;
 
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.Set;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ServerConnection;
@@ -65,7 +66,7 @@ class OriginMuxConnection extends MuxServerConnection {
  * @see EdgeServer
  */
 public class OriginServer implements ServerConnection, AutoCloseable {
-	LinkedHashSet<OriginMuxConnection> timeoutSet = new LinkedHashSet<>();
+	Set<OriginMuxConnection> timeoutSet = new LinkedHashSet<>();
 	ServerConnection server;
 	MuxContext context;
 

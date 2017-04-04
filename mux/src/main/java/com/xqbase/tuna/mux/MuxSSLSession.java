@@ -15,18 +15,18 @@ import javax.net.ssl.SSLSessionContext;
 import javax.security.cert.CertificateException;
 import javax.security.cert.X509Certificate;
 
+import com.xqbase.tuna.util.ByteArrayQueue;
 import com.xqbase.tuna.util.Bytes;
-import com.xqbase.util.ByteArrayQueue;
 import com.xqbase.util.Log;
 
 class MuxSSLSession implements SSLSession {
 	private static final Certificate[] EMPTY_CERTIFICATES = {};
 
-	private static HashMap<String, Integer> proto2Ver = new HashMap<>();
-	private static HashMap<Integer, String> ver2Proto = new HashMap<>();
+	private static Map<String, Integer> proto2Ver = new HashMap<>();
+	private static Map<Integer, String> ver2Proto = new HashMap<>();
 
-	private static HashMap<String, Integer> cipherName2Id = new HashMap<>();
-	private static HashMap<Integer, String> cipherId2Name = new HashMap<>();
+	private static Map<String, Integer> cipherName2Id = new HashMap<>();
+	private static Map<Integer, String> cipherId2Name = new HashMap<>();
 
 	private static void addProtoVer(String proto, int ver) {
 		Integer ver_ = Integer.valueOf(ver);

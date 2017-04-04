@@ -3,6 +3,7 @@ package com.xqbase.tuna.mux;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.Set;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.Connector;
@@ -78,7 +79,7 @@ class HostMuxConnection extends MuxClientConnection implements ServerConnection 
 }
 
 public class HostServer implements ServerConnection, AutoCloseable {
-	LinkedHashSet<HostMuxConnection> timeoutSet = new LinkedHashSet<>();
+	Set<HostMuxConnection> timeoutSet = new LinkedHashSet<>();
 	Connector connector;
 	MuxContext context;
 

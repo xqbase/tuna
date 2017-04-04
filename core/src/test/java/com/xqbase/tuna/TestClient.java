@@ -2,10 +2,7 @@ package com.xqbase.tuna;
 
 import java.util.LinkedHashSet;
 import java.util.Random;
-
-import com.xqbase.tuna.Connection;
-import com.xqbase.tuna.ConnectionHandler;
-import com.xqbase.tuna.ConnectorImpl;
+import java.util.Set;
 
 public class TestClient {
 	static int connections = 0, responses = 0, errors = 0;
@@ -13,7 +10,7 @@ public class TestClient {
 	// To test under Windows, you should add a registry item "MaxUserPort = 65534" in
 	// HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
 	public static void main(String[] args) throws Exception {
-		final LinkedHashSet<ConnectionHandler> handlerSet = new LinkedHashSet<>();
+		final Set<ConnectionHandler> handlerSet = new LinkedHashSet<>();
 		Random random = new Random();
 		try (ConnectorImpl connector = new ConnectorImpl()) {
 			int count = 0;

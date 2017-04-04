@@ -3,6 +3,8 @@ package com.xqbase.tuna.mux;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import com.xqbase.tuna.ConnectionFilter;
 import com.xqbase.tuna.ConnectionHandler;
@@ -42,7 +44,7 @@ public class MulticastHandler implements ConnectionHandler {
 			return;
 		}
 		int maxNumConns = (65535 - HEAD_SIZE - len) / 2;
-		HashMap<ConnectionHandler, ArrayList<Integer>> connListMap = new HashMap<>();
+		Map<ConnectionHandler, List<Integer>> connListMap = new HashMap<>();
 		// "connections.iterator()" is called
 		for (ConnectionHandler handler : handlers) {
 			while (!(handler instanceof VirtualConnection)) {
@@ -57,7 +59,7 @@ public class MulticastHandler implements ConnectionHandler {
 			}
 			VirtualConnection virtual = ((VirtualConnection) handler);
 			ConnectionHandler muxHandler = virtual.mux.handler;
-			ArrayList<Integer> connList = connListMap.get(muxHandler);
+			List<Integer> connList = connListMap.get(muxHandler);
 			if (connList == null) {
 				connList = new ArrayList<>();
 				connListMap.put(muxHandler, connList);

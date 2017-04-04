@@ -1,6 +1,7 @@
 package com.xqbase.tuna.misc;
 
 import java.util.LinkedHashSet;
+import java.util.Set;
 
 import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectionHandler;
@@ -10,11 +11,11 @@ import com.xqbase.tuna.ServerConnection;
 class BroadcastConnection implements Connection {
 	private static final ConnectionHandler[] EMPTY_HANDLERS = {};
 
-	private LinkedHashSet<ConnectionHandler> handlers;
+	private Set<ConnectionHandler> handlers;
 	private boolean noEcho;
 	private ConnectionHandler handler;
 
-	public BroadcastConnection(LinkedHashSet<ConnectionHandler> handlers, boolean noEcho) {
+	public BroadcastConnection(Set<ConnectionHandler> handlers, boolean noEcho) {
 		this.handlers = handlers;
 		this.noEcho = noEcho;
 	}
@@ -53,7 +54,7 @@ class BroadcastConnection implements Connection {
  * when it is removed from a connector.
  */
 public class BroadcastServer implements ServerConnection {
-	private LinkedHashSet<ConnectionHandler> handlers = new LinkedHashSet<>();
+	private Set<ConnectionHandler> handlers = new LinkedHashSet<>();
 	private boolean noEcho;
 
 	/**

@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class Names {
@@ -11,7 +12,7 @@ public class Names {
 	private static String[] names;
 
 	static {
-		ArrayList<String> names_ = new ArrayList<>();
+		List<String> names_ = new ArrayList<>();
 		try (BufferedReader in = new BufferedReader(new InputStreamReader(Names.
 				class.getResourceAsStream("Names.txt")))) {
 			String line;
