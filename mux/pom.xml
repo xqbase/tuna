@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.xqbase</groupId>
 	<artifactId>tuna-mux</artifactId>
-	<version>0.1.4-SNAPSHOT</version>
+	<version>0.1.4</version>
 	<packaging>jar</packaging>
 	<name>Tuna Mux</name>
 	<description>a Lightweight and High Performance Java Network Framework - Multiplexing Part</description>
@@ -42,18 +42,18 @@
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-core</artifactId>
-			<version>0.1.4-SNAPSHOT</version>
+			<version>0.1.4</version>
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>xqbase-util</artifactId>
-			<version>0.2.11</version>
+			<version>0.2.12</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.xqbase</groupId>
 			<artifactId>tuna-misc</artifactId>
-			<version>0.1.4-SNAPSHOT</version>
+			<version>0.1.4</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
