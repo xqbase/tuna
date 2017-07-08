@@ -63,6 +63,7 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 	private SSLEngine ssle;
 	private LinkedEntry<SSLFilter> timeoutEntry = null;
 	private long expire = 0;
+	private boolean enabled = true;
 	private int appBBSize;
 	private byte[] requestBytes;
 	private ByteBuffer requestBB;
@@ -130,8 +131,19 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 		this.timeoutEntry = timeoutEntry;
 	}
 
+	public void setEnabled(boolean enabled) {
+		this.enabled = enabled;
+		if (enabled) {
+			onConnect();
+		}
+	}
+
 	@Override
 	public void send(byte[] b, int off, int len) {
+		if (!enabled) {
+			super.send(b, off, len);
+			return;
+		}
 		if (hs == HandshakeStatus.FINISHED) {
 			disconnectIfClosed(wrap(b, off, len));
 		} else {
@@ -141,6 +153,10 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
+		if (!enabled) {
+			super.onRecv(b, off, len);
+			return;
+		}
 		baqRecv.add(b, off, len);
 		if (hs == HandshakeStatus.FINISHED) {
 			boolean closed = unwrap();
@@ -153,11 +169,12 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 
 	@Override
 	public void onConnect(ConnectionSession session_) {
-		if (ssltq != null) {
-			ssltq.offer(this);
-		}
 		session = session_;
-		handshake();
+		if (enabled) {
+			onConnect();
+		} else {
+			super.onConnect(session_);
+		}
 	}
 
 	@Override
@@ -277,6 +294,13 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 			hs = ssle.getHandshakeStatus();
 			handshake();
 		});
+	}
+
+	private void onConnect() {
+		if (ssltq != null) {
+			ssltq.offer(this);
+		}
+		handshake();
 	}
 
 	private void handshake() {
