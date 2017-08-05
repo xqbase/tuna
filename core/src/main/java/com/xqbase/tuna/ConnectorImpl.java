@@ -3,6 +3,7 @@ package com.xqbase.tuna;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectableChannel;
@@ -106,6 +107,7 @@ class Client extends Attachment {
 		try {
 			socketChannel = SocketChannel.open();
 			socketChannel.configureBlocking(false);
+			socketChannel.socket().setTcpNoDelay(true);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
@@ -172,10 +174,9 @@ class Client extends Attachment {
 	}
 
 	void finishConnect() {
-		InetSocketAddress local = ((InetSocketAddress) socketChannel.
-				socket().getLocalSocketAddress());
-		InetSocketAddress remote = ((InetSocketAddress) socketChannel.
-				socket().getRemoteSocketAddress());
+		Socket socket = socketChannel.socket();
+		InetSocketAddress local = (InetSocketAddress) socket.getLocalSocketAddress();
+		InetSocketAddress remote = (InetSocketAddress) socket.getRemoteSocketAddress();
 		connection.onConnect(new ConnectionSession(local, remote));
 	}
 
@@ -543,6 +544,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 						continue;
 					}
 					socketChannel.configureBlocking(false);
+					socketChannel.socket().setTcpNoDelay(true);
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
