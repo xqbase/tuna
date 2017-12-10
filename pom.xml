@@ -5,7 +5,7 @@
 
 	<groupId>com.xqbase</groupId>
 	<artifactId>tuna-parent</artifactId>
-	<version>0.1.4</version>
+	<version>0.1.5</version>
 	<packaging>pom</packaging>
 	<name>Tuna</name>
 	<description>a Lightweight and High Performance Java Network Framework</description>
