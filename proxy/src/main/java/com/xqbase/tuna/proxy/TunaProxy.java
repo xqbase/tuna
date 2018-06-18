@@ -1,14 +1,19 @@
 package com.xqbase.tuna.proxy;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
+import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -39,7 +44,9 @@ import com.xqbase.tuna.util.Bytes;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
+import com.xqbase.util.Runnables;
 import com.xqbase.util.Service;
+import com.xqbase.util.Strings;
 import com.xqbase.util.Time;
 
 public class TunaProxy {
@@ -93,11 +100,13 @@ public class TunaProxy {
 				"%1$tY-%1$tm-%1$td %1$tk:%1$tM:%1$tS.%1$tL %2$s%n%4$s: %5$s%6$s%n");
 		Logger logger = Log.getAndSet(Conf.openLogger("TunaProxy.", 16777216, 10));
 		Properties p = Conf.load("TunaProxy");
-		String host = p.getProperty("host");
-		host = host == null || host.isEmpty() ? "0.0.0.0" : host;
+		String bind = p.getProperty("host");
+		bind = bind == null || bind.isEmpty() ? "0.0.0.0" : bind;
 		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
 		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
 		boolean lookupEnabled = Conf.getBoolean(p.getProperty("lookup"), false);
+		String proxyChain = p.getProperty("proxy_chain");
+		String proxyAuth = p.getProperty("proxy_auth");
 		String realm = p.getProperty("realm");
 		boolean enableReverse = Conf.getBoolean(p.getProperty("reverse"), false);
 		int keepAlive = Numbers.parseInt(p.getProperty("keep_alive"), (int) Time.MINUTE);
@@ -135,6 +144,67 @@ public class TunaProxy {
 							lookupMap.put((String) k, (String) v));
 				}, 0, 10000);
 			}
+			if (proxyChain != null) {
+				HashSet<String> domains = new HashSet<>();
+				ArrayList<String> suffixes = new ArrayList<>();
+				connector.scheduleDelayed(Runnables.wrap(() -> {
+					domains.clear();
+					String filename = Conf.
+							getAbsolutePath("conf/ProxyDomains.txt");
+					try (BufferedReader in = new BufferedReader(new
+							FileReader(filename))) {
+						String s;
+						while ((s = in.readLine()) != null) {
+							if (!Strings.isBlank(s) && !s.startsWith("#")) {
+								domains.add(s.toLowerCase());
+							}
+						}
+					} catch (IOException e) {
+						Log.w(filename + ": " + e.getMessage()); // Ignored
+					}
+					suffixes.clear();
+					for (String domain : domains) {
+						suffixes.add("." + domain);
+					}
+				}), 0, 10000);
+				server.setOnRequest((connection, packet) -> {
+					String host;
+					if (packet.getMethod().toUpperCase().equals("CONNECT")) {
+						String uri = packet.getUri();
+						int colon = uri.indexOf(':');
+						host = colon < 0 ? uri : uri.substring(0, colon);
+					} else {
+						URL url;
+						try {
+							url = new URL(packet.getUri());
+						} catch (IOException e) {
+							if (logLevel >= ProxyConnection.LOG_DEBUG) {
+								Log.d("Invalid URI: " + packet.getUri());
+							}
+							return;
+						}
+						host = url.getHost();
+					}
+					host = host.toLowerCase();
+					boolean chained = domains.contains(host);
+					if (!chained) {
+						for (String suffix : suffixes) {
+							if (host.endsWith(suffix)) {
+								chained = true;
+								break;
+							}
+						}
+					}
+					if (chained) {
+						connection.setAttribute(ProxyConnection.
+								PROXY_CHAIN_KEY, proxyChain);
+						if (proxyAuth != null) {
+							connection.setAttribute(ProxyConnection.
+									PROXY_AUTH_KEY, proxyAuth);
+						}
+					}
+				});
+			}
 			server.setRealm(realm);
 			server.setEnableReverse(enableReverse);
 			server.setKeepAlive(keepAlive);
@@ -164,11 +234,11 @@ public class TunaProxy {
 				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
 				connector.add(server_.appendFilter(() -> new SSLFilter(connector,
 						connector, server.ssltq, sslcServer,
-						SSLFilter.SERVER_NO_AUTH)), host, port);
+						SSLFilter.SERVER_NO_AUTH)), bind, port);
 			} else {
-				connector.add(server_, host, port);
+				connector.add(server_, bind, port);
 			}
-			Log.i("Tuna Proxy Started on " + host + ":" + port);
+			Log.i("Tuna Proxy Started on " + bind + ":" + port);
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());
