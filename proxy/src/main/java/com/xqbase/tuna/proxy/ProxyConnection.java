@@ -29,6 +29,7 @@ import com.xqbase.tuna.util.Expirable;
 import com.xqbase.tuna.util.LinkedEntry;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
+import com.xqbase.util.Runnables;
 
 public class ProxyConnection
 		implements Connection, Expirable<ProxyConnection>, HttpStatus {
@@ -93,7 +94,8 @@ public class ProxyConnection
 		return errorPage == null ? Bytes.EMPTY_BYTES : errorPage;
 	}
 
-	private static String parseHost(String uri, int[] port) throws HttpPacketException {
+	private static String parseHost(String uri, int[] port,
+			boolean[] secure) throws HttpPacketException {
 		if (uri.isEmpty()) {
 			throw new HttpPacketException("Invalid Host", uri);
 		}
@@ -107,6 +109,12 @@ public class ProxyConnection
 		}
 		String host = uri.substring(0, colon);
 		String value = uri.substring(colon + 1);
+		if (secure != null && secure.length > 0) {
+			secure[0] = value.endsWith("s");
+			if (secure[0]) {
+				value = value.substring(0, value.length() - 1);
+			}
+		}
 		port[0] = Numbers.parseInt(value, -1);
 		if (port[0] < 0 || port[0] > 0xFFFF) {
 			throw new HttpPacketException("Invalid Port", value);
@@ -169,35 +177,81 @@ public class ProxyConnection
 			}
 			return;
 		}
-
 		try {
 			server.onRequest.accept(this, request);
 		} catch (RequestException e) {
-			HttpPacket response = e.getResponse();
-			if (connectionClose || !request.isComplete()) {
-				// Skip reading body
-				response.setHeader("Connection", "close");
-				response.write(handler, true, false);
-				disconnect();
-			} else { 
-				response.setHeader("Connection", "keep-alive");
-				response.write(handler, true, false);
-				attributeMap.clear();
-				request.reset();
-				// No request from peer, so continue reading
-				if (queue.length() > 0) {
-					readEx();
-				}
-			}
+			doDisconnect(e.getResponse(), connectionClose);
 			return;
 		}
 
+		if (server.onRequestAsync == null) {
+			doRequest(connectionClose);
+			return;
+		}
+		handler.setBufferSize(0);
+		server.executor.execute(Runnables.wrap(() -> {
+			HttpPacket[] response = {null};
+			try {
+				server.onRequestAsync.accept(this, request);
+			} catch (RequestException e) {
+				response[0] = e.getResponse();
+			}
+			server.eventQueue.invokeLater(() -> {
+				handler.setBufferSize(MAX_BUFFER_SIZE);
+				try {
+					if (response[0] == null) {
+						doRequest(connectionClose);
+					} else {
+						doDisconnect(response[0], connectionClose);
+					}
+				} catch (HttpPacketException e) {
+					doDisconnect(e);
+				}
+			});
+		}));
+	}
+
+	private void doDisconnect(HttpPacketException e) {
+		if (logLevel >= LOG_DEBUG) {
+			Log.d(e.getMessage() + ", " + remote);
+		}
+		if (client == null || !client.begun) {
+			String type = e.getType();
+			sendError(type == HttpPacketException.HEADER_SIZE ?
+					SC_REQUEST_ENTITY_TOO_LARGE :
+					type == HttpPacketException.VERSION ?
+					SC_HTTP_VERSION_NOT_SUPPORTED : SC_BAD_REQUEST);
+		}
+		disconnect();
+	}
+
+	private void doDisconnect(HttpPacket response,
+			boolean connectionClose) throws HttpPacketException {
+		if (connectionClose || !request.isComplete()) {
+			// Skip reading body
+			response.setHeader("Connection", "close");
+			response.write(handler, true, false);
+			disconnect();
+		} else { 
+			response.setHeader("Connection", "keep-alive");
+			response.write(handler, true, false);
+			attributeMap.clear();
+			request.reset();
+			// No request from peer, so continue reading
+			if (queue.length() > 0) {
+				readEx();
+			}
+		}
+	}
+
+	private void doRequest(boolean connectionClose) throws HttpPacketException {
 		String method = request.getMethod().toUpperCase();
 		if (method.equals("CONNECT")) {
 			ByteArrayQueue body = request.getBody();
 			String proxyChain = (String) attributeMap.get(PROXY_CHAIN_KEY);
 			String host;
 			int port;
+			boolean secure = false;
 			if (proxyChain == null) {
 				String uri = server.lookup.apply(request.getUri().toLowerCase());
 				if (uri == null) {
@@ -210,17 +264,19 @@ public class ProxyConnection
 					return;
 				}
 				int[] port_ = {443};
-				host = parseHost(uri, port_);
+				host = parseHost(uri, port_, null);
 				port = port_[0];
 			} else {
 				int[] port_ = {3128};
-				host = parseHost(proxyChain, port_);
+				boolean[] secure_ = {false};
+				host = parseHost(proxyChain, port_, secure_);
 				port = port_[0];
-				proxyAuth = (String) attributeMap.get(PROXY_AUTH_KEY);
-				if (proxyAuth == null) {
+				secure = secure_[0];
+				String proxyAuth_ = (String) attributeMap.get(PROXY_AUTH_KEY);
+				if (proxyAuth_ == null) {
 					request.removeHeader("PROXY-AUTHORIZATION");
 				} else {
-					request.setHeader("Proxy-Authorization", proxyAuth);
+					request.setHeader("Proxy-Authorization", proxyAuth_);
 				}
 				request.write(body, true, false);
 			}
@@ -229,7 +285,15 @@ public class ProxyConnection
 			try {
 				server.totalPeers ++;
 				// onDisconnect() will never be called here in tuna-core-0.1.2
-				server.connector.connect(connect, host, port);
+				Connection connection;
+				if (secure) {
+					connection = connect.appendFilter(new SSLFilter(server.eventQueue,
+							server.executor, server.ssltq, server.sslc,
+							SSLFilter.CLIENT, host, port));
+				} else {
+					connection = connect;
+				}
+				server.connector.connect(connection, host, port);
 			} catch (IOException e) {
 				throw new HttpPacketException("Unreachable Host",
 						e.getMessage() + ": " + host);
@@ -248,9 +312,9 @@ public class ProxyConnection
 
 		String proxyChain = (String) attributeMap.get(PROXY_CHAIN_KEY);
 		String uri = request.getUri();
-		boolean secure = false;
 		String connectHost;
 		String host;
+		boolean secure = false;
 		int port;
 		if (proxyChain == null) {
 			try {
@@ -296,7 +360,7 @@ public class ProxyConnection
 				return;
 			}
 			int[] port_ = {secure ? 443 : 80};
-			connectHost = parseHost(host, port_);
+			connectHost = parseHost(host, port_, null);
 			port = port_[0];
 
 			request.setUri(uri);
@@ -307,9 +371,11 @@ public class ProxyConnection
 		} else {
 			host = proxyChain;
 			int[] port_ = {3128};
-			connectHost = parseHost(host, port_);
+			boolean[] secure_ = {false};
+			connectHost = parseHost(host, port_, secure_);
 			port = port_[0];
-			proxyAuth = (String) attributeMap.get(PROXY_AUTH_KEY);
+			secure = secure_[0];
+			String proxyAuth = (String) attributeMap.get(PROXY_AUTH_KEY);
 			if (proxyAuth != null) {
 				request.setHeader("Proxy-Authorization", proxyAuth);
 			}
@@ -401,17 +467,7 @@ public class ProxyConnection
 		try {
 			readEx();
 		} catch (HttpPacketException e) {
-			if (logLevel >= LOG_DEBUG) {
-				Log.d(e.getMessage() + ", " + remote);
-			}
-			if (client == null || !client.begun) {
-				String type = e.getType();
-				sendError(type == HttpPacketException.HEADER_SIZE ?
-						SC_REQUEST_ENTITY_TOO_LARGE :
-						type == HttpPacketException.VERSION ?
-						SC_HTTP_VERSION_NOT_SUPPORTED : SC_BAD_REQUEST);
-			}
-			disconnect();
+			doDisconnect(e);
 		}
 	}
 

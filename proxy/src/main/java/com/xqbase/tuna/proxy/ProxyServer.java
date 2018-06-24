@@ -53,6 +53,8 @@ public class ProxyServer implements ServerConnection, Runnable {
 	UnaryOperator<String> lookup = t -> t;
 	BiConsumerEx<ProxyConnection, HttpPacket, RequestException>
 			onRequest = (t, u) -> {/**/};
+	BiConsumerEx<ProxyConnection, HttpPacket, RequestException>
+			onRequestAsync = null;
 	BiConsumer<ProxyConnection, HttpPacket> onResponse = (t, u) -> {/**/};
 	Consumer<ProxyConnection> onComplete = t -> {/**/};
 	IntFunction<byte[]> errorPages = ProxyConnection::getDefaultErrorPage;
@@ -210,8 +212,14 @@ public class ProxyServer implements ServerConnection, Runnable {
 		this.lookup = lookup;
 	}
 
-	public void setOnRequest(BiConsumerEx<ProxyConnection, HttpPacket, RequestException> onRequest) {
+	public void setOnRequest(BiConsumerEx<ProxyConnection,
+			HttpPacket, RequestException> onRequest) {
 		this.onRequest = onRequest;
+	}
+
+	public void setOnRequestAsync(BiConsumerEx<ProxyConnection,
+			HttpPacket, RequestException> onRequestAsync) {
+		this.onRequestAsync = onRequestAsync;
 	}
 
 	public void setOnResponse(BiConsumer<ProxyConnection, HttpPacket> onResponse) {
