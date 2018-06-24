@@ -156,11 +156,15 @@ public class ProxyConnection
 		String username = null, password = null;
 		String proxyAuth = request.getHeader("PROXY-AUTHORIZATION");
 		if (proxyAuth != null && proxyAuth.toUpperCase().startsWith("BASIC ")) {
-			String basic = new String(Base64.getDecoder().decode(proxyAuth.substring(6)));
-			int colon = basic.indexOf(':');
-			if (colon >= 0) {
-				username = basic.substring(0, colon);
-				password = basic.substring(colon + 1);
+			try {
+				String basic = new String(Base64.getDecoder().decode(proxyAuth.substring(6)));
+				int colon = basic.indexOf(':');
+				if (colon >= 0) {
+					username = basic.substring(0, colon);
+					password = basic.substring(colon + 1);
+				}
+			} catch (IllegalArgumentException e) {
+				// Ignored
 			}
 		}
 		if (!server.auth.test(username, password)) {
