@@ -181,6 +181,10 @@ public class ProxyServer implements ServerConnection, Runnable {
 		Log.v(sw.toString());
 	}
 
+	public TimeoutQueue<SSLFilter> getTimeoutQueue() {
+		return ssltq;
+	}
+
 	public Set<ProxyConnection> getConnections() {
 		return connections;
 	}
