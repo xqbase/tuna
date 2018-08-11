@@ -167,7 +167,7 @@ public class MuxEdge {
 				LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
 		try (ConnectorImpl connector = new ConnectorImpl()) {
-			service.addShutdownHook(connector::interrupt);
+			service.register(connector::interrupt);
 			new EdgeLoop(connector, port, muxHost, muxPort,
 					ssl, authPhrase, queueLimit, logLevel).run();
 			Log.i(String.format("MuxEdge Started (%s->%s:%s%s)",

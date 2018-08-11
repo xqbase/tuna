@@ -45,7 +45,7 @@ public class Forward {
 		boolean ssl = option(args, 3, "-s");
 		boolean dump = ssl ? option(args, 4, "-d") : option(args, 3, "-d");
 		try (ConnectorImpl connector = new ConnectorImpl()) {
-			service.addShutdownHook(connector::interrupt);
+			service.register(connector::interrupt);
 			ForwardServer server = new ForwardServer(connector, remoteHost, remotePort);
 			if (ssl) {
 				TimeoutQueue<SSLFilter> ssltq = SSLFilter.getTimeoutQueue(10000);

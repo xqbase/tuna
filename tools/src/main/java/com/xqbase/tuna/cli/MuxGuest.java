@@ -146,7 +146,7 @@ public class MuxGuest {
 				LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
 		try (ConnectorImpl connector = new ConnectorImpl()) {
-			service.addShutdownHook(connector::interrupt);
+			service.register(connector::interrupt);
 			new GuestLoop(connector, publicPort, privateHost, privatePort,
 					muxHost, muxPort, ssl, authPhrase, queueLimit, logLevel).run();
 			Log.i(String.format("MuxGuest Started (%s:%s->%s:%s) via %s:%s%s",

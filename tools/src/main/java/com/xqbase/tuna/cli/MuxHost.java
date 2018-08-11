@@ -56,7 +56,7 @@ public class MuxHost {
 				LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
 		try (ConnectorImpl connector = new ConnectorImpl()) {
-			service.addShutdownHook(connector::interrupt);
+			service.register(connector::interrupt);
 			ServerConnection server = new HostServer(connector,
 					new MuxContext(connector, auth, queueLimit, logLevel));
 			if (ssl) {

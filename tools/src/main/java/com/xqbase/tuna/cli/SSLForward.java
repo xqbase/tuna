@@ -48,7 +48,7 @@ public class SSLForward {
 			remotePort = Numbers.parseInt(args[3], 443, 1, 65535);
 		}
 		try (ConnectorImpl connector = new ConnectorImpl()) {
-			service.addShutdownHook(connector::interrupt);
+			service.register(connector::interrupt);
 
 			TimeoutQueue<SSLFilter> ssltq = SSLFilter.getTimeoutQueue(60000);
 			connector.scheduleDelayed(ssltq, 10000, 10000);

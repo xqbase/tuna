@@ -183,7 +183,7 @@ public class ProxyTunnel {
 		sb.append("\r\n");
 		byte[] request = sb.toString().getBytes();
 		try (ConnectorImpl connector = new ConnectorImpl()) {
-			service.addShutdownHook(connector::interrupt);
+			service.register(connector::interrupt);
 			TimeoutQueue<SSLFilter> ssltq;
 			SSLContext sslc;
 			if (ssl) {

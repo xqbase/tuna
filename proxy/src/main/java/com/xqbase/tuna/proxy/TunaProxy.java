@@ -117,7 +117,7 @@ public class TunaProxy {
 		int logLevel = logValue == null ? 0 : LOG_VALUE.indexOf(logValue.toLowerCase()) + 1;
 
 		try (ConnectorImpl connector = new ConnectorImpl()) {
-			service.addShutdownHook(connector::interrupt);
+			service.register(connector::interrupt);
 
 			ProxyServer server = new ProxyServer(connector, connector, connector);
 			if (authEnabled) {
