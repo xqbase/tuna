@@ -429,6 +429,7 @@ public class ProxyConnection
 				Log.w(e.getMessage());
 			}
 			break;
+		default: // FORWARDED_TRANSPARENT
 		}
 
 		client = server.borrowClient(host, secure);
