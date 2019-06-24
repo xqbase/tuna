@@ -23,4 +23,8 @@ public interface ConnectionHandler {
 	 * the connection will not be closed until all queued data sent out.
 	 */
 	public void disconnect();
+	/** Closes the connection actively regardless queued data.<p> */
+	public default void forceDisconnect() {
+		disconnect();
+	}
 }

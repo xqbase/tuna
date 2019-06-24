@@ -235,6 +235,8 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 				return true;
 			case CLOSED:
 				return true;
+			default:
+				return true;
 			}
 		}
 	}

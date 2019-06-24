@@ -69,7 +69,8 @@ class Client extends Attachment {
 				boolean toBlock = bufferSize <= 0;
 				Client.this.bufferSize = Math.max(0,
 						Math.min(bufferSize, Connection.MAX_BUFFER_SIZE));
-				if ((blocked ^ toBlock) && !resolving && isOpen()) {
+				if ((blocked ^ toBlock) && !resolving && isOpen() &&
+						(selectionKey.interestOps() & SelectionKey.OP_CONNECT) == 0) {
 					// may be called before resolve
 					interestOps();
 				}
@@ -82,6 +83,13 @@ class Client extends Attachment {
 					finishClose();
 				} else if (status == STATUS_BUSY) {
 					status = STATUS_DISCONNECTING;
+				}
+			}
+
+			@Override
+			public void forceDisconnect() {
+				if (isOpen()) {
+					finishClose();
 				}
 			}
 		});
@@ -199,10 +207,6 @@ class Client extends Attachment {
 
 	boolean isOpen() {
 		return status != STATUS_CLOSED;
-	}
-
-	boolean isBusy() {
-		return status >= STATUS_IDLE;
 	}
 
 	private boolean blocking = false;
@@ -576,7 +580,7 @@ public class ConnectorImpl implements Connector, TimerHandler, EventQueue, Execu
 				} else if (key.isConnectable() && client.socketChannel.finishConnect()) {
 					client.finishConnect();
 					// "onConnect()" might call "disconnect()"
-					if (client.isBusy()) {
+					if (client.isOpen()) {
 						client.write();
 					}
 				}
