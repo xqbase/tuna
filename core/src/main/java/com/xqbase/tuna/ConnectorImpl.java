@@ -87,7 +87,7 @@ class Client extends Attachment {
 			}
 
 			@Override
-			public void forceDisconnect() {
+			public void disconnectNow() {
 				if (isOpen()) {
 					finishClose();
 				}
