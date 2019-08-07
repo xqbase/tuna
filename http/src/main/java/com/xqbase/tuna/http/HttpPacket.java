@@ -242,7 +242,7 @@ public class HttpPacket {
 				return;
 			}
 			String[] ss = line.toString().split(" ", 3);
-			if (ss.length < 3) {
+			if (ss.length < (type == TYPE_REQUEST ? 3 : 2)) {
 				throw new HttpPacketException(HttpPacketException.START_LINE, line.toString());
 			}
 			String version = (type == TYPE_REQUEST ? ss[2] : ss[0]).toUpperCase();
@@ -263,7 +263,7 @@ public class HttpPacket {
 				} catch (NumberFormatException e) {
 					throw new HttpPacketException(HttpPacketException.STATUS, ss[1]);
 				}
-				reason = ss[2];
+				reason = ss.length > 2 ? ss[2] : "" + status;
 				if (status == 101) {
 					bytesToRead = -1;
 				}
