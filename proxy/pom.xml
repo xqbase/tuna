@@ -79,13 +79,15 @@
 		</dependency>
 		<dependency>
 			<groupId>com.xqbase</groupId>
-			<artifactId>tuna-mux</artifactId>
-			<version>0.1.5</version>
+			<artifactId>xqbase-util</artifactId>
+			<version>0.2.17</version>
 		</dependency>
+
 		<dependency>
 			<groupId>com.xqbase</groupId>
-			<artifactId>xqbase-util</artifactId>
-			<version>0.2.16</version>
+			<artifactId>tuna-mux</artifactId>
+			<version>0.1.5</version>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 </project>

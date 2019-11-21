@@ -3,6 +3,7 @@ package com.xqbase.tuna.proxy;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
@@ -17,7 +18,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.function.Predicate;
 import java.util.logging.Logger;
 
 import javax.net.ssl.KeyManager;
@@ -35,12 +35,8 @@ import sun.security.x509.X509CertImpl;
 import sun.security.x509.X509CertInfo;
 
 import com.xqbase.tuna.ConnectorImpl;
-import com.xqbase.tuna.ServerConnection;
-import com.xqbase.tuna.mux.MuxContext;
-import com.xqbase.tuna.mux.OriginServer;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.ssl.SSLManagers;
-import com.xqbase.tuna.util.Bytes;
 import com.xqbase.util.Conf;
 import com.xqbase.util.Log;
 import com.xqbase.util.Numbers;
@@ -100,9 +96,7 @@ public class TunaProxy {
 				"%1$tY-%1$tm-%1$td %1$tk:%1$tM:%1$tS.%1$tL %2$s%n%4$s: %5$s%6$s%n");
 		Logger logger = Log.getAndSet(Conf.openLogger("TunaProxy.", 16777216, 10));
 		Properties p = Conf.load("TunaProxy");
-		String bind = p.getProperty("host");
-		bind = bind == null || bind.isEmpty() ? "0.0.0.0" : bind;
-		int port = Numbers.parseInt(p.getProperty("port"), 3128, 1, 65535);
+		String binds = p.getProperty("binds", "");
 		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
 		boolean lookupEnabled = Conf.getBoolean(p.getProperty("lookup"), false);
 		String proxyChain = p.getProperty("proxy_chain");
@@ -212,33 +206,34 @@ public class TunaProxy {
 			server.setLogLevel(logLevel);
 			connector.scheduleDelayed(server, 10000, 10000);
 
-			ServerConnection server_;
-			if (Conf.getBoolean(p.getProperty("mux"), false)) {
-				String authPhrase = p.getProperty("mux.auth_phrase");
-				Predicate<byte[]> muxAuth;
-				if (authPhrase == null || authPhrase.isEmpty()) {
-					muxAuth = t -> true;
-				} else {
-					byte[] authPhrase_ = authPhrase.getBytes();
-					muxAuth = t -> t != null && Bytes.equals(t, authPhrase_);
+			for (String bind_ : binds.split("[,;]")) {
+				if (Strings.isBlank(bind_)) {
+					continue;
 				}
-				int queueLimit = Numbers.parseInt(p.
-						getProperty("mux.queue_limit"), 1048576);
-				server_ = new OriginServer(server, new MuxContext(connector,
-						muxAuth, queueLimit, logLevel));
-			} else {
-				server_ = server;
+				String bind = bind_.trim().toLowerCase();
+				boolean secure = false;
+				if (bind.endsWith("s")) {
+					bind = bind.substring(0, bind.length() - 1);
+					secure = true;
+				}
+				int colon = bind.indexOf(':');
+				InetSocketAddress addr;
+				if (colon < 0) {
+					addr = new InetSocketAddress(Numbers.parseInt(bind));
+				} else {
+					addr = new InetSocketAddress(bind.substring(0, colon),
+							Numbers.parseInt(bind.substring(colon + 1)));
+				}
+				if (secure) {
+					SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
+					connector.add(server.appendFilter(() -> new SSLFilter(connector,
+							connector, server.ssltq, sslcServer,
+							SSLFilter.SERVER_NO_AUTH)), addr);
+				} else {
+					connector.add(server, addr);
+				}
 			}
-
-			if (Conf.getBoolean(p.getProperty("ssl"), false)) {
-				SSLContext sslcServer = getSSLContext("CN=localhost", Time.WEEK * 520);
-				connector.add(server_.appendFilter(() -> new SSLFilter(connector,
-						connector, server.ssltq, sslcServer,
-						SSLFilter.SERVER_NO_AUTH)), bind, port);
-			} else {
-				connector.add(server_, bind, port);
-			}
-			Log.i("Tuna Proxy Started on " + bind + ":" + port);
+			Log.i("Tuna Proxy Started on " + binds);
 			connector.doEvents();
 		} catch (IOException | GeneralSecurityException e) {
 			Log.w(e.getMessage());
