@@ -50,7 +50,7 @@ public class ProxyConnection
 
 	private static final String ERROR_PAGE_FORMAT = "<!DOCTYPE html><html>" +
 			"<head><title>%d %s</title></head>" +
-			"<body><center><h1>%d %s</h1></center><hr><center>Tuna Proxy/0.1.5</center></body>" +
+			"<body><center><h1>%d %s</h1></center><hr><center>Tuna Proxy/0.1.6</center></body>" +
 			"</html>";
 
 	private static Map<Integer, String> reasonMap = new HashMap<>();
