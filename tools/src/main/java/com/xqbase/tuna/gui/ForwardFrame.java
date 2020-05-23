@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.function.Supplier;
 
+import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -35,6 +36,7 @@ public class ForwardFrame extends ConnectorFrame {
 	private JComboBox<String> cmbDump = new JComboBox<>(new
 			String[] {DUMP_NONE, DUMP_BINARY, DUMP_TEXT, DUMP_FOLDER});
 	private JFileChooser chooser = new JFileChooser();
+	private JButton clearButton = new JButton("Clear");
 
 	private PrintStream dumpStream = null;
 	private File dumpFolder = null;
@@ -176,8 +178,17 @@ public class ForwardFrame extends ConnectorFrame {
 		cmbDump.addActionListener(e -> choose());
 		add(cmbDump);
 
-		startButton.setBounds(120, 66, 78, 30);
-		exitButton.setBounds(204, 66, 78, 30);
+		clearButton.addActionListener(e -> {
+			// https://stackoverflow.com/a/33379766/4260959
+			try {
+				new ProcessBuilder("cmd", "/c", "cls").inheritIO().start().waitFor();
+			} catch (InterruptedException | IOException ex) {/* Ignored */}
+		});
+		add(clearButton);
+
+		startButton.setBounds(120, 66, 52, 30);
+		clearButton.setBounds(176, 66, 52, 30);
+		exitButton.setBounds(232, 66, 52, 30);
 	}
 
 	public static void main(String[] args) {
