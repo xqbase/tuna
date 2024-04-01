@@ -36,7 +36,8 @@ public class ProxyServer implements ServerConnection, Runnable {
 
 	static {
 		try {
-			defaultSSLContext = SSLContext.getInstance("TLS");
+			// TLSv1.3 doesn't work in SSLFilter.unwrap(), SSLEngineResult.Status = OK
+			defaultSSLContext = SSLContext.getInstance("TLSv1.2");
 			defaultSSLContext.init(SSLManagers.DEFAULT_KEY_MANAGERS,
 					SSLManagers.DEFAULT_TRUST_MANAGERS, null);
 		} catch (GeneralSecurityException e) {

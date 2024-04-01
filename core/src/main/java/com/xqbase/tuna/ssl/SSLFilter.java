@@ -232,6 +232,7 @@ public class SSLFilter extends ConnectionFilter implements Expirable<SSLFilter> 
 					// Continue unwrapEx
 					break;
 				}
+				// TODO TLSv1.3 should return false?
 				return true;
 			case CLOSED:
 				return true;
