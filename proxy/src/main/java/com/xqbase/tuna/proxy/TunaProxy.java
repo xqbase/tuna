@@ -99,6 +99,7 @@ public class TunaProxy {
 		String binds = p.getProperty("binds", "");
 		boolean authEnabled = Conf.getBoolean(p.getProperty("auth"), false);
 		boolean lookupEnabled = Conf.getBoolean(p.getProperty("lookup"), false);
+		String cipherKey = p.getProperty("cipher_key", "changeit");
 		String proxyChain = p.getProperty("proxy_chain");
 		String proxyAuth = p.getProperty("proxy_auth");
 		String realm = p.getProperty("realm");
@@ -211,10 +212,13 @@ public class TunaProxy {
 					continue;
 				}
 				String bind = bind_.trim().toLowerCase();
-				boolean secure = false;
+				boolean secure = false, cipher = false;
 				if (bind.endsWith("s")) {
 					bind = bind.substring(0, bind.length() - 1);
 					secure = true;
+				} else if (bind.endsWith("c")) {
+					bind = bind.substring(0, bind.length() - 1);
+					cipher = true;
 				}
 				int colon = bind.indexOf(':');
 				InetSocketAddress addr;
@@ -229,6 +233,8 @@ public class TunaProxy {
 					connector.add(server.appendFilter(() -> new SSLFilter(connector,
 							connector, server.ssltq, sslcServer,
 							SSLFilter.SERVER_NO_AUTH)), addr);
+				} else if (cipher) {
+					connector.add(server.appendFilter(() -> new CipherFilter(cipherKey)), addr);
 				} else {
 					connector.add(server, addr);
 				}
