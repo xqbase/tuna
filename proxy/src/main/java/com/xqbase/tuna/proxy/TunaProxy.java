@@ -34,6 +34,7 @@ import sun.security.x509.X500Name;
 import sun.security.x509.X509CertImpl;
 import sun.security.x509.X509CertInfo;
 
+import com.xqbase.tuna.Connection;
 import com.xqbase.tuna.ConnectorImpl;
 import com.xqbase.tuna.ssl.SSLFilter;
 import com.xqbase.tuna.ssl.SSLManagers;
@@ -207,6 +208,7 @@ public class TunaProxy {
 			server.setLogLevel(logLevel);
 			connector.scheduleDelayed(server, 10000, 10000);
 
+			byte[] cipherBuffer = new byte[Connection.MAX_BUFFER_SIZE];
 			for (String bind_ : binds.split("[,;]")) {
 				if (Strings.isBlank(bind_)) {
 					continue;
@@ -234,7 +236,7 @@ public class TunaProxy {
 							connector, server.ssltq, sslcServer,
 							SSLFilter.SERVER_NO_AUTH)), addr);
 				} else if (cipher) {
-					connector.add(server.appendFilter(() -> new CipherFilter(cipherKey)), addr);
+					connector.add(server.appendFilter(() -> new CipherFilter(cipherKey, cipherBuffer)), addr);
 				} else {
 					connector.add(server, addr);
 				}

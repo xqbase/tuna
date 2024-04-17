@@ -11,8 +11,9 @@ public class CipherFilter extends ConnectionFilter {
 	private static final String ALG = "RC4";
 
 	private Cipher encrypt, decrypt;
+	private byte[] buffer;
 
-	public CipherFilter(String key) {
+	public CipherFilter(String key, byte[] buffer) {
 		SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(), ALG);
 		try {
 			encrypt = Cipher.getInstance(ALG);
@@ -22,17 +23,16 @@ public class CipherFilter extends ConnectionFilter {
 		} catch (GeneralSecurityException e) {
 			throw new RuntimeException(e);
 		}
+		this.buffer = buffer;
 	}
 
-	private static byte[] update(Cipher cipher, byte[] b, int off, int len) {
-		byte[] buffer = new byte[len];
+	private void update(Cipher cipher, byte[] b, int off, int len) {
 		try {
 			int bufferLen = cipher.update(b, off, len, buffer, 0);
 			if (len != bufferLen) {
 				throw new RuntimeException("encryption/decription error, expected bytes: " +
 						len + ", actual bytes: " + bufferLen);
 			}
-			return buffer;
 		} catch (GeneralSecurityException e) {
 			throw new RuntimeException(e);
 		}
@@ -40,13 +40,13 @@ public class CipherFilter extends ConnectionFilter {
 
 	@Override
 	public void send(byte[] b, int off, int len) {
-		byte[] buffer = update(encrypt, b, off, len);
+		update(encrypt, b, off, len);
 		super.send(buffer, 0, len);
 	}
 
 	@Override
 	public void onRecv(byte[] b, int off, int len) {
-		byte[] buffer = update(decrypt, b, off, len);
+		update(decrypt, b, off, len);
 		super.onRecv(buffer, 0, len);
 	}
 }
